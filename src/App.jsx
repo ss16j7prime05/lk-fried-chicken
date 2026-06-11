@@ -33,7 +33,7 @@ useEffect(() => {
     }}
   >
     <h3>{menu.name}</h3>
-    <p>ราคา {menu.price} บาท</p>
+    <p>ราคา: {menu.price ? menu.price : "ไม่มีราคา"} บาท</p>
 
     {menu.image && (
       <img
