@@ -74,16 +74,23 @@ const deleteOrder = async (id) => {
   {filteredOrders.map((order) => (
     <div
       key={order.id}
-      style={{
-        border: "1px solid white",
-        padding: "10px",
-        marginBottom: "10px",
-      }}
+    style={{
+  border: "1px solid #ddd",
+  borderRadius: "12px",
+  padding: "15px",
+  marginBottom: "20px",
+  backgroundColor: "#f8f8f8",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+}}
     >
-    <h3>ลูกค้า: {order.customerName}</h3>
-    <p>📞 เบอร์โทร: {order.phone}</p>
+    <h3 style={{ marginBottom: "5px" }}>
+  👤 {order.customerName}
+</h3>
+   <p style={{ margin: "4px 0" }}>
+  📞 {order.phone}
+</p>
 
-<p>
+<p style={{ margin: "4px 0" }}>
 📍 GPS:
 <a
   href={`https://www.google.com/maps?q=${order.gps}`}
@@ -94,9 +101,12 @@ const deleteOrder = async (id) => {
 </a>
 </p>
 
-<p>💳 ชำระเงิน: {order.paymentMethod}</p>
-
-<p>📝 หมายเหตุ: {order.note || "-"}</p>
+<p style={{ margin: "4px 0" }}>
+  💳 ชำระเงิน: {order.paymentMethod}
+</p>
+<p style={{ margin: "4px 0" }}>
+  📄 หมายเหตุ: {order.note || "-"}
+</p>
 <p>สถานะ: {order.status}</p>
 
 <button
@@ -117,12 +127,26 @@ const deleteOrder = async (id) => {
 >
   ลบออเดอร์
 </button>
-<h3>รวม {order.totalPrice} บาท</h3>
+<h3
+  style={{
+    color: "#ff6600",
+    marginTop: "15px",
+    marginBottom: "15px",
+  }}
+>
+  💰 รวม {order.totalPrice} บาท
+</h3>
 
 {order.items?.map((item, index) => (
-  <p key={index}>
-    {item.name} - {item.price} บาท
-  </p>
+ <p
+  key={index}
+  style={{
+    margin: "6px 0",
+    paddingLeft: "10px",
+  }}
+>
+  🍗 {item.name} - {item.price} บาท
+</p>
 ))}
     </div>
   ))}
