@@ -47,7 +47,9 @@ const deleteOrder = async (id) => {
 
   await deleteDoc(doc(db, "orders", id));
 
-  window.location.reload();
+  setOrders(
+    orders.filter((order) => order.id !== id)
+  );
 };
   return (
    <div style={{ padding: "20px" }}>
