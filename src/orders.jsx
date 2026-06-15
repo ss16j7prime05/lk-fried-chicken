@@ -81,6 +81,22 @@ const deleteOrder = async (id) => {
       }}
     >
     <h3>ลูกค้า: {order.customerName}</h3>
+    <p>📞 เบอร์โทร: {order.phone}</p>
+
+<p>
+📍 GPS:
+<a
+  href={`https://www.google.com/maps?q=${order.gps}`}
+  target="_blank"
+  rel="noreferrer"
+>
+  {order.gps}
+</a>
+</p>
+
+<p>💳 ชำระเงิน: {order.paymentMethod}</p>
+
+<p>📝 หมายเหตุ: {order.note || "-"}</p>
 <p>สถานะ: {order.status}</p>
 
 <button
