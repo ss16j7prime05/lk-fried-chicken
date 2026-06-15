@@ -95,11 +95,11 @@ const deleteOrder = async (id) => {
 <p style={{ margin: "4px 0" }}>
 📍 GPS:
 <a
-  href={`https://www.google.com/maps?q=${order.gps}`}
+ href={`https://www.google.com/maps?q=${order.gpsLocation}`}
   target="_blank"
   rel="noreferrer"
 >
-  {order.gps}
+ {order.gpsLocation}
 </a>
 </p>
 
