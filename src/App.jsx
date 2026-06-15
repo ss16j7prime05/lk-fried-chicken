@@ -146,54 +146,6 @@ setNote("");
 return (
     <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
       <h1>🍗 LK Fried Chicken</h1>
-  <input
-  type="text"
-  placeholder="ชื่อผู้สั่ง"
-  value={customerName}
-  onChange={(e) => setCustomerName(e.target.value)}
-  required
-  style={{
-    padding: "10px",
-    marginBottom: "10px",
-    width: "250px"
-  }}
-  />
-  <input
-  type="tel"
-  placeholder="เบอร์โทร"
-  value={phone}
-  onChange={(e) => setPhone(e.target.value)}
-  style={{
-    padding: "10px",
-    marginBottom: "10px",
-    width: "250px"
-  }}
- />
-<button onClick={getLocation}>
-  📍 ใช้ตำแหน่งปัจจุบัน
-</button>
-
-<p>GPS: {gpsLocation}</p>
-
-<textarea
-  placeholder="หมายเหตุ"
-  value={note}
-  onChange={(e) => setNote(e.target.value)}
-  style={{
-    padding: "10px",
-    marginBottom: "10px",
-    width: "250px",
-    height: "60px"
-  }}
-></textarea>
-<select
-  value={paymentMethod}
-  onChange={(e) => setPaymentMethod(e.target.value)}
->
-  <option value="เงินสด">เงินสด</option>
-  <option value="โอนเงิน">โอนเงิน</option>
-  <option value="PromptPay">PromptPay</option>
-</select>
   
 <h3>🛒 ตะกร้าสินค้า</h3>
       <h3>🛒 ตะกร้า ({cart.length}) รายการ</h3>
@@ -306,7 +258,18 @@ return (
 />
 
 <br /><br />
+<h3>💳 วิธีชำระเงิน</h3>
 
+<select
+  value={paymentMethod}
+  onChange={(e) => setPaymentMethod(e.target.value)}
+>
+  <option value="เงินสด">เงินสด</option>
+  <option value="โอนเงิน">โอนเงิน</option>
+  <option value="PromptPay">PromptPay</option>
+</select>
+
+<br /><br />
 <button onClick={getLocation}>
   📍 ดึง GPS
 </button>
