@@ -85,34 +85,18 @@ const filteredMenus =
         (menu) => menu.category === selectedCategory
       );
 const addToCart = (menu) => {
-  const existingItem = cart.find(
-    (item) =>
-      item.id === menu.id &&
-      item.top_chicken === menu.top_chicken &&
-      item.spicy === menu.spicy
-  );
-
-  if (existingItem) {
-    setCart(
-      cart.map((item) =>
-        item === existingItem
-          ? {
-              ...item,
-              qty: item.qty + (menu.qty || 1),
-            }
-          : item
-      )
-    );
-  } else {
-    setCart([
-      ...cart,
-      {
-        ...menu,
-        qty: menu.qty || 1,
-      },
-    ]);
-  }
+  setCart((prev) => [
+    ...prev,
+    {
+      ...menu,
+      qty: menu.qty || 1,
+      top_chicken: menu.top_chicken || "",
+      spicy: menu.spicy || "",
+    },
+  ]);
 };
+
+
 const totalPrice = cart.reduce(
   (sum, item) => sum + item.price * item.qty,
   0
@@ -186,6 +170,9 @@ setPhone("");
 setAddress("");
 setGpsLocation("");
 setNote("");
+setSelectedTopChicken("");
+setSelectedSpicy("");
+setQuantity(1);
 };
 return (
     <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
@@ -353,7 +340,19 @@ addToCart(menu);
   }}
 >
  <div style={{ flex: 1 }}>
-  {item.name}
+  <div>{item.name}</div>
+
+  {item.top_chicken && (
+    <div>
+      🍖 {item.top_chicken}
+    </div>
+  )}
+
+  {item.spicy && (
+    <div>
+      🌶️ {item.spicy}
+    </div>
+  )}
 </div>
 
   <button
@@ -524,29 +523,33 @@ setQuantity(quantity+1)
 
 <br/><br/>
 <button
-
 onClick={() => {
 
-addToCart({
+const item = {
+  ...selectedMenu,
+  top_chicken: selectedTopChicken,
+  spicy: selectedSpicy,
+  qty: quantity
+};
 
-...selectedMenu,
+console.log(item);
 
-top_chicken:selectedTopChicken,
+if (!selectedTopChicken) {
+  alert("กรุณาเลือกไก่ทอด");
+  return;
+}
 
-spicy:selectedSpicy,
+if (!selectedSpicy) {
+  alert("กรุณาเลือกระดับความเผ็ด");
+  return;
+}
 
-qty:quantity
-
-});
-
+addToCart(item);
 setShowModal(false);
 
 }}
-
 >
-
 ใส่ตะกร้า
-
 </button>
  <button
   onClick={() => setShowModal(false)}

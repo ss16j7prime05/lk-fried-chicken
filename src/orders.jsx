@@ -138,17 +138,40 @@ const deleteOrder = async (id) => {
 >
   💰 รวม {order.totalPrice} บาท
 </h3>
-
 {order.items?.map((item, index) => (
- <p
-  key={index}
-  style={{
-    margin: "6px 0",
-    paddingLeft: "10px",
-  }}
->
-  🍗 {item.name} - {item.price} บาท
-</p>
+  <div
+    key={index}
+    style={{
+      borderTop: "1px dashed #ccc",
+      marginTop: "10px",
+      paddingTop: "10px",
+      paddingLeft: "10px",
+    }}
+  >
+    <div>
+      🍗 {item.name}
+    </div>
+
+    {item.top_chicken && (
+      <div>
+        🍖 ไก่ : {item.top_chicken}
+      </div>
+    )}
+
+    {item.spicy && (
+      <div>
+        🌶️ ความเผ็ด : {item.spicy}
+      </div>
+    )}
+
+    <div>
+      🔢 จำนวน : {item.qty || 1}
+    </div>
+
+    <div>
+      💰 ราคา : {(item.price * (item.qty || 1))} บาท
+    </div>
+  </div>
 ))}
     </div>
   ))}
