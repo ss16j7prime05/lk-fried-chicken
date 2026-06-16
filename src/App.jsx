@@ -147,16 +147,6 @@ return (
     <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
       <h1>🍗 LK Fried Chicken</h1>
   
-<<<<<<< HEAD
-=======
-<h3>🛒 ตะกร้าสินค้า</h3>
-      <h3>🛒 ตะกร้า ({cart.length}) รายการ</h3>
-      <Link to="/orders">
-  <button style={{ marginBottom: "20px" }}>
-    📦 ดูออเดอร์
-  </button>
-</Link>
->>>>>>> 946610e7b9a7472d52d0884d7ae1e5cd2f59b96b
 <div style={{ marginBottom: "20px" }}>
   <button onClick={() => setSelectedCategory("ทั้งหมด")}>ทั้งหมด</button>
   <button onClick={() => setSelectedCategory("ข้าวหน้าไก่ทอด")}>ข้าวหน้าไก่ทอด</button>
@@ -234,11 +224,7 @@ return (
 </div>
 <hr />
 
-<<<<<<< HEAD
 <h2> สรุปรายการสั่งซื่อ</h2>
-=======
-<h2>🛒 ตะกร้าสินค้า</h2>
->>>>>>> 946610e7b9a7472d52d0884d7ae1e5cd2f59b96b
 <h3>รวมเป็นเงิน: {totalPrice} บาท</h3>
 <input
   type="text"
@@ -295,17 +281,11 @@ return (
 <button onClick={() => setCart([])}>
   🗑️ ล้างตะกร้า
 </button>
-<<<<<<< HEAD
 
 <button onClick={submitOrder}>
   📦 สั่งอาหาร
 </button>
 
-=======
-<button onClick={submitOrder}>
-  📦 สั่งอาหาร
-</button>
->>>>>>> 946610e7b9a7472d52d0884d7ae1e5cd2f59b96b
 {cart.map((item, index) => (
   <div key={index}>
   <div
@@ -373,7 +353,6 @@ return (
 
   </div>
 ))}
-<<<<<<< HEAD
 <div style={{ textAlign: "center", marginTop: "30px" }}>
   <Link to="/orders">
     <button
@@ -393,10 +372,6 @@ return (
 </div>
 </div>
 );
-=======
-</div>
-  );
->>>>>>> 946610e7b9a7472d52d0884d7ae1e5cd2f59b96b
 }
 
 export default App;
