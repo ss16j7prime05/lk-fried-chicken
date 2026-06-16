@@ -65,19 +65,12 @@ const spicy = options.find(
 (item)=>item.id==="spicy"
 );
 const openMenu = (menu) => {
-
-setSelectedMenu(menu);
-
-setSelectedTopChicken("");
-
-setSelectedSpicy("");
-
-setQuantity(1);
-
-setShowModal(true);
-
-
-}
+  setSelectedMenu(menu);
+  setSelectedTopChicken("");
+  setSelectedSpicy("");
+  setQuantity(1);
+  setShowModal(true);
+};
 const drinkMenus = menus.filter(
   (menu) => menu.category === "เครื่องดื่ม"
 );
@@ -91,17 +84,22 @@ const filteredMenus =
     : menus.filter(
         (menu) => menu.category === selectedCategory
       );
-
-qty: item.qty + (menu.qty || 1)
+const addToCart = (menu) => {
   const existingItem = cart.find(
-    (item) => item.id === menu.id
+    (item) =>
+      item.id === menu.id &&
+      item.top_chicken === menu.top_chicken &&
+      item.spicy === menu.spicy
   );
 
   if (existingItem) {
     setCart(
       cart.map((item) =>
-        item.id === menu.id
-          ? { ...item, qty: item.qty + 1 }
+        item === existingItem
+          ? {
+              ...item,
+              qty: item.qty + (menu.qty || 1),
+            }
           : item
       )
     );
@@ -110,7 +108,7 @@ qty: item.qty + (menu.qty || 1)
       ...cart,
       {
         ...menu,
-       qty: menu.qty || 1,
+        qty: menu.qty || 1,
       },
     ]);
   }
@@ -562,6 +560,7 @@ setShowModal(false);
 </div>
 </div>
 );
-}
+
+}   // ← เพิ่มบรรทัดนี้
 
 export default App;
