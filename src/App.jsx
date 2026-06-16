@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 function App() {
   const [menus, setMenus] = useState([]);
+  const [options, setOptions] = useState([]);
 const [selectedCategory, setSelectedCategory] = useState("ทั้งหมด");
 const [cart, setCart] = useState([]);
 const [customerName, setCustomerName] = useState("");
@@ -13,6 +14,15 @@ const [gpsLocation, setGpsLocation] = useState("");
 const [note, setNote] = useState("");
 const [paymentMethod, setPaymentMethod] = useState("เงินสด");
 const [shippingFee, setShippingFee] = useState(0);
+const [selectedTopChicken, setSelectedTopChicken] = useState("");
+const [showModal, setShowModal] = useState(false);
+
+const [selectedMenu, setSelectedMenu] = useState(null);
+
+const [selectedSauce, setSelectedSauce] = useState("");
+
+const [selectedSpicy, setSelectedSpicy] = useState("");
+console.log(options);
 useEffect(() => {
   const fetchMenus = async () => {
     const querySnapshot = await getDocs(collection(db, "menus"));
@@ -24,6 +34,26 @@ useEffect(() => {
   };
   fetchMenus();
 }, []);
+useEffect(() => {
+
+  const fetchOptions = async () => {
+
+    const querySnapshot =
+      await getDocs(collection(db, "options"));
+
+    const optionData =
+      querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+setOptions(optionData);
+console.log(optionData);
+   
+  };
+
+  fetchOptions();
+
+}, []);
 const riceMenus = menus.filter(
   (menu) => menu.category === "ข้าวหน้าไก่ทอด"
 );
@@ -31,7 +61,28 @@ const riceMenus = menus.filter(
 const snackMenus = menus.filter(
   (menu) => menu.category === "อาหารทานเล่น"
 );
+const topChicken = options.find(
+  (item) => item.id === "top_chicken"
+);
+const sauce = options.find(
+(item)=>item.id==="sauce"
+);
 
+const spicy = options.find(
+(item)=>item.id==="spicy"
+);
+
+const openMenu = (menu) => {
+
+setSelectedMenu(menu);
+
+setSelectedSauce("");
+
+setSelectedSpicy("");
+
+setShowModal(true);
+
+}
 const drinkMenus = menus.filter(
   (menu) => menu.category === "เครื่องดื่ม"
 );
@@ -205,7 +256,7 @@ return (
 </p>
 
    <button
-  onClick={() => addToCart(menu)}
+onClick={() => openMenu(menu)}
   style={{
     width: "50px",
     height: "50px",
@@ -276,7 +327,33 @@ return (
   value={note}
   onChange={(e) => setNote(e.target.value)}
 />
+{topChicken && (
+  <>
+    <h4>{topChicken.title}</h4>
 
+    <select
+      value={selectedTopChicken}
+      onChange={(e) =>
+        setSelectedTopChicken(e.target.value)
+      }
+    >
+      <option value="">
+        -- กรุณาเลือก --
+      </option>
+
+      {topChicken.choices.map((choice,index) => (
+        <option
+          key={index}
+          value={choice.name}
+        >
+          {choice.name}
+        </option>
+      ))}
+    </select>
+
+    <br /><br />
+  </>
+)}
 <br /><br />
 <button onClick={() => setCart([])}>
   🗑️ ล้างตะกร้า
@@ -369,6 +446,93 @@ return (
       📦 ดูออเดอร์
     </button>
   </Link>
+  {showModal && (
+
+<div className="modal">
+
+  <div className="modal-content">
+
+    <h2>{selectedMenu?.name}</h2>
+
+    <h3>ราคา {selectedMenu?.price} บาท</h3>
+
+    <br/>
+
+    <h3>เลือกซอส</h3>
+
+    <select
+      value={selectedSauce}
+      onChange={(e)=>setSelectedSauce(e.target.value)}
+    >
+
+      <option value="">เลือกซอส</option>
+
+      {sauce?.choices?.map((item,index)=>(
+
+        <option
+          key={index}
+          value={item.name}
+        >
+          {item.name}
+        </option>
+
+      ))}
+
+    </select>
+
+
+    <br/><br/>
+
+    <h3>ระดับความเผ็ด</h3>
+
+    <select
+      value={selectedSpicy}
+      onChange={(e)=>setSelectedSpicy(e.target.value)}
+    >
+
+      <option value="">เลือกความเผ็ด</option>
+
+      {spicy?.choices?.map((item,index)=>(
+
+        <option
+          key={index}
+          value={item.name}
+        >
+          {item.name}
+        </option>
+
+      ))}
+
+    </select>
+
+    <br/><br/>
+
+<button
+  onClick={() => {
+
+    addToCart({
+      ...selectedMenu,
+      sauce: selectedSauce,
+      spicy: selectedSpicy
+    });
+
+    setSelectedSauce("");
+    setSelectedSpicy("");
+    setShowModal(false);
+
+  }}
+>
+  ใส่ตะกร้า
+</button>
+ <button
+  onClick={() => setShowModal(false)}
+>
+  ปิด
+</button>
+ </div>
+</div>
+
+)}
 </div>
 </div>
 );
