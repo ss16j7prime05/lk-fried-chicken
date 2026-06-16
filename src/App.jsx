@@ -238,14 +238,10 @@ return (
    <button
 onClick={() => {
 
-if(menu.name === "ข้าวยำไก่แซ่บ"){
-
-openMenu(menu);
-
+if(menu.category === "ข้าวหน้าไก่ทอด"){
+  openMenu(menu);
 }else{
-
-addToCart(menu);
-
+  addToCart(menu);
 }
 
 }}
@@ -471,6 +467,10 @@ value={item.name}
 </select>
 
     <br/><br/>
+{selectedMenu?.name === "ข้าวยำไก่แซ่บ" && (
+
+<>
+
 <h3>ระดับความเผ็ด</h3>
 
 <select
@@ -494,6 +494,9 @@ value={item.name}
 ))}
 
 </select>
+
+</>
+)}
 
 <br/><br/>
 
@@ -528,7 +531,12 @@ onClick={() => {
 const item = {
   ...selectedMenu,
   top_chicken: selectedTopChicken,
-  spicy: selectedSpicy,
+
+  spicy:
+    selectedMenu?.name === "ข้าวยำไก่แซ่บ"
+      ? selectedSpicy
+      : "",
+
   qty: quantity
 };
 
@@ -539,7 +547,10 @@ if (!selectedTopChicken) {
   return;
 }
 
-if (!selectedSpicy) {
+if (
+  selectedMenu?.name === "ข้าวยำไก่แซ่บ" &&
+  !selectedSpicy
+) {
   alert("กรุณาเลือกระดับความเผ็ด");
   return;
 }
@@ -557,6 +568,7 @@ setShowModal(false);
   ปิด
 </button>
  </div>
+
 </div>
 
 )}
