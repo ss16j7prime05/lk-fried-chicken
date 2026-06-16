@@ -16,12 +16,9 @@ const [paymentMethod, setPaymentMethod] = useState("เงินสด");
 const [shippingFee, setShippingFee] = useState(0);
 const [selectedTopChicken, setSelectedTopChicken] = useState("");
 const [showModal, setShowModal] = useState(false);
-
 const [selectedMenu, setSelectedMenu] = useState(null);
-
-const [selectedSauce, setSelectedSauce] = useState("");
-
 const [selectedSpicy, setSelectedSpicy] = useState("");
+const [quantity, setQuantity] = useState(1);
 console.log(options);
 useEffect(() => {
   const fetchMenus = async () => {
@@ -64,23 +61,21 @@ const snackMenus = menus.filter(
 const topChicken = options.find(
   (item) => item.id === "top_chicken"
 );
-const sauce = options.find(
-(item)=>item.id==="sauce"
-);
-
 const spicy = options.find(
 (item)=>item.id==="spicy"
 );
-
 const openMenu = (menu) => {
 
 setSelectedMenu(menu);
 
-setSelectedSauce("");
+setSelectedTopChicken("");
 
 setSelectedSpicy("");
 
+setQuantity(1);
+
 setShowModal(true);
+
 
 }
 const drinkMenus = menus.filter(
@@ -97,7 +92,7 @@ const filteredMenus =
         (menu) => menu.category === selectedCategory
       );
 
-const addToCart = (menu) => {
+qty: item.qty + (menu.qty || 1)
   const existingItem = cart.find(
     (item) => item.id === menu.id
   );
@@ -115,7 +110,7 @@ const addToCart = (menu) => {
       ...cart,
       {
         ...menu,
-        qty: 1,
+       qty: menu.qty || 1,
       },
     ]);
   }
@@ -256,7 +251,19 @@ return (
 </p>
 
    <button
-onClick={() => openMenu(menu)}
+onClick={() => {
+
+if(menu.name === "ข้าวยำไก่แซ่บ"){
+
+openMenu(menu);
+
+}else{
+
+addToCart(menu);
+
+}
+
+}}
   style={{
     width: "50px",
     height: "50px",
@@ -327,33 +334,7 @@ onClick={() => openMenu(menu)}
   value={note}
   onChange={(e) => setNote(e.target.value)}
 />
-{topChicken && (
-  <>
-    <h4>{topChicken.title}</h4>
 
-    <select
-      value={selectedTopChicken}
-      onChange={(e) =>
-        setSelectedTopChicken(e.target.value)
-      }
-    >
-      <option value="">
-        -- กรุณาเลือก --
-      </option>
-
-      {topChicken.choices.map((choice,index) => (
-        <option
-          key={index}
-          value={choice.name}
-        >
-          {choice.name}
-        </option>
-      ))}
-    </select>
-
-    <br /><br />
-  </>
-)}
 <br /><br />
 <button onClick={() => setCart([])}>
   🗑️ ล้างตะกร้า
@@ -454,75 +435,120 @@ onClick={() => openMenu(menu)}
 
     <h2>{selectedMenu?.name}</h2>
 
-    <h3>ราคา {selectedMenu?.price} บาท</h3>
+<h3>เลือกไก่ทอดที่จะเอามาทำหน้าข้าว</h3>
 
-    <br/>
+<select
 
-    <h3>เลือกซอส</h3>
+value={selectedTopChicken}
 
-    <select
-      value={selectedSauce}
-      onChange={(e)=>setSelectedSauce(e.target.value)}
-    >
+onChange={(e)=>setSelectedTopChicken(e.target.value)}
 
-      <option value="">เลือกซอส</option>
+>
 
-      {sauce?.choices?.map((item,index)=>(
+<option value="">
 
-        <option
-          key={index}
-          value={item.name}
-        >
-          {item.name}
-        </option>
+เลือก
 
-      ))}
+</option>
 
-    </select>
+{
 
+topChicken?.choices?.map((item,index)=>(
 
-    <br/><br/>
+<option
 
-    <h3>ระดับความเผ็ด</h3>
+key={index}
 
-    <select
-      value={selectedSpicy}
-      onChange={(e)=>setSelectedSpicy(e.target.value)}
-    >
+value={item.name}
 
-      <option value="">เลือกความเผ็ด</option>
+>
 
-      {spicy?.choices?.map((item,index)=>(
+{item.name}
 
-        <option
-          key={index}
-          value={item.name}
-        >
-          {item.name}
-        </option>
+</option>
 
-      ))}
+))
 
-    </select>
+}
+
+</select>
 
     <br/><br/>
+<h3>ระดับความเผ็ด</h3>
+
+<select
+value={selectedSpicy}
+onChange={(e)=>setSelectedSpicy(e.target.value)}
+>
+
+<option value="">
+เลือกความเผ็ด
+</option>
+
+{spicy?.choices?.map((item,index)=>(
+
+<option
+key={index}
+value={item.name}
+>
+{item.name}
+</option>
+
+))}
+
+</select>
+
+<br/><br/>
+
+<h3>จำนวน</h3>
 
 <button
-  onClick={() => {
-
-    addToCart({
-      ...selectedMenu,
-      sauce: selectedSauce,
-      spicy: selectedSpicy
-    });
-
-    setSelectedSauce("");
-    setSelectedSpicy("");
-    setShowModal(false);
-
-  }}
+onClick={()=>{
+if(quantity>1){
+setQuantity(quantity-1)
+}
+}}
 >
-  ใส่ตะกร้า
+-
+</button>
+
+<span style={{margin:"0 20px"}}>
+{quantity}
+</span>
+
+<button
+onClick={()=>{
+setQuantity(quantity+1)
+}}
+>
++
+</button>
+
+<br/><br/>
+<button
+
+onClick={() => {
+
+addToCart({
+
+...selectedMenu,
+
+top_chicken:selectedTopChicken,
+
+spicy:selectedSpicy,
+
+qty:quantity
+
+});
+
+setShowModal(false);
+
+}}
+
+>
+
+ใส่ตะกร้า
+
 </button>
  <button
   onClick={() => setShowModal(false)}
