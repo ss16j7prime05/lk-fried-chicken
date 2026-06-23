@@ -3,9 +3,10 @@ import { collection, getDocs, addDoc } from "firebase/firestore";
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 
-// TODO: replace with the real shop coordinates
-const SHOP_LAT = 13.7563;
-const SHOP_LNG = 100.5018;
+// LK Fried Chicken store location
+// 526 ซอย ประปานคร 3 ต.นครปฐม อ.เมืองนครปฐม จ.นครปฐม 73000
+const SHOP_LAT = 13.8294079;
+const SHOP_LNG = 100.0529543;
 
 // Haversine distance in kilometers
 const haversineKm = (lat1, lng1, lat2, lng2) => {
@@ -238,14 +239,36 @@ useEffect(() => {
     const startLng = lng ?? SHOP_LNG;
     tempCoordsRef.current = { lat: startLat, lng: startLng, address: "" };
 
-    const map = L.map(mapRef.current).setView([startLat, startLng], 15);
+    // center the map on the store
+    const map = L.map(mapRef.current).setView([SHOP_LAT, SHOP_LNG], 14);
     mapInstanceRef.current = map;
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap",
     }).addTo(map);
 
-    const marker = L.marker([startLat, startLng], { draggable: true }).addTo(map);
+    // store marker (fixed)
+    const storeIcon = L.divIcon({
+      className: "",
+      html: '<div style="font-size:28px;line-height:28px">🏪</div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 28],
+    });
+    L.marker([SHOP_LAT, SHOP_LNG], { icon: storeIcon })
+      .addTo(map)
+      .bindPopup("LK Fried Chicken");
+
+    // draggable customer marker (green)
+    const customerIcon = L.divIcon({
+      className: "",
+      html: '<div style="width:22px;height:22px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.4)"></div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+    const marker = L.marker([startLat, startLng], {
+      draggable: true,
+      icon: customerIcon,
+    }).addTo(map);
     markerRef.current = marker;
 
     const onMove = async (lt, lg) => {
