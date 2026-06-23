@@ -117,6 +117,24 @@ const reverseGeocode = async (lat, lng) => {
   }
 };
 
+const MAX_RADIUS_KM = 8;
+
+// ร้านเปิดตามเวลา (รองรับข้ามวัน เช่น 15:30 - 02:00)
+const withinHours = (openTime, closeTime) => {
+  if (!openTime || !closeTime) return true;
+  const [oh, om] = openTime.split(":").map(Number);
+  const [ch, cm] = closeTime.split(":").map(Number);
+  const now = new Date();
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const openM = oh * 60 + om;
+  const closeM = ch * 60 + cm;
+  if (closeM <= openM) {
+    // ข้ามเที่ยงคืน
+    return cur >= openM || cur < closeM;
+  }
+  return cur >= openM && cur < closeM;
+};
+
 function App() {
   const [menus, setMenus] = useState([]);
   const [options, setOptions] = useState([]);
@@ -144,7 +162,8 @@ const [lat, setLat] = useState(null);
 const [lng, setLng] = useState(null);
 const [cartOpen, setCartOpen] = useState(false);
 const [searchTerm, setSearchTerm] = useState("");
-const [storeOpen, setStoreOpen] = useState(true);
+const [storeData, setStoreData] = useState({ isOpen: true });
+const [, setTick] = useState(0);
 const [slipFile, setSlipFile] = useState(null);
 const [deliveryAddress, setDeliveryAddress] = useState("");
 const [distanceKm, setDistanceKm] = useState(null);
@@ -169,9 +188,14 @@ useEffect(() => {
 }, []);
 useEffect(() => {
   const unsub = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
-    if (snap.exists()) setStoreOpen(snap.data().isOpen !== false);
+    if (snap.exists()) setStoreData(snap.data());
   });
-  return () => unsub();
+  // re-evaluate เวลาเปิด/ปิดทุก 1 นาที
+  const interval = setInterval(() => setTick((t) => t + 1), 60000);
+  return () => {
+    unsub();
+    clearInterval(interval);
+  };
 }, []);
 useEffect(() => {
 
@@ -256,6 +280,10 @@ const filteredMenus = menus
       menu.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 const addToCart = (menu) => {
+  if (!storeOpen) {
+    alert("ร้านปิดรับออเดอร์");
+    return;
+  }
   setCart((prev) => [
     ...prev,
     {
@@ -274,6 +302,13 @@ const totalPrice = cart.reduce(
   (sum, item) => sum + itemTotal(item),
   0
 );
+const storeOpen =
+  storeData.isOpen !== false &&
+  withinHours(storeData.openTime, storeData.closeTime);
+const outOfArea =
+  orderType === "delivery" &&
+  distanceKm != null &&
+  distanceKm > MAX_RADIUS_KM;
 const applyLocation = async (latValue, lngValue, knownAddress) => {
   console.log("selectedLocation", selectedLocation);
 
@@ -352,7 +387,11 @@ const handleConfirmLocation = async () => {
 };
 const submitOrder = async () => {
   if (!storeOpen) {
-    alert("ร้านปิดชั่วคราว");
+    alert("ร้านปิดรับออเดอร์");
+    return;
+  }
+  if (outOfArea) {
+    alert("ขออภัย อยู่นอกพื้นที่จัดส่ง");
     return;
   }
   if (cart.length === 0) {
@@ -439,7 +478,13 @@ if (orderType === "delivery") {
 
   distanceKm: distanceKm,
 
+  distance: distanceKm,
+
   deliveryDistance: distanceKm,
+
+  storeLat: SHOP_LAT,
+
+  storeLng: SHOP_LNG,
 
   orderType: orderType,
 
@@ -556,7 +601,7 @@ return (
       marginBottom: "16px",
     }}
   >
-    ⛔ ร้านปิดชั่วคราว
+    ⛔ ร้านปิดรับออเดอร์
   </div>
 )}
 
@@ -923,22 +968,41 @@ return (
         {totalPrice + (orderType === "delivery" ? deliveryFee : 0)} บาท
       </span>
     </div>
+    {outOfArea && (
+      <div
+        style={{
+          background: "#e53935",
+          color: "#fff",
+          padding: "10px",
+          borderRadius: "10px",
+          textAlign: "center",
+          marginBottom: "10px",
+          fontWeight: "bold",
+        }}
+      >
+        ขออภัย อยู่นอกพื้นที่จัดส่ง (เกิน {MAX_RADIUS_KM} กม.)
+      </div>
+    )}
     <button
       onClick={submitOrder}
-      disabled={!storeOpen}
+      disabled={!storeOpen || outOfArea}
       style={{
         width: "100%",
         padding: "14px",
         borderRadius: "12px",
-        background: storeOpen ? "#ff9800" : "#777",
+        background: storeOpen && !outOfArea ? "#ff9800" : "#777",
         color: "#fff",
         border: "none",
         fontSize: "18px",
         fontWeight: "bold",
-        cursor: storeOpen ? "pointer" : "not-allowed",
+        cursor: storeOpen && !outOfArea ? "pointer" : "not-allowed",
       }}
     >
-      {storeOpen ? "📦 สั่งซื้อ" : "ร้านปิดชั่วคราว"}
+      {!storeOpen
+        ? "ร้านปิดรับออเดอร์"
+        : outOfArea
+        ? "นอกพื้นที่จัดส่ง"
+        : "📦 สั่งซื้อ"}
     </button>
   </div>
 </div>

@@ -31,6 +31,8 @@ function StoreDashboard() {
   const [orders, setOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [isOpen, setIsOpen] = useState(true);
+  const [openTime, setOpenTime] = useState("15:30");
+  const [closeTime, setCloseTime] = useState("02:00");
   const { logout } = useAuth();
 
   useEffect(() => {
