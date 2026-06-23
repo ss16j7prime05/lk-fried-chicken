@@ -377,7 +377,7 @@ if (orderType === "delivery") {
 
   grandTotal: totalPrice + (orderType === "delivery" ? deliveryFee : 0),
 
-  status: "pending",
+  status: "ออเดอร์ใหม่",
 
   createdAt: new Date(),
 });
@@ -1095,6 +1095,38 @@ onClick={() => openMenu(menu)}
       }}
     >
       📦 ดูออเดอร์
+    </button>
+  </Link>
+  <Link to="/history">
+    <button
+      style={{
+        padding: "12px 25px",
+        fontSize: "18px",
+        borderRadius: "12px",
+        background: "#444",
+        color: "white",
+        border: "none",
+        cursor: "pointer",
+        marginLeft: "10px",
+      }}
+    >
+      📜 ประวัติการสั่งซื้อ
+    </button>
+  </Link>
+  <Link to="/track">
+    <button
+      style={{
+        padding: "12px 25px",
+        fontSize: "18px",
+        borderRadius: "12px",
+        background: "#444",
+        color: "white",
+        border: "none",
+        cursor: "pointer",
+        marginLeft: "10px",
+      }}
+    >
+      🚚 ติดตามออเดอร์
     </button>
   </Link>
   {showModal && (
