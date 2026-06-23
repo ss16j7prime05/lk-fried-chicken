@@ -8,30 +8,44 @@ import { Link } from "react-router-dom";
 const SHOP_LAT = 13.8294079;
 const SHOP_LNG = 100.0529543;
 
-// Haversine distance in kilometers
-const haversineKm = (lat1, lng1, lat2, lng2) => {
-  const R = 6371;
-  const toRad = (deg) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
 const calcDeliveryFee = (distanceKm) =>
-  distanceKm <= 3 ? 20 : Math.round(20 + (distanceKm - 3) * 10);
+  distanceKm <= 3 ? 20 : 20 + Math.round((distanceKm - 3) * 10);
 
-// Real road-route distance (km) from store to customer via OSRM
-const getRouteDistanceKm = async (custLat, custLng) => {
-  const url =
-    `https://router.project-osrm.org/route/v1/driving/` +
-    `${SHOP_LNG},${SHOP_LAT};${custLng},${custLat}?overview=false`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data.routes[0].distance / 1000;
+const STORE = {
+  lat: SHOP_LAT,
+  lng: SHOP_LNG,
+  name: "LK Fried Chicken",
+  address:
+    "526 ซอย ประปานคร 3 ตำบลนครปฐม อำเภอเมืองนครปฐม จังหวัดนครปฐม 73000",
 };
+
+// Real road-route distance (km) from store to customer via Google Routes API
+async function getRouteDistanceKm(customerLat, customerLng) {
+  const res = await fetch(
+    "https://routes.googleapis.com/directions/v2:computeRoutes",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": "routes.distanceMeters",
+      },
+      body: JSON.stringify({
+        origin: {
+          location: { latLng: { latitude: STORE.lat, longitude: STORE.lng } },
+        },
+        destination: {
+          location: {
+            latLng: { latitude: customerLat, longitude: customerLng },
+          },
+        },
+        travelMode: "DRIVE",
+      }),
+    }
+  );
+  const data = await res.json();
+  return data.routes[0].distanceMeters / 1000;
+}
 
 const reverseGeocode = async (lat, lng) => {
   try {
@@ -198,13 +212,7 @@ const applyLocation = async (latValue, lngValue, knownAddress) => {
   setLng(lngValue);
   setGpsLocation(`${latValue},${lngValue}`);
 
-  let d;
-  try {
-    d = await getRouteDistanceKm(latValue, lngValue);
-  } catch {
-    // fall back to straight-line only if the routing service is unreachable
-    d = haversineKm(SHOP_LAT, SHOP_LNG, latValue, lngValue);
-  }
+  const d = await getRouteDistanceKm(latValue, lngValue);
   setDistanceKm(d);
   setDeliveryFee(calcDeliveryFee(d));
 
@@ -742,13 +750,15 @@ return (
                   }}
                 >
                   <div>📍 ที่อยู่จัดส่ง</div>
-                  <div style={{ color: "#ccc", marginBottom: "6px" }}>
+                  <div style={{ color: "#ccc", marginBottom: "8px" }}>
                     {deliveryAddress}
                   </div>
-                  <div>
-                    ระยะทางตามเส้นทางจริง : {distanceKm != null ? distanceKm.toFixed(1) : "-"} กม.
+                  <div>🚗 ระยะทางตามเส้นทางจริง</div>
+                  <div style={{ marginBottom: "8px" }}>
+                    {distanceKm != null ? distanceKm.toFixed(1) : "-"} กม.
                   </div>
-                  <div>ค่าส่ง : {deliveryFee} บาท</div>
+                  <div>🛵 ค่าส่ง</div>
+                  <div>{deliveryFee} บาท</div>
                 </div>
               )}
             </>
@@ -807,7 +817,7 @@ return (
         marginBottom: "12px",
       }}
     >
-      <span>รวมทั้งหมด</span>
+      <span>💰 รวมทั้งหมด</span>
       <span style={{ color: "#ff9800" }}>
         {totalPrice + (orderType === "delivery" ? deliveryFee : 0)} บาท
       </span>
