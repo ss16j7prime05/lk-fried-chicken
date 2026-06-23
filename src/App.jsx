@@ -75,7 +75,7 @@ const spicy = options.find(
 (item)=>item.id==="spicy"
 );
 const powder = options.find(
-(item)=>item.id==="powder"
+(item)=>item.id==="poewder"
 );
 const sauceMain = options.find(
 (item)=>item.id==="Sauce"
@@ -86,14 +86,21 @@ const sauceExtra = options.find(
 const tableCheese = options.find(
 (item)=>item.id==="table cheese"
 );
+const optionsTotal = (item) =>
+  (item.Sauce?.price || 0) +
+  (item.sauce?.price || 0) +
+  (item.powder?.price || 0) +
+  (item.tableCheese?.price || 0);
+const itemTotal = (item) =>
+  ((item.price || 0) + optionsTotal(item)) * item.qty;
 const openMenu = (menu) => {
   setSelectedMenu(menu);
   setSelectedTopChicken("");
   setSelectedSpicy("");
-  setSelectedPowder("");
-  setSelectedSauceMain("");
-  setSelectedSauce("");
-  setSelectedTableCheese("");
+  setSelectedPowder(null);
+  setSelectedSauceMain(null);
+  setSelectedSauce(null);
+  setSelectedTableCheese(null);
   setItemNote("");
   setQuantity(1);
   setShowModal(true);
@@ -132,7 +139,7 @@ const addToCart = (menu) => {
 
 
 const totalPrice = cart.reduce(
-  (sum, item) => sum + item.price * item.qty,
+  (sum, item) => sum + itemTotal(item),
   0
 );
 const getLocation = () => {
@@ -218,10 +225,10 @@ setLat(null);
 setLng(null);
 setSelectedTopChicken("");
 setSelectedSpicy("");
-setSelectedPowder("");
-setSelectedSauceMain("");
-setSelectedSauce("");
-setSelectedTableCheese("");
+setSelectedPowder(null);
+setSelectedSauceMain(null);
+setSelectedSauce(null);
+setSelectedTableCheese(null);
 setItemNote("");
 setQuantity(1);
 setOrderType("delivery");
@@ -376,11 +383,12 @@ return (
           <div style={{ fontWeight: "bold" }}>{item.name}</div>
           {item.top_chicken && <div>🍖 {item.top_chicken}</div>}
           {item.spicy && <div>🌶️ {item.spicy}</div>}
-          {item.Sauce && <div>🍯 ซอส : {item.Sauce}</div>}
-          {item.sauce && <div>🥫 เพิ่มซอส : {item.sauce}</div>}
-          {item.powder && <div>🧂 ผงเขย่า : {item.powder}</div>}
-          {item.tableCheese && <div>🧀 ชีส : {item.tableCheese}</div>}
+          {item.Sauce && <div>🍟 ซอส : {item.Sauce.name} (+{item.Sauce.price || 0})</div>}
+          {item.sauce && <div>🥫 เพิ่มซอส : {item.sauce.name} (+{item.sauce.price || 0})</div>}
+          {item.powder && <div>🧂 ผงเขย่า : {item.powder.name} (+{item.powder.price || 0})</div>}
+          {item.tableCheese && <div>🧀 ชีส : {item.tableCheese.name} (+{item.tableCheese.price || 0})</div>}
           {item.note && <div>📝 {item.note}</div>}
+          <div>ราคา : {itemTotal(item)} บาท</div>
 
           <div
             style={{
@@ -438,7 +446,7 @@ return (
               +
             </button>
             <span style={{ marginLeft: "auto", color: "#ff9800" }}>
-              {item.price * item.qty} บาท
+              {itemTotal(item)} บาท
             </span>
           </div>
 
@@ -869,11 +877,10 @@ onClick={() => openMenu(menu)}
     <input
       type="radio"
       name="sauceMain"
-      value={item.name}
-      checked={selectedSauceMain === item.name}
-      onChange={(e) => setSelectedSauceMain(e.target.value)}
+      checked={selectedSauceMain?.name === item.name}
+      onChange={() => setSelectedSauceMain({ name: item.name, price: item.price || 0 })}
     />{" "}
-    {item.name}
+    {item.name} (+{item.price || 0} บาท)
   </label>
 ))}
 <br/><br/>
@@ -888,11 +895,10 @@ onClick={() => openMenu(menu)}
     <input
       type="radio"
       name="sauceExtra"
-      value={item.name}
-      checked={selectedSauce === item.name}
-      onChange={(e) => setSelectedSauce(e.target.value)}
+      checked={selectedSauce?.name === item.name}
+      onChange={() => setSelectedSauce({ name: item.name, price: item.price || 0 })}
     />{" "}
-    {item.name}
+    {item.name} (+{item.price || 0} บาท)
   </label>
 ))}
 <br/><br/>
@@ -907,11 +913,10 @@ onClick={() => openMenu(menu)}
     <input
       type="radio"
       name="powder"
-      value={item.name}
-      checked={selectedPowder === item.name}
-      onChange={(e) => setSelectedPowder(e.target.value)}
+      checked={selectedPowder?.name === item.name}
+      onChange={() => setSelectedPowder({ name: item.name, price: item.price || 0 })}
     />{" "}
-    {item.name}
+    {item.name} (+{item.price || 0} บาท)
   </label>
 ))}
 <br/><br/>
@@ -926,11 +931,10 @@ onClick={() => openMenu(menu)}
     <input
       type="radio"
       name="tableCheese"
-      value={item.name}
-      checked={selectedTableCheese === item.name}
-      onChange={(e) => setSelectedTableCheese(e.target.value)}
+      checked={selectedTableCheese?.name === item.name}
+      onChange={() => setSelectedTableCheese({ name: item.name, price: item.price || 0 })}
     />{" "}
-    {item.name}
+    {item.name} (+{item.price || 0} บาท)
   </label>
 ))}
 <br/><br/>
@@ -1048,6 +1052,10 @@ if (
 
 addToCart(item);
 setShowModal(false);
+setSelectedSauceMain(null);
+setSelectedSauce(null);
+setSelectedPowder(null);
+setSelectedTableCheese(null);
 
 }}
 style={{
