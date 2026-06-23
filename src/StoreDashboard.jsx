@@ -170,6 +170,11 @@ function StoreDashboard() {
       >
         <Stat label="ยอดขายวันนี้" value={`${salesToday} ฿`} color="#ff8c00" />
         <Stat label="ยอดขายเดือนนี้" value={`${salesMonth} ฿`} color="#ff8c00" />
+        <Stat
+          label="🔔 ออเดอร์ใหม่ (ยังไม่รับ)"
+          value={countBy("ออเดอร์ใหม่") + countBy("pending")}
+          color="#e53935"
+        />
         <Stat label="จำนวนออเดอร์ทั้งหมด" value={orders.length} />
         <Stat label="กำลังทำ" value={countBy("กำลังทำ")} color="#ffb74d" />
         <Stat

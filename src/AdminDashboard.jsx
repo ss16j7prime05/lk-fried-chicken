@@ -66,6 +66,37 @@ function AdminDashboard() {
   );
   const best = Object.entries(menuCount).sort((a, b) => b[1] - a[1])[0];
 
+  // ลูกค้าที่ใช้จ่ายสูงสุด
+  const custSpend = {};
+  completed.forEach((o) => {
+    const key = o.customerName || o.phone || "-";
+    custSpend[key] = (custSpend[key] || 0) + (o.grandTotal || 0);
+  });
+  const topCustomers = Object.entries(custSpend)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  // ไรเดอร์ที่ส่งมากสุด
+  const riderJobs = {};
+  completed.forEach((o) => {
+    if (o.riderName) riderJobs[o.riderName] = (riderJobs[o.riderName] || 0) + 1;
+  });
+  const topRiders = Object.entries(riderJobs)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  // กราฟยอดขาย 7 วัน
+  const sevenDays = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const total = completed
+      .filter((o) => isSameDay(toDate(o.createdAt), d))
+      .reduce((s, o) => s + (o.grandTotal || 0), 0);
+    sevenDays.push({ label: `${d.getDate()}/${d.getMonth() + 1}`, total });
+  }
+  const maxSale = Math.max(1, ...sevenDays.map((d) => d.total));
+
   const Stat = ({ label, value, color }) => (
     <div style={card}>
       <div style={{ color: "#999", fontSize: "14px" }}>{label}</div>
@@ -125,6 +156,65 @@ function AdminDashboard() {
           color={isOpen ? "#22c55e" : "#e53935"}
         />
         <Stat label="เมนูขายดี" value={best ? `${best[0]} (${best[1]})` : "-"} />
+      </div>
+
+      {/* กราฟยอดขาย 7 วัน */}
+      <div style={{ ...card, marginTop: "16px" }}>
+        <div style={{ color: "#999", fontSize: "14px", marginBottom: "10px" }}>
+          กราฟยอดขาย 7 วันล่าสุด
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "160px" }}>
+          {sevenDays.map((d) => (
+            <div key={d.label} style={{ flex: 1, textAlign: "center" }}>
+              <div
+                title={`${d.total} ฿`}
+                style={{
+                  height: `${(d.total / maxSale) * 120}px`,
+                  background: "#ff8c00",
+                  borderRadius: "6px 6px 0 0",
+                  minHeight: "2px",
+                }}
+              />
+              <div style={{ fontSize: "11px", color: "#999", marginTop: "4px" }}>{d.label}</div>
+              <div style={{ fontSize: "11px" }}>{d.total}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Top customers / riders */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+          gap: "16px",
+          marginTop: "16px",
+        }}
+      >
+        <div style={card}>
+          <div style={{ color: "#999", fontSize: "14px", marginBottom: "8px" }}>
+            ลูกค้าที่ใช้จ่ายสูงสุด
+          </div>
+          {topCustomers.length === 0 && <div style={{ color: "#777" }}>-</div>}
+          {topCustomers.map(([name, amt], i) => (
+            <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+              <span>{i + 1}. {name}</span>
+              <span style={{ color: "#ff8c00" }}>{amt} ฿</span>
+            </div>
+          ))}
+        </div>
+        <div style={card}>
+          <div style={{ color: "#999", fontSize: "14px", marginBottom: "8px" }}>
+            ไรเดอร์ส่งมากสุด
+          </div>
+          {topRiders.length === 0 && <div style={{ color: "#777" }}>-</div>}
+          {topRiders.map(([name, jobs], i) => (
+            <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+              <span>{i + 1}. {name}</span>
+              <span style={{ color: "#4fc3f7" }}>{jobs} งาน</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

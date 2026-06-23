@@ -89,6 +89,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- blockedCustomers ----------
+    // หน้าร้านสาธารณะต้องตรวจสอบได้ว่าเบอร์ถูกบล็อกไหม ; แก้ไขเฉพาะ admin
+    match /blockedCustomers/{phone} {
+      allow read: if true;
+      allow write: if role() == "admin";
+    }
+
     // ---------- counters (เลขออเดอร์รันต่อวัน) ----------
     // หน้าร้านสาธารณะต้องเพิ่มเลขรันได้ตอนสร้างออเดอร์
     match /counters/{id} {

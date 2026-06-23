@@ -1,5 +1,6 @@
-import { db } from "./firebase";
-import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction, onSnapshot } from "firebase/firestore";
+import { db, storage } from "./firebase";
+import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction, onSnapshot, getDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { STORE_ID } from "./config";
 
 // เลขออเดอร์อัตโนมัติแบบรันต่อวัน เช่น LK2506240001
@@ -144,6 +145,7 @@ const [lng, setLng] = useState(null);
 const [cartOpen, setCartOpen] = useState(false);
 const [searchTerm, setSearchTerm] = useState("");
 const [storeOpen, setStoreOpen] = useState(true);
+const [slipFile, setSlipFile] = useState(null);
 const [deliveryAddress, setDeliveryAddress] = useState("");
 const [distanceKm, setDistanceKm] = useState(null);
 const [deliveryFee, setDeliveryFee] = useState(0);
@@ -376,7 +378,33 @@ if (orderType === "delivery") {
     return;
   }
 }
+  // ตรวจสอบลูกค้าถูกบล็อกหรือไม่
+  try {
+    const blockSnap = await getDoc(doc(db, "blockedCustomers", phone.trim()));
+    if (blockSnap.exists() && blockSnap.data().blocked) {
+      alert("บัญชีของคุณถูกระงับการสั่งซื้อ กรุณาติดต่อร้าน");
+      return;
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+
   console.log("เริ่มบันทึกออเดอร์");
+
+  // อัปโหลดสลิปถ้ามี
+  let slipImage = "";
+  let paymentTime = null;
+  if (slipFile && (paymentMethod === "transfer" || paymentMethod === "promptpay")) {
+    try {
+      const slipRef = ref(storage, `slips/${Date.now()}_${slipFile.name}`);
+      await uploadBytes(slipRef, slipFile);
+      slipImage = await getDownloadURL(slipRef);
+      paymentTime = new Date();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   const orderNo = await generateOrderNo(db);
  await addDoc(collection(db, "orders"), {
   orderNo: orderNo,
@@ -386,6 +414,10 @@ if (orderType === "delivery") {
   riderLat: null,
 
   riderLng: null,
+
+  slipImage: slipImage,
+
+  paymentTime: paymentTime,
 
   customerName: customerName,
 
@@ -442,6 +474,7 @@ setLng(null);
 setDeliveryAddress("");
 setDistanceKm(null);
 setDeliveryFee(0);
+setSlipFile(null);
 setSelectedTopChicken("");
 setSelectedSpicy("");
 setSelectedPowder(null);
@@ -825,11 +858,12 @@ return (
           >
             <option value="cash">เงินสด</option>
             <option value="transfer">โอนเงิน</option>
+            <option value="promptpay">PromptPay</option>
           </select>
 
-          {paymentMethod === "transfer" && (
+          {(paymentMethod === "transfer" || paymentMethod === "promptpay") && (
             <div style={{ textAlign: "center", marginBottom: "12px" }}>
-              <div style={{ marginBottom: "6px" }}>สแกนเพื่อโอนเงิน</div>
+              <div style={{ marginBottom: "6px" }}>สแกนเพื่อชำระเงิน</div>
               <img
                 src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=LK-Fried-Chicken-PromptPay"
                 alt="QR PromptPay"
@@ -841,6 +875,20 @@ return (
                   padding: "8px",
                 }}
               />
+              <div style={{ marginTop: "8px", fontSize: "14px" }}>แนบสลิปการโอน</div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setSlipFile(e.target.files?.[0] || null)}
+                style={{ color: "#fff", marginTop: "6px" }}
+              />
+              {slipFile && (
+                <img
+                  src={URL.createObjectURL(slipFile)}
+                  alt="slip"
+                  style={{ width: "100px", borderRadius: "10px", display: "block", margin: "8px auto 0" }}
+                />
+              )}
             </div>
           )}
         </>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { Link } from "react-router-dom";
 
 const optionLabel = (value) => {
@@ -21,6 +21,10 @@ const statusLabel = (status) =>
 // ADMIN = อ่านอย่างเดียว เห็นทุกอย่าง
 function Admin() {
   const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [blocked, setBlocked] = useState([]);
+  const [blockPhone, setBlockPhone] = useState("");
+  const [blockReason, setBlockReason] = useState("");
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
@@ -37,8 +41,33 @@ function Admin() {
         });
       setOrders(data);
     });
-    return () => unsubscribe();
+    const u2 = onSnapshot(collection(db, "users"), (s) =>
+      setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    const u3 = onSnapshot(collection(db, "blockedCustomers"), (s) =>
+      setBlocked(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => {
+      unsubscribe();
+      u2();
+      u3();
+    };
   }, []);
+
+  const blockCustomer = async () => {
+    if (!blockPhone.trim()) return;
+    await setDoc(doc(db, "blockedCustomers", blockPhone.trim()), {
+      blocked: true,
+      reason: blockReason.trim() || "-",
+      createdAt: serverTimestamp(),
+    });
+    setBlockPhone("");
+    setBlockReason("");
+  };
+
+  const unblockCustomer = async (phone) => {
+    await deleteDoc(doc(db, "blockedCustomers", phone));
+  };
 
   const exportRows = () =>
     orders.map((o) => ({
@@ -78,8 +107,7 @@ function Admin() {
     downloadFile(csv, "orders.csv", "text/csv;charset=utf-8;");
   };
 
-  const exportExcel = () => {
-    const rows = exportRows();
+  const toExcel = (rows, filename) => {
     if (rows.length === 0) return;
     const headers = Object.keys(rows[0]);
     const table =
@@ -93,8 +121,44 @@ function Admin() {
         )
         .join("") +
       "</table>";
-    downloadFile(table, "orders.xls", "application/vnd.ms-excel");
+    downloadFile(table, filename, "application/vnd.ms-excel");
   };
+
+  const exportExcel = () => toExcel(exportRows(), "orders.xls");
+
+  const exportCustomers = () =>
+    toExcel(
+      users
+        .filter((u) => u.role === "customer")
+        .map((u) => ({ phone: u.phone || "", role: u.role })),
+      "customers.xls"
+    );
+
+  const exportRiders = () =>
+    toExcel(
+      users
+        .filter((u) => u.role === "rider")
+        .map((u) => ({
+          name: u.name || u.riderName || "",
+          phone: u.phone || "",
+          vehicleType: u.vehicleType || "",
+        })),
+      "riders.xls"
+    );
+
+  const exportStores = () =>
+    toExcel(
+      users
+        .filter((u) => u.role === "store")
+        .map((u) => ({
+          storeName: u.storeName || "",
+          ownerName: u.ownerName || "",
+          phone: u.phone || "",
+          email: u.email || "",
+          address: u.address || "",
+        })),
+      "stores.xls"
+    );
 
   return (
     <div
@@ -122,7 +186,10 @@ function Admin() {
             <button style={hdrBtn("#5c6bc0")}>📈 Dashboard</button>
           </Link>
           <button onClick={exportCSV} style={hdrBtn("#22c55e")}>⬇️ CSV</button>
-          <button onClick={exportExcel} style={hdrBtn("#2e7d32")}>⬇️ Excel</button>
+          <button onClick={exportExcel} style={hdrBtn("#2e7d32")}>⬇️ ออเดอร์</button>
+          <button onClick={exportCustomers} style={hdrBtn("#2e7d32")}>⬇️ ลูกค้า</button>
+          <button onClick={exportRiders} style={hdrBtn("#2e7d32")}>⬇️ ไรเดอร์</button>
+          <button onClick={exportStores} style={hdrBtn("#2e7d32")}>⬇️ ร้าน</button>
           <Link to="/">
             <button style={hdrBtn("#ff8c00")}>🍗 หน้าแรก</button>
           </Link>
@@ -130,6 +197,51 @@ function Admin() {
       </div>
 
       <p style={{ color: "#888" }}>ทั้งหมด {orders.length} ออเดอร์ (ดูอย่างเดียว)</p>
+
+      {/* ระบบบล็อกลูกค้า */}
+      <div
+        style={{
+          background: "#1e1e1e",
+          borderRadius: "16px",
+          padding: "16px",
+          marginBottom: "16px",
+        }}
+      >
+        <div style={{ fontWeight: "bold", marginBottom: "8px" }}>🚫 บล็อกลูกค้า</div>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+          <input
+            placeholder="เบอร์โทรลูกค้า"
+            value={blockPhone}
+            onChange={(e) => setBlockPhone(e.target.value)}
+            style={blockInput}
+          />
+          <input
+            placeholder="เหตุผล"
+            value={blockReason}
+            onChange={(e) => setBlockReason(e.target.value)}
+            style={blockInput}
+          />
+          <button onClick={blockCustomer} style={hdrBtn("#e53935")}>บล็อก</button>
+        </div>
+        {blocked.length === 0 && <div style={{ color: "#777" }}>ยังไม่มีลูกค้าที่ถูกบล็อก</div>}
+        {blocked.map((b) => (
+          <div
+            key={b.id}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderTop: "1px solid #333",
+              padding: "6px 0",
+            }}
+          >
+            <span>{b.id} — {b.reason}</span>
+            <button onClick={() => unblockCustomer(b.id)} style={hdrBtn("#22c55e")}>
+              ปลดบล็อก
+            </button>
+          </div>
+        ))}
+      </div>
 
       <div
         style={{
@@ -252,6 +364,16 @@ function Admin() {
     </div>
   );
 }
+
+const blockInput = {
+  flex: 1,
+  minWidth: "140px",
+  padding: "10px",
+  borderRadius: "10px",
+  border: "1px solid #444",
+  background: "#2a2a2a",
+  color: "#fff",
+};
 
 const hdrBtn = (bg) => ({
   padding: "8px 16px",
