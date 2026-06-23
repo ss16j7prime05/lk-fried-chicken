@@ -21,6 +21,9 @@ const [selectedMenu, setSelectedMenu] = useState(null);
 const [selectedSpicy, setSelectedSpicy] = useState("");
 const [quantity, setQuantity] = useState(1);
 const [selectedPowder, setSelectedPowder] = useState("");
+const [selectedSauceMain, setSelectedSauceMain] = useState("");
+const [selectedSauce, setSelectedSauce] = useState("");
+const [selectedTableCheese, setSelectedTableCheese] = useState("");
 const [itemNote, setItemNote] = useState("");
 const [lat, setLat] = useState(null);
 const [lng, setLng] = useState(null);
@@ -74,11 +77,23 @@ const spicy = options.find(
 const powder = options.find(
 (item)=>item.id==="powder"
 );
+const sauceMain = options.find(
+(item)=>item.id==="Sauce"
+);
+const sauceExtra = options.find(
+(item)=>item.id==="sauce"
+);
+const tableCheese = options.find(
+(item)=>item.id==="table cheese"
+);
 const openMenu = (menu) => {
   setSelectedMenu(menu);
   setSelectedTopChicken("");
   setSelectedSpicy("");
   setSelectedPowder("");
+  setSelectedSauceMain("");
+  setSelectedSauce("");
+  setSelectedTableCheese("");
   setItemNote("");
   setQuantity(1);
   setShowModal(true);
@@ -204,6 +219,9 @@ setLng(null);
 setSelectedTopChicken("");
 setSelectedSpicy("");
 setSelectedPowder("");
+setSelectedSauceMain("");
+setSelectedSauce("");
+setSelectedTableCheese("");
 setItemNote("");
 setQuantity(1);
 setOrderType("delivery");
@@ -358,7 +376,10 @@ return (
           <div style={{ fontWeight: "bold" }}>{item.name}</div>
           {item.top_chicken && <div>🍖 {item.top_chicken}</div>}
           {item.spicy && <div>🌶️ {item.spicy}</div>}
-          {item.powder && <div>🧂 {item.powder}</div>}
+          {item.Sauce && <div>🍯 ซอส : {item.Sauce}</div>}
+          {item.sauce && <div>🥫 เพิ่มซอส : {item.sauce}</div>}
+          {item.powder && <div>🧂 ผงเขย่า : {item.powder}</div>}
+          {item.tableCheese && <div>🧀 ชีส : {item.tableCheese}</div>}
           {item.note && <div>📝 {item.note}</div>}
 
           <div
@@ -836,26 +857,85 @@ onClick={() => openMenu(menu)}
 
 <br/><br/>
 
-{selectedMenu?.category === "อาหารทานเล่น" && powder && (
+{["อาหารทานเล่น", "เซ็ตรวม"].includes(selectedMenu?.category) && (
 
 <>
 
-<h3>เลือกผงโรย</h3>
-
-{powder?.choices?.map((item,index)=>(
-
-<label key={index} style={{ display: "block", marginBottom: "6px" }}>
-  <input
-    type="radio"
-    name="powder"
-    value={item.name}
-    checked={selectedPowder === item.name}
-    onChange={(e)=>setSelectedPowder(e.target.value)}
-  />{" "}
-  {item.name}
-</label>
-
+{sauceMain?.choices?.length > 0 && (
+<>
+<h3>เลือกซอส</h3>
+{sauceMain.choices.map((item, index) => (
+  <label key={index} style={{ display: "block", marginBottom: "6px" }}>
+    <input
+      type="radio"
+      name="sauceMain"
+      value={item.name}
+      checked={selectedSauceMain === item.name}
+      onChange={(e) => setSelectedSauceMain(e.target.value)}
+    />{" "}
+    {item.name}
+  </label>
 ))}
+<br/><br/>
+</>
+)}
+
+{sauceExtra?.choices?.length > 0 && (
+<>
+<h3>เพิ่มซอส</h3>
+{sauceExtra.choices.map((item, index) => (
+  <label key={index} style={{ display: "block", marginBottom: "6px" }}>
+    <input
+      type="radio"
+      name="sauceExtra"
+      value={item.name}
+      checked={selectedSauce === item.name}
+      onChange={(e) => setSelectedSauce(e.target.value)}
+    />{" "}
+    {item.name}
+  </label>
+))}
+<br/><br/>
+</>
+)}
+
+{powder?.choices?.length > 0 && (
+<>
+<h3>เลือกผงเขย่า</h3>
+{powder.choices.map((item, index) => (
+  <label key={index} style={{ display: "block", marginBottom: "6px" }}>
+    <input
+      type="radio"
+      name="powder"
+      value={item.name}
+      checked={selectedPowder === item.name}
+      onChange={(e) => setSelectedPowder(e.target.value)}
+    />{" "}
+    {item.name}
+  </label>
+))}
+<br/><br/>
+</>
+)}
+
+{tableCheese?.choices?.length > 0 && (
+<>
+<h3>เพิ่มชีส</h3>
+{tableCheese.choices.map((item, index) => (
+  <label key={index} style={{ display: "block", marginBottom: "6px" }}>
+    <input
+      type="radio"
+      name="tableCheese"
+      value={item.name}
+      checked={selectedTableCheese === item.name}
+      onChange={(e) => setSelectedTableCheese(e.target.value)}
+    />{" "}
+    {item.name}
+  </label>
+))}
+<br/><br/>
+</>
+)}
 
 </>
 )}
@@ -938,7 +1018,13 @@ const item = {
       ? selectedSpicy
       : "",
 
+  Sauce: selectedSauceMain,
+
+  sauce: selectedSauce,
+
   powder: selectedPowder,
+
+  tableCheese: selectedTableCheese,
 
   note: itemNote,
 
