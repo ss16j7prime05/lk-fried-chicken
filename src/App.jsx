@@ -90,7 +90,11 @@ const [deliveryAddress, setDeliveryAddress] = useState("");
 const [distanceKm, setDistanceKm] = useState(null);
 const [deliveryFee, setDeliveryFee] = useState(0);
 const [showMapModal, setShowMapModal] = useState(false);
-const [selectedLocation, setSelectedLocation] = useState(null);
+const [selectedLocation, setSelectedLocation] = useState({
+  lat: null,
+  lng: null,
+  address: "",
+});
 const [canConfirm, setCanConfirm] = useState(false);
 const mapRef = useRef(null);
 const markerRef = useRef(null);
@@ -239,7 +243,7 @@ useEffect(() => {
 
   // reset confirm state each time the picker opens
   setCanConfirm(false);
-  setSelectedLocation(null);
+  setSelectedLocation({ lat: null, lng: null, address: "" });
 
   const ensureLeaflet = () =>
     new Promise((resolve) => {
@@ -299,21 +303,23 @@ useEffect(() => {
     }).addTo(map);
     markerRef.current = marker;
 
-    const onMove = async (lt, lg) => {
-      const addr = await reverseGeocode(lt, lg);
-      setSelectedLocation({ lat: lt, lng: lg, address: addr });
-      setCanConfirm(true);
-    };
-    onMove(startLat, startLng);
+    setSelectedLocation({ lat: startLat, lng: startLng, address: "" });
+    setCanConfirm(true);
 
     marker.on("dragend", () => {
-      const { lat: lt, lng: lg } = marker.getLatLng();
-      onMove(lt, lg);
+      const p = marker.getLatLng();
+      setSelectedLocation({ lat: p.lat, lng: p.lng, address: "" });
+      setCanConfirm(true);
     });
 
     map.on("click", (e) => {
       marker.setLatLng(e.latlng);
-      onMove(e.latlng.lat, e.latlng.lng);
+      setSelectedLocation({
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        address: "",
+      });
+      setCanConfirm(true);
     });
 
     // fix tiles not rendering inside a freshly shown container
@@ -330,9 +336,23 @@ useEffect(() => {
 }, [showMapModal]);
 
 const handleConfirmLocation = async () => {
-  if (!selectedLocation) return;
-  const { lat: lt, lng: lg, address: addr } = selectedLocation;
-  await applyLocation(lt, lg, addr);
+  if (
+    !selectedLocation ||
+    selectedLocation.lat === null ||
+    selectedLocation.lng === null
+  ) {
+    alert("กรุณาลากหมุดก่อน");
+    return;
+  }
+
+  console.log("selectedLocation", selectedLocation);
+
+  await applyLocation(
+    selectedLocation?.lat,
+    selectedLocation?.lng,
+    selectedLocation?.address
+  );
+
   setShowMapModal(false);
 };
 const submitOrder = async () => {
@@ -885,24 +905,32 @@ return (
           marginBottom: "12px",
         }}
       />
-      <button
-        disabled={!canConfirm}
-        onClick={handleConfirmLocation}
-        style={{
-          width: "100%",
-          padding: "12px",
-          borderRadius: "12px",
-          background: canConfirm ? "#ff9800" : "#ccc",
-          color: "#fff",
-          border: "none",
-          fontSize: "16px",
-          fontWeight: "bold",
-          cursor: canConfirm ? "pointer" : "not-allowed",
-          marginBottom: "8px",
-        }}
-      >
-        ยืนยันหมุด
-      </button>
+      {(() => {
+        const locationReady =
+          selectedLocation &&
+          selectedLocation.lat != null &&
+          selectedLocation.lng != null;
+        return (
+          <button
+            disabled={!locationReady}
+            onClick={handleConfirmLocation}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "12px",
+              background: locationReady ? "#ff9800" : "#ccc",
+              color: "#fff",
+              border: "none",
+              fontSize: "16px",
+              fontWeight: "bold",
+              cursor: locationReady ? "pointer" : "not-allowed",
+              marginBottom: "8px",
+            }}
+          >
+            ยืนยันหมุด
+          </button>
+        );
+      })()}
       <button
         onClick={() => setShowMapModal(false)}
         style={{
