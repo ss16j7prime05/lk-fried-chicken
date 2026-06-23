@@ -1,5 +1,28 @@
 import { db } from "./firebase";
-import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction } from "firebase/firestore";
+
+// เลขออเดอร์อัตโนมัติแบบรันต่อวัน เช่น LK2506240001
+const generateOrderNo = async (database) => {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const dayKey = `${yy}${mm}${dd}`;
+  const counterRef = doc(database, "counters", dayKey);
+  try {
+    const seq = await runTransaction(database, async (tx) => {
+      const snap = await tx.get(counterRef);
+      const current = snap.exists() ? snap.data().count || 0 : 0;
+      const next = current + 1;
+      tx.set(counterRef, { count: next }, { merge: true });
+      return next;
+    });
+    return `LK${dayKey}${String(seq).padStart(4, "0")}`;
+  } catch (err) {
+    console.error(err);
+    return `LK${dayKey}${String(Date.now()).slice(-4)}`;
+  }
+};
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -342,8 +365,9 @@ if (orderType === "delivery") {
   }
 }
   console.log("เริ่มบันทึกออเดอร์");
+  const orderNo = await generateOrderNo(db);
  await addDoc(collection(db, "orders"), {
-  orderNo: "LK-" + Date.now(),
+  orderNo: orderNo,
 
   customerName: customerName,
 
@@ -368,6 +392,8 @@ if (orderType === "delivery") {
   orderType: orderType,
 
   paymentMethod: paymentMethod,
+
+  paymentStatus: "pending",
 
   items: cart,
 
@@ -1046,6 +1072,21 @@ return (
   ฿{menu.price}
 </p>
 
+{menu.available === false ? (
+  <div
+    style={{
+      textAlign: "center",
+      padding: "14px",
+      borderRadius: "12px",
+      background: "#eee",
+      color: "#999",
+      fontWeight: "bold",
+      fontSize: "16px",
+    }}
+  >
+    สินค้าหมด
+  </div>
+) : (
 <div style={{ display: "flex", gap: "10px" }}>
    <button
 onClick={() => openMenu(menu)}
@@ -1082,6 +1123,7 @@ onClick={() => openMenu(menu)}
   ดูรายละเอียด
 </button>
 </div>
+)}
   </div>
 ))}
 </div>

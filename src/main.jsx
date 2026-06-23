@@ -16,6 +16,11 @@ import AdminLogin from './login/AdminLogin.jsx'
 import StoreLogin from './login/StoreLogin.jsx'
 import CustomerLogin from './login/CustomerLogin.jsx'
 import RiderLogin from './login/RiderLogin.jsx'
+import SignupStore from './signup/SignupStore.jsx'
+import SignupRider from './signup/SignupRider.jsx'
+import StoreDashboard from './StoreDashboard.jsx'
+import StoreMenu from './StoreMenu.jsx'
+import RiderProfile from './RiderProfile.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -29,6 +34,10 @@ createRoot(document.getElementById('root')).render(
           <Route path="/login/store" element={<StoreLogin />} />
           <Route path="/login/customer" element={<CustomerLogin />} />
           <Route path="/login/rider" element={<RiderLogin />} />
+
+          {/* Signup pages */}
+          <Route path="/signup/store" element={<SignupStore />} />
+          <Route path="/signup/rider" element={<SignupRider />} />
 
           {/* Protected systems */}
           <Route
@@ -48,6 +57,22 @@ createRoot(document.getElementById('root')).render(
             }
           />
           <Route
+            path="/store/dashboard"
+            element={
+              <ProtectedRoute role="store" loginPath="/login/store">
+                <StoreDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/store/menu"
+            element={
+              <ProtectedRoute role="store" loginPath="/login/store">
+                <StoreMenu />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/track"
             element={
               <ProtectedRoute role="customer" loginPath="/login/customer">
@@ -63,8 +88,23 @@ createRoot(document.getElementById('root')).render(
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/rider/profile"
+            element={
+              <ProtectedRoute role="rider" loginPath="/login/rider">
+                <RiderProfile />
+              </ProtectedRoute>
+            }
+          />
 
-          <Route path="/history" element={<CustomerOrderHistory />} />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute role="customer" loginPath="/login/customer">
+                <CustomerOrderHistory />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

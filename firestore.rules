@@ -73,6 +73,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- counters (เลขออเดอร์รันต่อวัน) ----------
+    // หน้าร้านสาธารณะต้องเพิ่มเลขรันได้ตอนสร้างออเดอร์
+    match /counters/{id} {
+      allow read, write: if true;
+    }
+
     // ---------- deny all others ----------
     match /{document=**} {
       allow read, write: if false;

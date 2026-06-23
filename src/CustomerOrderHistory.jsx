@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Link } from "react-router-dom";
+import { useAuth } from "./AuthContext.jsx";
 
 // แปลงค่า option ที่อาจเป็น string หรือ object {name, price}
 const optionLabel = (value) => {
@@ -35,9 +36,18 @@ const formatDate = (createdAt) => {
 };
 
 function CustomerOrderHistory() {
+  const { profile } = useAuth();
   const [phone, setPhone] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
   const [orders, setOrders] = useState([]);
+
+  // ลูกค้าที่ login แล้ว -> โชว์เฉพาะออเดอร์ของเบอร์ตัวเองอัตโนมัติ
+  useEffect(() => {
+    if (profile?.phone) {
+      setPhone(profile.phone);
+      setSearchPhone(profile.phone);
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (!searchPhone) {
