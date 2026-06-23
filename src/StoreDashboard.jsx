@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, setDoc } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import NewOrderNotifier from "./NewOrderNotifier.jsx";
 import { useAuth } from "./AuthContext.jsx";
@@ -30,6 +30,7 @@ const card = {
 function StoreDashboard() {
   const [orders, setOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [isOpen, setIsOpen] = useState(true);
   const { logout } = useAuth();
 
   useEffect(() => {
@@ -40,11 +41,19 @@ function StoreDashboard() {
     const unsubRev = onSnapshot(rq, (snapshot) => {
       setReviews(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
+    const unsubStore = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
+      if (snap.exists()) setIsOpen(snap.data().isOpen !== false);
+    });
     return () => {
       unsubscribe();
       unsubRev();
+      unsubStore();
     };
   }, []);
+
+  const toggleOpen = async () => {
+    await setDoc(doc(db, "stores", STORE_ID), { isOpen: !isOpen }, { merge: true });
+  };
 
   const now = new Date();
   const completed = orders.filter((o) => o.status === "เสร็จสิ้น");
@@ -66,7 +75,21 @@ function StoreDashboard() {
       menuCount[it.name] = (menuCount[it.name] || 0) + (it.qty || 1);
     });
   });
-  const bestSeller = Object.entries(menuCount).sort((a, b) => b[1] - a[1])[0];
+  const top5 = Object.entries(menuCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  const bestSeller = top5[0];
+
+  // กำไร = ยอดขาย - ต้นทุน (ต้นทุนจาก item.cost)
+  const costOf = (o) =>
+    (o.items || []).reduce((s, it) => s + (it.cost || 0) * (it.qty || 1), 0);
+  const profitToday = completed
+    .filter((o) => isSameDay(toDate(o.createdAt), now))
+    .reduce((s, o) => s + ((o.grandTotal || 0) - costOf(o)), 0);
+  const profitTotal = completed.reduce(
+    (s, o) => s + ((o.grandTotal || 0) - costOf(o)),
+    0
+  );
 
   // คะแนนร้าน
   const reviewCount = reviews.length;
@@ -126,6 +149,12 @@ function StoreDashboard() {
           <Link to="/store/menu">
             <button style={navBtn}>🍽️ จัดการเมนู</button>
           </Link>
+          <button
+            style={{ ...navBtn, background: isOpen ? "#22c55e" : "#e53935" }}
+            onClick={toggleOpen}
+          >
+            {isOpen ? "✅ ร้านเปิด (กดเพื่อปิด)" : "❌ ร้านปิด (กดเพื่อเปิด)"}
+          </button>
           <button style={{ ...navBtn, background: "#e53935" }} onClick={logout}>
             ออกจากระบบ
           </button>
@@ -153,8 +182,33 @@ function StoreDashboard() {
           label="เมนูขายดีที่สุด"
           value={bestSeller ? `${bestSeller[0]} (${bestSeller[1]})` : "-"}
         />
+        <Stat label="กำไรวันนี้" value={`${profitToday} ฿`} color="#22c55e" />
+        <Stat label="กำไรรวม" value={`${profitTotal} ฿`} color="#22c55e" />
+        <Stat label="สถานะร้าน" value={isOpen ? "เปิด" : "ปิด"} color={isOpen ? "#22c55e" : "#e53935"} />
         <Stat label="คะแนนร้าน" value={`⭐ ${storeRating}`} color="#ffd54f" />
         <Stat label="จำนวนรีวิว" value={reviewCount} />
+      </div>
+
+      {/* Top 5 เมนูขายดี */}
+      <div style={{ ...card, marginTop: "16px" }}>
+        <div style={{ color: "#999", fontSize: "14px", marginBottom: "10px" }}>
+          เมนูขายดี Top 5
+        </div>
+        {top5.length === 0 && <div style={{ color: "#777" }}>ยังไม่มีข้อมูล</div>}
+        {top5.map(([name, qty], i) => (
+          <div
+            key={name}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "6px 0",
+              borderTop: i === 0 ? "none" : "1px solid #333",
+            }}
+          >
+            <span>{i + 1}. {name}</span>
+            <span style={{ color: "#ff8c00" }}>{qty} จาน</span>
+          </div>
+        ))}
       </div>
 
       {/* กราฟยอดขาย 7 วัน */}

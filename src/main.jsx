@@ -21,6 +21,7 @@ import SignupRider from './signup/SignupRider.jsx'
 import StoreDashboard from './StoreDashboard.jsx'
 import StoreMenu from './StoreMenu.jsx'
 import RiderProfile from './RiderProfile.jsx'
+import AdminDashboard from './AdminDashboard.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -45,6 +46,14 @@ createRoot(document.getElementById('root')).render(
             element={
               <ProtectedRoute role="admin" loginPath="/login/admin">
                 <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute role="admin" loginPath="/login/admin">
+                <AdminDashboard />
               </ProtectedRoute>
             }
           />

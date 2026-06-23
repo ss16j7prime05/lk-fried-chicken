@@ -55,6 +55,8 @@ function Store() {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
   const [cancelOther, setCancelOther] = useState("");
+  const [cookTarget, setCookTarget] = useState(null);
+  const [cookMinutes, setCookMinutes] = useState(15);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
@@ -77,7 +79,24 @@ function Store() {
   const filteredOrders = orders.filter((order) => matchTab(order, filter));
 
   const setStatus = async (id, to) => {
+    // เริ่มทำอาหาร -> ถามเวลาโดยประมาณก่อน
+    if (to === "กำลังทำ") {
+      setCookTarget(id);
+      return;
+    }
     await updateDoc(doc(db, "orders", id), { status: to });
+  };
+
+  const confirmCook = async () => {
+    if (!cookTarget) return;
+    const finish = new Date(Date.now() + cookMinutes * 60000);
+    await updateDoc(doc(db, "orders", cookTarget), {
+      status: "กำลังทำ",
+      estimatedMinutes: cookMinutes,
+      estimatedFinishTime: finish,
+    });
+    setCookTarget(null);
+    setCookMinutes(15);
   };
 
   const actionsFor = (status) => {
@@ -285,6 +304,17 @@ function Store() {
                 </p>
               )}
 
+              {order.deliveryProofUrl && (
+                <div style={{ margin: "6px 0" }}>
+                  <div style={{ fontSize: "13px", color: "#22c55e" }}>📸 หลักฐานการส่ง</div>
+                  <img
+                    src={order.deliveryProofUrl}
+                    alt="proof"
+                    style={{ width: "120px", borderRadius: "10px", marginTop: "4px" }}
+                  />
+                </div>
+              )}
+
               {order.status === "ยกเลิก" && (
                 <p style={{ margin: "4px 0", color: "#e53935" }}>
                   ❌ ยกเลิก: {order.cancelReason || "-"}
@@ -446,6 +476,51 @@ function Store() {
           );
         })}
       </div>
+
+      {/* Modal เวลาทำอาหาร */}
+      {cookTarget && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 4000,
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              background: "#1e1e1e",
+              borderRadius: "16px",
+              padding: "20px",
+              width: "100%",
+              maxWidth: "360px",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>เวลาทำอาหารโดยประมาณ (นาที)</h3>
+            <select
+              value={cookMinutes}
+              onChange={(e) => setCookMinutes(Number(e.target.value))}
+              style={inputStyle}
+            >
+              {[10, 15, 20, 30, 45, 60].map((m) => (
+                <option key={m} value={m}>{m} นาที</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+              <button onClick={confirmCook} style={btn("#ff8c00")}>
+                เริ่มทำอาหาร
+              </button>
+              <button onClick={() => setCookTarget(null)} style={btn("#777")}>
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal ยกเลิกออเดอร์ */}
       {cancelTarget && (

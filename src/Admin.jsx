@@ -118,6 +118,9 @@ function Admin() {
       >
         <h1 style={{ margin: 0, fontSize: "22px" }}>🛠️ Admin — ภาพรวมทั้งหมด</h1>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Link to="/admin/dashboard">
+            <button style={hdrBtn("#5c6bc0")}>📈 Dashboard</button>
+          </Link>
           <button onClick={exportCSV} style={hdrBtn("#22c55e")}>⬇️ CSV</button>
           <button onClick={exportExcel} style={hdrBtn("#2e7d32")}>⬇️ Excel</button>
           <Link to="/">
@@ -232,6 +235,16 @@ function Admin() {
               <div>ชื่อ: {order.riderName || "-"}</div>
               <div>โทร: {order.riderPhone || "-"}</div>
               <div>สถานะไรเดอร์: {order.riderStatus || "-"}</div>
+              {order.deliveryProofUrl && (
+                <div style={{ marginTop: "6px" }}>
+                  <div style={{ fontSize: "12px", color: "#22c55e" }}>📸 หลักฐานการส่ง</div>
+                  <img
+                    src={order.deliveryProofUrl}
+                    alt="proof"
+                    style={{ width: "120px", borderRadius: "10px", marginTop: "4px" }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}

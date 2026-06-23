@@ -22,6 +22,7 @@ const CATEGORIES = [
 const emptyForm = {
   name: "",
   price: "",
+  cost: "",
   image: "",
   category: CATEGORIES[0],
   available: true,
@@ -87,6 +88,7 @@ function StoreMenu() {
     const payload = {
       name: form.name.trim(),
       price: Number(form.price) || 0,
+      cost: Number(form.cost) || 0,
       image: form.image.trim(),
       category: form.category,
       available: form.available,
@@ -105,6 +107,7 @@ function StoreMenu() {
     setForm({
       name: m.name || "",
       price: m.price || "",
+      cost: m.cost || "",
       image: m.image || "",
       category: m.category || CATEGORIES[0],
       available: m.available !== false,
@@ -170,7 +173,8 @@ function StoreMenu() {
       >
         <h3 style={{ marginTop: 0 }}>{editId ? "แก้ไขเมนู" : "เพิ่มเมนู"}</h3>
         <input placeholder="ชื่อเมนู" value={form.name} onChange={set("name")} style={input} />
-        <input type="number" placeholder="ราคา" value={form.price} onChange={set("price")} style={input} />
+        <input type="number" placeholder="ราคาขาย" value={form.price} onChange={set("price")} style={input} />
+        <input type="number" placeholder="ต้นทุน (สำหรับคำนวณกำไร)" value={form.cost} onChange={set("cost")} style={input} />
         <input placeholder="ลิงก์รูป (หรืออัปโหลดด้านล่าง)" value={form.image} onChange={set("image")} style={input} />
         <input type="file" accept="image/*" onChange={handleImage} style={{ marginBottom: "10px" }} />
         {uploading && <div style={{ color: "#ffb74d" }}>กำลังอัปโหลด...</div>}

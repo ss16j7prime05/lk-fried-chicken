@@ -73,6 +73,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- stores (เปิด/ปิดร้าน) ----------
+    // ลูกค้าหน้าร้านสาธารณะอ่านสถานะร้านได้ ; แก้ไขเฉพาะ store/admin
+    match /stores/{id} {
+      allow read: if true;
+      allow write: if role() == "store" || role() == "admin";
+    }
+
     // ---------- reviews ----------
     // ลูกค้าเขียนรีวิวได้ ; ทุก role ที่เกี่ยวข้องอ่านได้
     match /reviews/{id} {

@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction } from "firebase/firestore";
+import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction, onSnapshot } from "firebase/firestore";
 import { STORE_ID } from "./config";
 
 // เลขออเดอร์อัตโนมัติแบบรันต่อวัน เช่น LK2506240001
@@ -143,6 +143,7 @@ const [lat, setLat] = useState(null);
 const [lng, setLng] = useState(null);
 const [cartOpen, setCartOpen] = useState(false);
 const [searchTerm, setSearchTerm] = useState("");
+const [storeOpen, setStoreOpen] = useState(true);
 const [deliveryAddress, setDeliveryAddress] = useState("");
 const [distanceKm, setDistanceKm] = useState(null);
 const [deliveryFee, setDeliveryFee] = useState(0);
@@ -163,6 +164,12 @@ useEffect(() => {
     setMenus(menuData);
   };
   fetchMenus();
+}, []);
+useEffect(() => {
+  const unsub = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
+    if (snap.exists()) setStoreOpen(snap.data().isOpen !== false);
+  });
+  return () => unsub();
 }, []);
 useEffect(() => {
 
@@ -342,6 +349,10 @@ const handleConfirmLocation = async () => {
   setShowMapModal(false);
 };
 const submitOrder = async () => {
+  if (!storeOpen) {
+    alert("ร้านปิดชั่วคราว");
+    return;
+  }
   if (cart.length === 0) {
     alert("ยังไม่มีสินค้าในตะกร้า");
     return;
@@ -498,6 +509,21 @@ return (
 
 <div style={{ padding: "20px" }}>
       <h2 style={{ marginTop: 0 }}>🍗 LK Fried Chicken</h2>
+{!storeOpen && (
+  <div
+    style={{
+      background: "#e53935",
+      color: "#fff",
+      padding: "12px",
+      borderRadius: "12px",
+      textAlign: "center",
+      fontWeight: "bold",
+      marginBottom: "16px",
+    }}
+  >
+    ⛔ ร้านปิดชั่วคราว
+  </div>
+)}
 
 {/* Overlay */}
 {cartOpen && (
@@ -849,19 +875,20 @@ return (
     </div>
     <button
       onClick={submitOrder}
+      disabled={!storeOpen}
       style={{
         width: "100%",
         padding: "14px",
         borderRadius: "12px",
-        background: "#ff9800",
+        background: storeOpen ? "#ff9800" : "#777",
         color: "#fff",
         border: "none",
         fontSize: "18px",
         fontWeight: "bold",
-        cursor: "pointer",
+        cursor: storeOpen ? "pointer" : "not-allowed",
       }}
     >
-      📦 สั่งซื้อ
+      {storeOpen ? "📦 สั่งซื้อ" : "ร้านปิดชั่วคราว"}
     </button>
   </div>
 </div>

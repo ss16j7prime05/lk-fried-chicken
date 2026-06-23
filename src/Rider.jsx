@@ -9,6 +9,8 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
+import { storage } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Chat from "./Chat.jsx";
 
 const STORE_PHONE = "0830000000"; // เบอร์โทรร้าน LK Fried Chicken
@@ -40,6 +42,9 @@ const RIDER_STEPS = [
 function Rider() {
   const [orders, setOrders] = useState([]);
   const [tracking, setTracking] = useState({});
+  const [proofTarget, setProofTarget] = useState(null);
+  const [proofFile, setProofFile] = useState(null);
+  const [proofUploading, setProofUploading] = useState(false);
   const watchers = useRef({});
   const [riderName, setRiderName] = useState(
     localStorage.getItem("riderName") || ""
@@ -115,12 +120,41 @@ function Rider() {
   };
 
   const setRiderStatus = async (order, riderStatus) => {
-    const updates = { riderStatus };
-    // เมื่อส่งสำเร็จ ปิดออเดอร์
+    // ส่งสำเร็จ -> ต้องอัปโหลดหลักฐานก่อน
     if (riderStatus === "ส่งสำเร็จ") {
-      updates.status = "เสร็จสิ้น";
+      setProofTarget(order);
+      return;
     }
-    await updateDoc(doc(db, "orders", order.id), updates);
+    await updateDoc(doc(db, "orders", order.id), { riderStatus });
+  };
+
+  const confirmProof = async () => {
+    if (!proofTarget || !proofFile) {
+      alert("กรุณาอัปโหลดรูปหลักฐานการส่ง");
+      return;
+    }
+    setProofUploading(true);
+    try {
+      const storageRef = ref(
+        storage,
+        `deliveryProof/${proofTarget.id}_${Date.now()}_${proofFile.name}`
+      );
+      await uploadBytes(storageRef, proofFile);
+      const url = await getDownloadURL(storageRef);
+      await updateDoc(doc(db, "orders", proofTarget.id), {
+        riderStatus: "ส่งสำเร็จ",
+        status: "เสร็จสิ้น",
+        deliveryProofUrl: url,
+      });
+      stopDelivery(proofTarget.id);
+      setProofTarget(null);
+      setProofFile(null);
+    } catch (err) {
+      console.error(err);
+      alert("อัปโหลดไม่สำเร็จ");
+    } finally {
+      setProofUploading(false);
+    }
   };
 
   return (
@@ -367,6 +401,83 @@ function Rider() {
           </div>
         ))}
       </div>
+
+      {/* Modal หลักฐานการส่ง */}
+      {proofTarget && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 4000,
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              background: "#1e1e1e",
+              borderRadius: "16px",
+              padding: "20px",
+              width: "100%",
+              maxWidth: "360px",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>📸 หลักฐานการส่ง</h3>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+              style={{ marginBottom: "12px", color: "#fff" }}
+            />
+            {proofFile && (
+              <img
+                src={URL.createObjectURL(proofFile)}
+                alt="preview"
+                style={{ width: "120px", borderRadius: "10px", display: "block", marginBottom: "12px" }}
+              />
+            )}
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={confirmProof}
+                disabled={proofUploading}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#22c55e",
+                  color: "#fff",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                {proofUploading ? "กำลังอัปโหลด..." : "ยืนยันส่งสำเร็จ"}
+              </button>
+              <button
+                onClick={() => {
+                  setProofTarget(null);
+                  setProofFile(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#777",
+                  color: "#fff",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

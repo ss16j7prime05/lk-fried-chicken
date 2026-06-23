@@ -380,6 +380,29 @@ function TrackOrder() {
               })}
             </div>
 
+            {/* เวลาทำอาหาร */}
+            {order.status === "กำลังทำ" && order.estimatedFinishTime && (
+              <div
+                style={{
+                  background: "#161616",
+                  borderRadius: "10px",
+                  padding: "10px",
+                  marginBottom: "8px",
+                  color: "#ffb74d",
+                }}
+              >
+                👨‍🍳 กำลังทำอาหาร — คาดว่าจะเสร็จเวลา{" "}
+                {(order.estimatedFinishTime.toDate
+                  ? order.estimatedFinishTime.toDate()
+                  : new Date(order.estimatedFinishTime)
+                ).toLocaleTimeString("th-TH", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                {" น."}
+              </div>
+            )}
+
             {/* ที่อยู่จัดส่ง */}
             {order.orderType === "delivery" && (
               <div style={{ fontSize: "14px", marginBottom: "8px" }}>
