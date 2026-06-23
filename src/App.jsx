@@ -1,12 +1,56 @@
 import { db } from "./firebase";
 import { collection, getDocs, addDoc } from "firebase/firestore";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMapEvents,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 
 // LK Fried Chicken store location
 // 526 ซอย ประปานคร 3 ต.นครปฐม อ.เมืองนครปฐม จ.นครปฐม 73000
 const SHOP_LAT = 13.8294079;
 const SHOP_LNG = 100.0529543;
+
+const storeDivIcon = L.divIcon({
+  className: "",
+  html: '<div style="font-size:28px;line-height:28px">🏪</div>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+});
+const customerDivIcon = L.divIcon({
+  className: "",
+  html: '<div style="width:22px;height:22px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.4)"></div>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
+
+// Draggable customer marker + tap-to-move (react-leaflet)
+function DraggableCustomerMarker({ position, onChange }) {
+  useMapEvents({
+    click(e) {
+      onChange(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return (
+    <Marker
+      draggable
+      icon={customerDivIcon}
+      position={[position.lat, position.lng]}
+      eventHandlers={{
+        dragend(e) {
+          const m = e.target.getLatLng();
+          onChange(m.lat, m.lng);
+        },
+      }}
+    />
+  );
+}
 
 const calcDeliveryFee = (distanceKm) =>
   distanceKm <= 3 ? 20 : 20 + Math.round((distanceKm - 3) * 10);
@@ -19,32 +63,21 @@ const STORE = {
     "526 ซอย ประปานคร 3 ตำบลนครปฐม อำเภอเมืองนครปฐม จังหวัดนครปฐม 73000",
 };
 
-// Real road-route distance (km) from store to customer via Google Routes API
+// Real road-route distance (km) from store to customer via OSRM
 async function getRouteDistanceKm(customerLat, customerLng) {
-  const res = await fetch(
-    "https://routes.googleapis.com/directions/v2:computeRoutes",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": "routes.distanceMeters",
-      },
-      body: JSON.stringify({
-        origin: {
-          location: { latLng: { latitude: STORE.lat, longitude: STORE.lng } },
-        },
-        destination: {
-          location: {
-            latLng: { latitude: customerLat, longitude: customerLng },
-          },
-        },
-        travelMode: "DRIVE",
-      }),
-    }
-  );
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${STORE.lng},${STORE.lat};${customerLng},${customerLat}?overview=false`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error("OSRM error: " + res.status);
+  }
   const data = await res.json();
-  return data.routes[0].distanceMeters / 1000;
+  const meters = data?.routes?.[0]?.distance;
+  if (meters == null) {
+    throw new Error("No route distance in response");
+  }
+  return meters / 1000;
 }
 
 const reverseGeocode = async (lat, lng) => {
@@ -91,14 +124,10 @@ const [distanceKm, setDistanceKm] = useState(null);
 const [deliveryFee, setDeliveryFee] = useState(0);
 const [showMapModal, setShowMapModal] = useState(false);
 const [selectedLocation, setSelectedLocation] = useState({
-  lat: null,
-  lng: null,
+  lat: SHOP_LAT,
+  lng: SHOP_LNG,
   address: "",
 });
-const [canConfirm, setCanConfirm] = useState(false);
-const mapRef = useRef(null);
-const markerRef = useRef(null);
-const mapInstanceRef = useRef(null);
 console.log(options);
 useEffect(() => {
   const fetchMenus = async () => {
@@ -213,17 +242,48 @@ const totalPrice = cart.reduce(
   0
 );
 const applyLocation = async (latValue, lngValue, knownAddress) => {
+  console.log("selectedLocation", selectedLocation);
+
+  // Always persist coordinates + address (independent of route lookup)
   setLat(latValue);
   setLng(lngValue);
   setGpsLocation(`${latValue},${lngValue}`);
 
-  const d = await getRouteDistanceKm(latValue, lngValue);
-  setDistanceKm(d);
-  setDeliveryFee(calcDeliveryFee(d));
-
   const addr = knownAddress || (await reverseGeocode(latValue, lngValue));
   setDeliveryAddress(addr);
   setAddress(addr);
+
+  try {
+    const km = await getRouteDistanceKm(latValue, lngValue);
+    console.log("km=", km);
+    setDistanceKm(km);
+    const fee = calcDeliveryFee(km);
+    setDeliveryFee(fee);
+    console.log("route distance", km);
+    console.log("delivery fee", fee);
+  } catch (err) {
+    console.error(err);
+
+    // Fallback to straight-line (Haversine) distance if routing fails
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(latValue - SHOP_LAT);
+    const dLng = toRad(lngValue - SHOP_LNG);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(SHOP_LAT)) *
+        Math.cos(toRad(latValue)) *
+        Math.sin(dLng / 2) ** 2;
+    const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    const fee = calcDeliveryFee(km);
+    setDistanceKm(km);
+    setDeliveryFee(fee);
+    console.log("route distance", km);
+    console.log("delivery fee", fee);
+
+    alert("ไม่สามารถคำนวณระยะทางได้");
+  }
 };
 
 const getLocation = () => {
@@ -236,104 +296,6 @@ const getLocation = () => {
     }
   );
 };
-
-// Load Leaflet (CDN) + init draggable-marker map when the map modal opens
-useEffect(() => {
-  if (!showMapModal) return;
-
-  // reset confirm state each time the picker opens
-  setCanConfirm(false);
-  setSelectedLocation({ lat: null, lng: null, address: "" });
-
-  const ensureLeaflet = () =>
-    new Promise((resolve) => {
-      if (window.L) {
-        resolve();
-        return;
-      }
-      const css = document.createElement("link");
-      css.rel = "stylesheet";
-      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(css);
-
-      const script = document.createElement("script");
-      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.onload = resolve;
-      document.body.appendChild(script);
-    });
-
-  let cancelled = false;
-
-  ensureLeaflet().then(() => {
-    if (cancelled || !mapRef.current) return;
-    const L = window.L;
-
-    const startLat = lat ?? SHOP_LAT;
-    const startLng = lng ?? SHOP_LNG;
-
-    // center the map on the store
-    const map = L.map(mapRef.current).setView([SHOP_LAT, SHOP_LNG], 14);
-    mapInstanceRef.current = map;
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap",
-    }).addTo(map);
-
-    // store marker (fixed)
-    const storeIcon = L.divIcon({
-      className: "",
-      html: '<div style="font-size:28px;line-height:28px">🏪</div>',
-      iconSize: [28, 28],
-      iconAnchor: [14, 28],
-    });
-    L.marker([SHOP_LAT, SHOP_LNG], { icon: storeIcon })
-      .addTo(map)
-      .bindPopup("LK Fried Chicken");
-
-    // draggable customer marker (green)
-    const customerIcon = L.divIcon({
-      className: "",
-      html: '<div style="width:22px;height:22px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.4)"></div>',
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
-    });
-    const marker = L.marker([startLat, startLng], {
-      draggable: true,
-      icon: customerIcon,
-    }).addTo(map);
-    markerRef.current = marker;
-
-    setSelectedLocation({ lat: startLat, lng: startLng, address: "" });
-    setCanConfirm(true);
-
-    marker.on("dragend", () => {
-      const p = marker.getLatLng();
-      setSelectedLocation({ lat: p.lat, lng: p.lng, address: "" });
-      setCanConfirm(true);
-    });
-
-    map.on("click", (e) => {
-      marker.setLatLng(e.latlng);
-      setSelectedLocation({
-        lat: e.latlng.lat,
-        lng: e.latlng.lng,
-        address: "",
-      });
-      setCanConfirm(true);
-    });
-
-    // fix tiles not rendering inside a freshly shown container
-    setTimeout(() => map.invalidateSize(), 200);
-  });
-
-  return () => {
-    cancelled = true;
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
-      mapInstanceRef.current = null;
-    }
-  };
-}, [showMapModal]);
 
 const handleConfirmLocation = async () => {
   if (
@@ -895,16 +857,55 @@ return (
       }}
     >
       <h3 style={{ marginTop: 0 }}>🗺️ ลากหมุดเพื่อเลือกตำแหน่ง</h3>
-      <div
-        ref={mapRef}
+      <MapContainer
+        center={[SHOP_LAT, SHOP_LNG]}
+        zoom={14}
         style={{
           width: "100%",
           height: "320px",
           borderRadius: "12px",
-          overflow: "hidden",
           marginBottom: "12px",
         }}
-      />
+      >
+        <TileLayer
+          attribution="© OpenStreetMap"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={[SHOP_LAT, SHOP_LNG]} icon={storeDivIcon}>
+          <Popup>LK Fried Chicken</Popup>
+        </Marker>
+        <DraggableCustomerMarker
+          position={selectedLocation}
+          onChange={(la, lo) =>
+            setSelectedLocation({ lat: la, lng: lo, address: "" })
+          }
+        />
+      </MapContainer>
+      <button
+        onClick={() =>
+          navigator.geolocation.getCurrentPosition(
+            (pos) =>
+              setSelectedLocation({
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                address: "",
+              }),
+            () => alert("ไม่สามารถดึงตำแหน่งได้")
+          )
+        }
+        style={{
+          width: "100%",
+          padding: "10px",
+          marginBottom: "8px",
+          borderRadius: "10px",
+          border: "none",
+          background: "#444",
+          color: "#fff",
+          cursor: "pointer",
+        }}
+      >
+        📍 ใช้ตำแหน่งปัจจุบัน
+      </button>
       {(() => {
         const locationReady =
           selectedLocation &&
