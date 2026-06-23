@@ -439,6 +439,8 @@ if (orderType === "delivery") {
 
   distanceKm: distanceKm,
 
+  deliveryDistance: distanceKm,
+
   orderType: orderType,
 
   paymentMethod: paymentMethod,
