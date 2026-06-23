@@ -345,6 +345,17 @@ function TrackOrder() {
             {/* เบอร์ไรเดอร์ + แชท เฉพาะตอนกำลังจัดส่ง */}
             {isDelivering(order.status) && (
               <>
+                {order.riderName && (
+                  <div
+                    style={{
+                      marginTop: "8px",
+                      fontSize: "14px",
+                      color: "#4fc3f7",
+                    }}
+                  >
+                    🛵 ไรเดอร์: {order.riderName}
+                  </div>
+                )}
                 {order.riderPhone && (
                   <a href={`tel:${order.riderPhone}`}>
                     <button

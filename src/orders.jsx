@@ -9,7 +9,7 @@ import {
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
 
-const TABS = ["ออเดอร์ใหม่", "กำลังทำ", "ส่งให้ไรเดอร์", "เสร็จสิ้น"];
+const TABS = ["ออเดอร์ใหม่", "กำลังทำ", "กำลังจัดส่ง", "เสร็จสิ้น"];
 
 // ปุ่มที่แสดงในแต่ละสถานะ -> สถานะปลายทาง
 const STATUS_ACTIONS = {
@@ -18,9 +18,9 @@ const STATUS_ACTIONS = {
     { label: "ยกเลิกออเดอร์", to: "ยกเลิก", color: "#e53935" },
   ],
   "กำลังทำ": [
-    { label: "ส่งให้ไรเดอร์", to: "ส่งให้ไรเดอร์", color: "#4fc3f7" },
+    { label: "ส่งให้ไรเดอร์", to: "กำลังจัดส่ง", color: "#4fc3f7" },
   ],
-  "ส่งให้ไรเดอร์": [
+  "กำลังจัดส่ง": [
     { label: "เสร็จสิ้น", to: "เสร็จสิ้น", color: "#22c55e" },
   ],
 };
@@ -60,6 +60,9 @@ function Orders() {
     if (tab === "ออเดอร์ใหม่") {
       return order.status === "ออเดอร์ใหม่" || order.status === "pending";
     }
+    if (tab === "กำลังจัดส่ง") {
+      return order.status === "กำลังจัดส่ง" || order.status === "ส่งให้ไรเดอร์";
+    }
     return order.status === tab;
   };
 
@@ -70,7 +73,8 @@ function Orders() {
   };
 
   const actionsFor = (status) => {
-    const normalized = status === "pending" ? "ออเดอร์ใหม่" : status;
+    let normalized = status === "pending" ? "ออเดอร์ใหม่" : status;
+    if (normalized === "ส่งให้ไรเดอร์") normalized = "กำลังจัดส่ง";
     return STATUS_ACTIONS[normalized] || [];
   };
 
@@ -244,6 +248,12 @@ function Orders() {
             <p style={{ margin: "4px 0" }}>
               📄 หมายเหตุ: {order.note || "-"}
             </p>
+
+            {order.riderName && (
+              <p style={{ margin: "4px 0", color: "#4fc3f7" }}>
+                🛵 ไรเดอร์: {order.riderName} ({order.riderPhone})
+              </p>
+            )}
 
             {/* รายการอาหาร */}
             <div style={{ marginTop: "10px" }}>

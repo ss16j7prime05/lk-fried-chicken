@@ -19,10 +19,19 @@ const optionLabel = (value) => {
   return value;
 };
 
-// ขั้นตอนของไรเดอร์ (riderStatus)
+// rider id ประจำเครื่อง (ไม่มีระบบ login)
+const getRiderId = () => {
+  let id = localStorage.getItem("riderId");
+  if (!id) {
+    id = "rider_" + Date.now();
+    localStorage.setItem("riderId", id);
+  }
+  return id;
+};
+
+// ขั้นตอนของไรเดอร์ (riderStatus) หลังรับออเดอร์
 const RIDER_STEPS = [
   { key: "ถึงร้านแล้ว", label: "1️⃣ ถึงร้านแล้ว" },
-  { key: "รับออเดอร์", label: "2️⃣ รับออเดอร์" },
   { key: "รับอาหารแล้ว", label: "4️⃣ รับอาหารแล้ว" },
   { key: "กำลังจัดส่ง", label: "5️⃣ กำลังจัดส่ง" },
   { key: "ส่งสำเร็จ", label: "6️⃣ ส่งสำเร็จ" },
@@ -30,12 +39,18 @@ const RIDER_STEPS = [
 
 function Rider() {
   const [orders, setOrders] = useState([]);
+  const [riderName, setRiderName] = useState(
+    localStorage.getItem("riderName") || ""
+  );
+  const [riderPhone, setRiderPhone] = useState(
+    localStorage.getItem("riderPhone") || ""
+  );
 
   useEffect(() => {
-    // ไรเดอร์เห็นออเดอร์ที่ร้านส่งให้ไรเดอร์แล้ว
+    // ไรเดอร์เห็นออเดอร์ที่ร้านส่งให้ไรเดอร์แล้ว (กำลังจัดส่ง)
     const q = query(
       collection(db, "orders"),
-      where("status", "==", "ส่งให้ไรเดอร์")
+      where("status", "==", "กำลังจัดส่ง")
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -43,6 +58,22 @@ function Rider() {
     });
     return () => unsubscribe();
   }, []);
+
+  // 2 รับออเดอร์ -> บันทึกข้อมูลไรเดอร์ลงออเดอร์
+  const acceptOrder = async (order) => {
+    if (!riderName.trim() || !riderPhone.trim()) {
+      alert("กรุณากรอกชื่อและเบอร์ไรเดอร์ก่อนรับออเดอร์");
+      return;
+    }
+    localStorage.setItem("riderName", riderName.trim());
+    localStorage.setItem("riderPhone", riderPhone.trim());
+    await updateDoc(doc(db, "orders", order.id), {
+      riderId: getRiderId(),
+      riderName: riderName.trim(),
+      riderPhone: riderPhone.trim(),
+      riderStatus: "accepted",
+    });
+  };
 
   const setRiderStatus = async (order, riderStatus) => {
     const updates = { riderStatus };
@@ -89,6 +120,40 @@ function Rider() {
             🍗 หน้าแรก
           </button>
         </Link>
+      </div>
+
+      {/* ข้อมูลไรเดอร์ */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+        <input
+          type="text"
+          placeholder="ชื่อไรเดอร์"
+          value={riderName}
+          onChange={(e) => setRiderName(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: "140px",
+            padding: "10px",
+            borderRadius: "10px",
+            border: "none",
+            background: "#2a2a2a",
+            color: "#fff",
+          }}
+        />
+        <input
+          type="tel"
+          placeholder="เบอร์ไรเดอร์"
+          value={riderPhone}
+          onChange={(e) => setRiderPhone(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: "140px",
+            padding: "10px",
+            borderRadius: "10px",
+            border: "none",
+            background: "#2a2a2a",
+            color: "#fff",
+          }}
+        />
       </div>
 
       {orders.length === 0 && (
@@ -165,36 +230,58 @@ function Rider() {
               💰 {order.grandTotal} บาท
             </div>
 
-            {/* ขั้นตอนไรเดอร์ */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "8px",
-                marginBottom: "10px",
-              }}
-            >
-              {RIDER_STEPS.map((step) => (
-                <button
-                  key={step.key}
-                  onClick={() => setRiderStatus(order, step.key)}
-                  style={{
-                    flex: 1,
-                    minWidth: "130px",
-                    padding: "10px",
-                    borderRadius: "10px",
-                    border: "none",
-                    background:
-                      order.riderStatus === step.key ? "#22c55e" : "#333",
-                    color: "#fff",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                  }}
-                >
-                  {step.label}
-                </button>
-              ))}
-            </div>
+            {/* 2 รับออเดอร์ (ยังไม่มีไรเดอร์รับ) */}
+            {!order.riderStatus && (
+              <button
+                onClick={() => acceptOrder(order)}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#22c55e",
+                  color: "#fff",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  marginBottom: "10px",
+                }}
+              >
+                2️⃣ รับออเดอร์
+              </button>
+            )}
+
+            {/* ขั้นตอนไรเดอร์ (หลังรับออเดอร์แล้ว) */}
+            {order.riderStatus && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  marginBottom: "10px",
+                }}
+              >
+                {RIDER_STEPS.map((step) => (
+                  <button
+                    key={step.key}
+                    onClick={() => setRiderStatus(order, step.key)}
+                    style={{
+                      flex: 1,
+                      minWidth: "130px",
+                      padding: "10px",
+                      borderRadius: "10px",
+                      border: "none",
+                      background:
+                        order.riderStatus === step.key ? "#22c55e" : "#333",
+                      color: "#fff",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {step.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* 7 เบอร์โทรร้าน */}
             <a href={`tel:${STORE_PHONE}`}>
