@@ -54,6 +54,7 @@ const toE164 = (phone) => {
 
 export default function CustomerLogin() {
   const [phone, setPhone] = useState("");
+  const [lineUserId, setLineUserId] = useState("");
   const [otp, setOtp] = useState("");
   const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
@@ -101,7 +102,11 @@ export default function CustomerLogin() {
       const cred = await confirmation.confirm(otp.trim());
       await setDoc(
         doc(db, "users", cred.user.uid),
-        { role: "customer", phone: phone.trim() },
+        {
+          role: "customer",
+          phone: phone.trim(),
+          ...(lineUserId.trim() ? { lineUserId: lineUserId.trim() } : {}),
+        },
         { merge: true }
       );
       navigate("/track", { replace: true });
@@ -125,6 +130,13 @@ export default function CustomerLogin() {
               placeholder="เบอร์โทร (เช่น 0812345678)"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              style={input}
+            />
+            <input
+              type="text"
+              placeholder="LINE User ID (ถ้ามี — รับแจ้งเตือนผ่าน LINE)"
+              value={lineUserId}
+              onChange={(e) => setLineUserId(e.target.value)}
               style={input}
             />
             <button onClick={sendOtp} disabled={loading} style={button}>
