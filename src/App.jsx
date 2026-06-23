@@ -90,10 +90,11 @@ const [deliveryAddress, setDeliveryAddress] = useState("");
 const [distanceKm, setDistanceKm] = useState(null);
 const [deliveryFee, setDeliveryFee] = useState(0);
 const [showMapModal, setShowMapModal] = useState(false);
+const [selectedLocation, setSelectedLocation] = useState(null);
+const [canConfirm, setCanConfirm] = useState(false);
 const mapRef = useRef(null);
 const markerRef = useRef(null);
 const mapInstanceRef = useRef(null);
-const tempCoordsRef = useRef({ lat: SHOP_LAT, lng: SHOP_LNG, address: "" });
 console.log(options);
 useEffect(() => {
   const fetchMenus = async () => {
@@ -236,6 +237,10 @@ const getLocation = () => {
 useEffect(() => {
   if (!showMapModal) return;
 
+  // reset confirm state each time the picker opens
+  setCanConfirm(false);
+  setSelectedLocation(null);
+
   const ensureLeaflet = () =>
     new Promise((resolve) => {
       if (window.L) {
@@ -261,7 +266,6 @@ useEffect(() => {
 
     const startLat = lat ?? SHOP_LAT;
     const startLng = lng ?? SHOP_LNG;
-    tempCoordsRef.current = { lat: startLat, lng: startLng, address: "" };
 
     // center the map on the store
     const map = L.map(mapRef.current).setView([SHOP_LAT, SHOP_LNG], 14);
@@ -297,7 +301,8 @@ useEffect(() => {
 
     const onMove = async (lt, lg) => {
       const addr = await reverseGeocode(lt, lg);
-      tempCoordsRef.current = { lat: lt, lng: lg, address: addr };
+      setSelectedLocation({ lat: lt, lng: lg, address: addr });
+      setCanConfirm(true);
     };
     onMove(startLat, startLng);
 
@@ -324,8 +329,9 @@ useEffect(() => {
   };
 }, [showMapModal]);
 
-const confirmMapLocation = async () => {
-  const { lat: lt, lng: lg, address: addr } = tempCoordsRef.current;
+const handleConfirmLocation = async () => {
+  if (!selectedLocation) return;
+  const { lat: lt, lng: lg, address: addr } = selectedLocation;
   await applyLocation(lt, lg, addr);
   setShowMapModal(false);
 };
@@ -880,17 +886,18 @@ return (
         }}
       />
       <button
-        onClick={confirmMapLocation}
+        disabled={!canConfirm}
+        onClick={handleConfirmLocation}
         style={{
           width: "100%",
           padding: "12px",
           borderRadius: "12px",
-          background: "#ff9800",
+          background: canConfirm ? "#ff9800" : "#ccc",
           color: "#fff",
           border: "none",
           fontSize: "16px",
           fontWeight: "bold",
-          cursor: "pointer",
+          cursor: canConfirm ? "pointer" : "not-allowed",
           marginBottom: "8px",
         }}
       >
