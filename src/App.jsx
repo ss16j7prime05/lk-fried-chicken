@@ -23,6 +23,16 @@ const haversineKm = (lat1, lng1, lat2, lng2) => {
 const calcDeliveryFee = (distanceKm) =>
   distanceKm <= 3 ? 20 : Math.round(20 + (distanceKm - 3) * 10);
 
+// Real road-route distance (km) from store to customer via OSRM
+const getRouteDistanceKm = async (custLat, custLng) => {
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${SHOP_LNG},${SHOP_LAT};${custLng},${custLat}?overview=false`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data.routes[0].distance / 1000;
+};
+
 const reverseGeocode = async (lat, lng) => {
   try {
     const res = await fetch(
@@ -188,7 +198,13 @@ const applyLocation = async (latValue, lngValue, knownAddress) => {
   setLng(lngValue);
   setGpsLocation(`${latValue},${lngValue}`);
 
-  const d = haversineKm(SHOP_LAT, SHOP_LNG, latValue, lngValue);
+  let d;
+  try {
+    d = await getRouteDistanceKm(latValue, lngValue);
+  } catch {
+    // fall back to straight-line only if the routing service is unreachable
+    d = haversineKm(SHOP_LAT, SHOP_LNG, latValue, lngValue);
+  }
   setDistanceKm(d);
   setDeliveryFee(calcDeliveryFee(d));
 
@@ -730,7 +746,7 @@ return (
                     {deliveryAddress}
                   </div>
                   <div>
-                    ระยะทาง : {distanceKm != null ? distanceKm.toFixed(1) : "-"} กม.
+                    ระยะทางตามเส้นทางจริง : {distanceKm != null ? distanceKm.toFixed(1) : "-"} กม.
                   </div>
                   <div>ค่าส่ง : {deliveryFee} บาท</div>
                 </div>
