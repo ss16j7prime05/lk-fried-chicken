@@ -7,15 +7,18 @@ import App from './App.jsx'
 import Orders from './orders.jsx'
 import CustomerOrderHistory from './CustomerOrderHistory.jsx'
 import TrackOrder from './TrackOrder.jsx'
+import Rider from './Rider.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/admin" element={<Orders />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/history" element={<CustomerOrderHistory />} />
         <Route path="/track" element={<TrackOrder />} />
+        <Route path="/rider" element={<Rider />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

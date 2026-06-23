@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -379,7 +379,11 @@ if (orderType === "delivery") {
 
   status: "ออเดอร์ใหม่",
 
-  createdAt: new Date(),
+  riderStatus: "",
+
+  riderId: "",
+
+  createdAt: serverTimestamp(),
 });
 console.log("บันทึกสำเร็จ");
   alert("สั่งซื้อสำเร็จ");

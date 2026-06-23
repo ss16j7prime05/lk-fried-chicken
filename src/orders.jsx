@@ -9,13 +9,20 @@ import {
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
 
-const TABS = ["ออเดอร์ใหม่", "กำลังทำ", "จัดส่ง", "เสร็จสิ้น"];
+const TABS = ["ออเดอร์ใหม่", "กำลังทำ", "ส่งให้ไรเดอร์", "เสร็จสิ้น"];
 
-// ลำดับการเปลี่ยนสถานะ
-const NEXT_STATUS = {
-  "ออเดอร์ใหม่": "กำลังทำ",
-  "กำลังทำ": "จัดส่ง",
-  "จัดส่ง": "เสร็จสิ้น",
+// ปุ่มที่แสดงในแต่ละสถานะ -> สถานะปลายทาง
+const STATUS_ACTIONS = {
+  "ออเดอร์ใหม่": [
+    { label: "รับออเดอร์", to: "กำลังทำ", color: "#22c55e" },
+    { label: "ยกเลิกออเดอร์", to: "ยกเลิก", color: "#e53935" },
+  ],
+  "กำลังทำ": [
+    { label: "ส่งให้ไรเดอร์", to: "ส่งให้ไรเดอร์", color: "#4fc3f7" },
+  ],
+  "ส่งให้ไรเดอร์": [
+    { label: "เสร็จสิ้น", to: "เสร็จสิ้น", color: "#22c55e" },
+  ],
 };
 
 // แปลงค่า option ที่อาจเป็น string หรือ object {name, price}
@@ -58,12 +65,13 @@ function Orders() {
 
   const filteredOrders = orders.filter((order) => matchTab(order, filter));
 
-  const updateStatus = async (id, currentStatus) => {
-    const normalized =
-      currentStatus === "pending" ? "ออเดอร์ใหม่" : currentStatus;
-    const next = NEXT_STATUS[normalized];
-    if (!next) return;
-    await updateDoc(doc(db, "orders", id), { status: next });
+  const setStatus = async (id, to) => {
+    await updateDoc(doc(db, "orders", id), { status: to });
+  };
+
+  const actionsFor = (status) => {
+    const normalized = status === "pending" ? "ออเดอร์ใหม่" : status;
+    return STATUS_ACTIONS[normalized] || [];
   };
 
   const deleteOrder = async (id) => {
@@ -304,34 +312,35 @@ function Orders() {
             </h3>
 
             {/* ปุ่มควบคุม */}
-            <div style={{ display: "flex", gap: "8px" }}>
-              {NEXT_STATUS[
-                order.status === "pending" ? "ออเดอร์ใหม่" : order.status
-              ] && (
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {actionsFor(order.status).map((action) => (
                 <button
-                  onClick={() => updateStatus(order.id, order.status)}
+                  key={action.label}
+                  onClick={() => setStatus(order.id, action.to)}
                   style={{
                     flex: 1,
+                    minWidth: "120px",
                     padding: "10px",
                     borderRadius: "10px",
                     border: "none",
-                    background: "#22c55e",
+                    background: action.color,
                     color: "#fff",
                     fontWeight: "bold",
                     cursor: "pointer",
                   }}
                 >
-                  เปลี่ยนสถานะ
+                  {action.label}
                 </button>
-              )}
+              ))}
               <button
                 onClick={() => deleteOrder(order.id)}
                 style={{
                   flex: 1,
+                  minWidth: "120px",
                   padding: "10px",
                   borderRadius: "10px",
                   border: "none",
-                  background: "#e53935",
+                  background: "#777",
                   color: "#fff",
                   fontWeight: "bold",
                   cursor: "pointer",

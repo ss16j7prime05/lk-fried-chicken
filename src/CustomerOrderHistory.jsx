@@ -13,13 +13,14 @@ const optionLabel = (value) => {
 const statusColor = (status) => {
   switch (status) {
     case "กำลังทำ":
-      return "#ffb74d";
+      return "#ff8c00"; // orange
+    case "ส่งให้ไรเดอร์":
     case "จัดส่ง":
-      return "#4fc3f7";
+      return "#4fc3f7"; // blue
     case "เสร็จสิ้น":
-      return "#22c55e";
+      return "#22c55e"; // green
     default:
-      return "#ff9800"; // ออเดอร์ใหม่ / pending
+      return "#ffd54f"; // ออเดอร์ใหม่ / pending = yellow
   }
 };
 

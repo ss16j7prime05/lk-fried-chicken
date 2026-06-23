@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Link } from "react-router-dom";
+import Chat from "./Chat.jsx";
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -13,6 +14,7 @@ const statusColor = (status) => {
   switch (status) {
     case "กำลังทำ":
       return "#ff8c00";
+    case "ส่งให้ไรเดอร์":
     case "จัดส่ง":
       return "#4fc3f7";
     case "เสร็จสิ้น":
@@ -32,7 +34,7 @@ const formatDate = (createdAt) => {
 };
 
 // ขั้นตอนสถานะสำหรับ progress
-const STEPS = ["ออเดอร์ใหม่", "กำลังทำ", "จัดส่ง", "เสร็จสิ้น"];
+const STEPS = ["ออเดอร์ใหม่", "กำลังทำ", "ส่งให้ไรเดอร์", "เสร็จสิ้น"];
 
 function TrackOrder() {
   const [phone, setPhone] = useState("");
@@ -276,6 +278,8 @@ function TrackOrder() {
             <h3 style={{ color: "#ff8c00", marginTop: "10px", marginBottom: 0 }}>
               💰 รวมทั้งหมด {order.grandTotal} บาท
             </h3>
+
+            <Chat orderId={order.id} sender="customer" />
           </div>
         ))}
       </div>
