@@ -1,7 +1,39 @@
 import { db } from "./firebase";
 import { collection, getDocs, addDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
+
+// TODO: replace with the real shop coordinates
+const SHOP_LAT = 13.7563;
+const SHOP_LNG = 100.5018;
+
+// Haversine distance in kilometers
+const haversineKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const calcDeliveryFee = (distanceKm) =>
+  distanceKm <= 3 ? 20 : Math.round(20 + (distanceKm - 3) * 10);
+
+const reverseGeocode = async (lat, lng) => {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+    );
+    const data = await res.json();
+    return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  } catch {
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+};
+
 function App() {
   const [menus, setMenus] = useState([]);
   const [options, setOptions] = useState([]);
@@ -29,6 +61,14 @@ const [lat, setLat] = useState(null);
 const [lng, setLng] = useState(null);
 const [cartOpen, setCartOpen] = useState(false);
 const [searchTerm, setSearchTerm] = useState("");
+const [deliveryAddress, setDeliveryAddress] = useState("");
+const [distanceKm, setDistanceKm] = useState(null);
+const [deliveryFee, setDeliveryFee] = useState(0);
+const [showMapModal, setShowMapModal] = useState(false);
+const mapRef = useRef(null);
+const markerRef = useRef(null);
+const mapInstanceRef = useRef(null);
+const tempCoordsRef = useRef({ lat: SHOP_LAT, lng: SHOP_LNG, address: "" });
 console.log(options);
 useEffect(() => {
   const fetchMenus = async () => {
@@ -142,20 +182,105 @@ const totalPrice = cart.reduce(
   (sum, item) => sum + itemTotal(item),
   0
 );
+const applyLocation = async (latValue, lngValue, knownAddress) => {
+  setLat(latValue);
+  setLng(lngValue);
+  setGpsLocation(`${latValue},${lngValue}`);
+
+  const d = haversineKm(SHOP_LAT, SHOP_LNG, latValue, lngValue);
+  setDistanceKm(d);
+  setDeliveryFee(calcDeliveryFee(d));
+
+  const addr = knownAddress || (await reverseGeocode(latValue, lngValue));
+  setDeliveryAddress(addr);
+  setAddress(addr);
+};
+
 const getLocation = () => {
   navigator.geolocation.getCurrentPosition(
     (position) => {
-      const latValue = position.coords.latitude;
-      const lngValue = position.coords.longitude;
-
-      setLat(latValue);
-      setLng(lngValue);
-      setGpsLocation(`${latValue},${lngValue}`);
+      applyLocation(position.coords.latitude, position.coords.longitude);
     },
-    (error) => {
+    () => {
       alert("ไม่สามารถดึงตำแหน่งได้");
     }
   );
+};
+
+// Load Leaflet (CDN) + init draggable-marker map when the map modal opens
+useEffect(() => {
+  if (!showMapModal) return;
+
+  const ensureLeaflet = () =>
+    new Promise((resolve) => {
+      if (window.L) {
+        resolve();
+        return;
+      }
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = resolve;
+      document.body.appendChild(script);
+    });
+
+  let cancelled = false;
+
+  ensureLeaflet().then(() => {
+    if (cancelled || !mapRef.current) return;
+    const L = window.L;
+
+    const startLat = lat ?? SHOP_LAT;
+    const startLng = lng ?? SHOP_LNG;
+    tempCoordsRef.current = { lat: startLat, lng: startLng, address: "" };
+
+    const map = L.map(mapRef.current).setView([startLat, startLng], 15);
+    mapInstanceRef.current = map;
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap",
+    }).addTo(map);
+
+    const marker = L.marker([startLat, startLng], { draggable: true }).addTo(map);
+    markerRef.current = marker;
+
+    const onMove = async (lt, lg) => {
+      const addr = await reverseGeocode(lt, lg);
+      tempCoordsRef.current = { lat: lt, lng: lg, address: addr };
+    };
+    onMove(startLat, startLng);
+
+    marker.on("dragend", () => {
+      const { lat: lt, lng: lg } = marker.getLatLng();
+      onMove(lt, lg);
+    });
+
+    map.on("click", (e) => {
+      marker.setLatLng(e.latlng);
+      onMove(e.latlng.lat, e.latlng.lng);
+    });
+
+    // fix tiles not rendering inside a freshly shown container
+    setTimeout(() => map.invalidateSize(), 200);
+  });
+
+  return () => {
+    cancelled = true;
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+  };
+}, [showMapModal]);
+
+const confirmMapLocation = async () => {
+  const { lat: lt, lng: lg, address: addr } = tempCoordsRef.current;
+  await applyLocation(lt, lg, addr);
+  setShowMapModal(false);
 };
 const submitOrder = async () => {
   if (cart.length === 0) {
@@ -191,11 +316,19 @@ if (orderType === "delivery") {
 
   address: address,
 
+  deliveryAddress: deliveryAddress,
+
+  latitude: lat,
+
+  longitude: lng,
+
   lat: lat,
 
   lng: lng,
 
   gpsLocation: gpsLocation,
+
+  distanceKm: distanceKm,
 
   orderType: orderType,
 
@@ -205,9 +338,9 @@ if (orderType === "delivery") {
 
   subtotal: totalPrice,
 
-  deliveryFee: shippingFee,
+  deliveryFee: orderType === "delivery" ? deliveryFee : 0,
 
-  grandTotal: totalPrice + shippingFee,
+  grandTotal: totalPrice + (orderType === "delivery" ? deliveryFee : 0),
 
   status: "pending",
 
@@ -223,6 +356,9 @@ setGpsLocation("");
 setNote("");
 setLat(null);
 setLng(null);
+setDeliveryAddress("");
+setDistanceKm(null);
+setDeliveryFee(0);
 setSelectedTopChicken("");
 setSelectedSpicy("");
 setSelectedPowder(null);
@@ -537,12 +673,43 @@ return (
                   cursor: "pointer",
                 }}
               >
-                📍 รับตำแหน่งปัจจุบัน
+                📍 ใช้ตำแหน่งปัจจุบัน
+              </button>
+
+              <button
+                onClick={() => setShowMapModal(true)}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "10px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#444",
+                  color: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                🗺️ เลือกตำแหน่งบนแผนที่
               </button>
 
               {gpsLocation && (
-                <div style={{ color: "#22c55e", marginBottom: "10px" }}>
-                  ตำแหน่งได้รับแล้ว ✓
+                <div
+                  style={{
+                    background: "#2a2a2a",
+                    borderRadius: "10px",
+                    padding: "10px",
+                    marginBottom: "10px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <div>📍 ที่อยู่จัดส่ง</div>
+                  <div style={{ color: "#ccc", marginBottom: "6px" }}>
+                    {deliveryAddress}
+                  </div>
+                  <div>
+                    ระยะทาง : {distanceKm != null ? distanceKm.toFixed(1) : "-"} กม.
+                  </div>
+                  <div>ค่าส่ง : {deliveryFee} บาท</div>
                 </div>
               )}
             </>
@@ -580,6 +747,18 @@ return (
       );
     })()}
 
+    <div style={{ marginBottom: "12px", fontSize: "15px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span>ค่าอาหาร</span>
+        <span>{totalPrice} บาท</span>
+      </div>
+      {orderType === "delivery" && (
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>ค่าส่ง</span>
+          <span>{deliveryFee} บาท</span>
+        </div>
+      )}
+    </div>
     <div
       style={{
         display: "flex",
@@ -590,7 +769,9 @@ return (
       }}
     >
       <span>รวมทั้งหมด</span>
-      <span style={{ color: "#ff9800" }}>{totalPrice} บาท</span>
+      <span style={{ color: "#ff9800" }}>
+        {totalPrice + (orderType === "delivery" ? deliveryFee : 0)} บาท
+      </span>
     </div>
     <button
       onClick={submitOrder}
@@ -610,6 +791,79 @@ return (
     </button>
   </div>
 </div>
+
+{/* Map Picker Modal */}
+{showMapModal && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      background: "rgba(0,0,0,0.7)",
+      zIndex: 3000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "16px",
+    }}
+  >
+    <div
+      style={{
+        background: "#fff",
+        color: "#222",
+        borderRadius: "20px",
+        padding: "16px",
+        width: "100%",
+        maxWidth: "480px",
+      }}
+    >
+      <h3 style={{ marginTop: 0 }}>🗺️ ลากหมุดเพื่อเลือกตำแหน่ง</h3>
+      <div
+        ref={mapRef}
+        style={{
+          width: "100%",
+          height: "320px",
+          borderRadius: "12px",
+          overflow: "hidden",
+          marginBottom: "12px",
+        }}
+      />
+      <button
+        onClick={confirmMapLocation}
+        style={{
+          width: "100%",
+          padding: "12px",
+          borderRadius: "12px",
+          background: "#ff9800",
+          color: "#fff",
+          border: "none",
+          fontSize: "16px",
+          fontWeight: "bold",
+          cursor: "pointer",
+          marginBottom: "8px",
+        }}
+      >
+        ยืนยันหมุด
+      </button>
+      <button
+        onClick={() => setShowMapModal(false)}
+        style={{
+          width: "100%",
+          padding: "10px",
+          borderRadius: "12px",
+          background: "#fff",
+          color: "#666",
+          border: "1px solid #ccc",
+          cursor: "pointer",
+        }}
+      >
+        ยกเลิก
+      </button>
+    </div>
+  </div>
+)}
 
 <div
   style={{
