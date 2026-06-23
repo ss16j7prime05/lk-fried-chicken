@@ -33,8 +33,25 @@ const formatDate = (createdAt) => {
   return d.toLocaleString("th-TH");
 };
 
-// ขั้นตอนสถานะสำหรับ progress
-const STEPS = ["ออเดอร์ใหม่", "กำลังทำ", "ส่งให้ไรเดอร์", "เสร็จสิ้น"];
+// เบอร์โทรร้าน LK Fried Chicken
+const STORE_PHONE = "0830000000";
+
+// ขั้นตอนที่ลูกค้าเห็น
+const STEPS = ["ร้านรับออเดอร์", "กำลังทำ", "กำลังจัดส่ง", "เสร็จสิ้น"];
+
+// แปลงสถานะจริงใน Firestore -> index ของ STEPS
+const statusToStep = (status) => {
+  const s = status === "pending" ? "ออเดอร์ใหม่" : status;
+  if (s === "ออเดอร์ใหม่") return 0;
+  if (s === "กำลังทำ") return 1;
+  if (s === "ส่งให้ไรเดอร์" || s === "จัดส่ง" || s === "กำลังจัดส่ง") return 2;
+  if (s === "เสร็จสิ้น") return 3;
+  return 0;
+};
+
+// กำลังจัดส่งอยู่หรือไม่ (สำหรับแสดงไรเดอร์ + แชท)
+const isDelivering = (status) =>
+  status === "ส่งให้ไรเดอร์" || status === "จัดส่ง" || status === "กำลังจัดส่ง";
 
 function TrackOrder() {
   const [phone, setPhone] = useState("");
@@ -67,12 +84,6 @@ function TrackOrder() {
   }, [searchPhone]);
 
   const handleTrack = () => setSearchPhone(phone.trim());
-
-  const currentStep = (status) => {
-    const s = status === "pending" ? "ออเดอร์ใหม่" : status;
-    const i = STEPS.indexOf(s);
-    return i < 0 ? 0 : i;
-  };
 
   return (
     <div
@@ -195,7 +206,7 @@ function TrackOrder() {
               🕒 {formatDate(order.createdAt)}
             </div>
 
-            {/* progress */}
+            {/* progress bar */}
             <div
               style={{
                 display: "flex",
@@ -211,11 +222,45 @@ function TrackOrder() {
                     height: "6px",
                     borderRadius: "3px",
                     background:
-                      i <= currentStep(order.status) ? "#ff8c00" : "#444",
+                      i <= statusToStep(order.status) ? "#ff8c00" : "#444",
                   }}
                 />
               ))}
             </div>
+
+            {/* ขั้นตอนสถานะ (อ่านอย่างเดียว) */}
+            <div style={{ marginBottom: "12px" }}>
+              {STEPS.map((step, i) => {
+                const active = i <= statusToStep(order.status);
+                const current = i === statusToStep(order.status);
+                return (
+                  <div
+                    key={step}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      fontSize: "14px",
+                      color: active ? "#fff" : "#666",
+                      fontWeight: current ? "bold" : "normal",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    <span>{active ? "✅" : "⬜"}</span>
+                    <span>
+                      {i + 1}. {step}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ที่อยู่จัดส่ง */}
+            {order.orderType === "delivery" && (
+              <div style={{ fontSize: "14px", marginBottom: "8px" }}>
+                🏠 {order.deliveryAddress || order.address || "-"}
+              </div>
+            )}
 
             {order.items?.map((item, index) => (
               <div
@@ -275,11 +320,53 @@ function TrackOrder() {
               </p>
             )}
 
-            <h3 style={{ color: "#ff8c00", marginTop: "10px", marginBottom: 0 }}>
+            <h3 style={{ color: "#ff8c00", marginTop: "10px", marginBottom: "10px" }}>
               💰 รวมทั้งหมด {order.grandTotal} บาท
             </h3>
 
-            <Chat orderId={order.id} sender="customer" />
+            {/* เบอร์โทรร้าน (แสดงตลอด) */}
+            <a href={`tel:${STORE_PHONE}`}>
+              <button
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#ff8c00",
+                  color: "#fff",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                📞 โทรหาร้าน ({STORE_PHONE})
+              </button>
+            </a>
+
+            {/* เบอร์ไรเดอร์ + แชท เฉพาะตอนกำลังจัดส่ง */}
+            {isDelivering(order.status) && (
+              <>
+                {order.riderPhone && (
+                  <a href={`tel:${order.riderPhone}`}>
+                    <button
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        marginTop: "8px",
+                        borderRadius: "10px",
+                        border: "none",
+                        background: "#4fc3f7",
+                        color: "#000",
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                      }}
+                    >
+                      🛵 โทรหาไรเดอร์ ({order.riderPhone})
+                    </button>
+                  </a>
+                )}
+                <Chat orderId={order.id} sender="customer" />
+              </>
+            )}
           </div>
         ))}
       </div>
