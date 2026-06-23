@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { db } from "./firebase";
 import {
   collection,
@@ -39,12 +39,51 @@ const RIDER_STEPS = [
 
 function Rider() {
   const [orders, setOrders] = useState([]);
+  const [tracking, setTracking] = useState({});
+  const watchers = useRef({});
   const [riderName, setRiderName] = useState(
     localStorage.getItem("riderName") || ""
   );
   const [riderPhone, setRiderPhone] = useState(
     localStorage.getItem("riderPhone") || ""
   );
+
+  // เริ่มส่งอาหาร -> แชร์ตำแหน่ง realtime
+  const startDelivery = (order) => {
+    if (!navigator.geolocation) {
+      alert("อุปกรณ์ไม่รองรับ GPS");
+      return;
+    }
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        updateDoc(doc(db, "orders", order.id), {
+          riderLat: pos.coords.latitude,
+          riderLng: pos.coords.longitude,
+        });
+      },
+      (err) => console.error(err),
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+    watchers.current[order.id] = id;
+    setTracking((p) => ({ ...p, [order.id]: true }));
+  };
+
+  const stopDelivery = (orderId) => {
+    const id = watchers.current[orderId];
+    if (id != null) {
+      navigator.geolocation.clearWatch(id);
+      delete watchers.current[orderId];
+    }
+    setTracking((p) => ({ ...p, [orderId]: false }));
+  };
+
+  useEffect(() => {
+    return () => {
+      Object.values(watchers.current).forEach((id) =>
+        navigator.geolocation.clearWatch(id)
+      );
+    };
+  }, []);
 
   useEffect(() => {
     // ไรเดอร์เห็นออเดอร์ที่ร้านส่งให้ไรเดอร์แล้ว (กำลังจัดส่ง)
@@ -281,6 +320,28 @@ function Rider() {
                   </button>
                 ))}
               </div>
+            )}
+
+            {/* เริ่ม/หยุด แชร์ตำแหน่ง realtime */}
+            {order.riderStatus && (
+              <button
+                onClick={() =>
+                  tracking[order.id] ? stopDelivery(order.id) : startDelivery(order)
+                }
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "10px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: tracking[order.id] ? "#e53935" : "#22c55e",
+                  color: "#fff",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                {tracking[order.id] ? "⏹️ หยุดแชร์ตำแหน่ง" : "▶️ เริ่มส่งอาหาร (แชร์ตำแหน่ง)"}
+              </button>
             )}
 
             {/* 7 เบอร์โทรร้าน */}

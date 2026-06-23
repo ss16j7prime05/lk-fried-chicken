@@ -40,6 +40,62 @@ function Admin() {
     return () => unsubscribe();
   }, []);
 
+  const exportRows = () =>
+    orders.map((o) => ({
+      orderNo: o.orderNo || "",
+      customerName: o.customerName || "",
+      phone: o.phone || "",
+      address: o.deliveryAddress || o.address || "",
+      status: o.status || "",
+      paymentMethod: o.paymentMethod || "",
+      paymentStatus: o.paymentStatus || "",
+      deliveryFee: o.deliveryFee || 0,
+      grandTotal: o.grandTotal || 0,
+      rider: o.riderName || "",
+      createdAt: formatDate(o.createdAt),
+    }));
+
+  const downloadFile = (content, filename, type) => {
+    const blob = new Blob(["﻿" + content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCSV = () => {
+    const rows = exportRows();
+    if (rows.length === 0) return;
+    const headers = Object.keys(rows[0]);
+    const csv = [
+      headers.join(","),
+      ...rows.map((r) =>
+        headers.map((h) => `"${String(r[h]).replace(/"/g, '""')}"`).join(",")
+      ),
+    ].join("\n");
+    downloadFile(csv, "orders.csv", "text/csv;charset=utf-8;");
+  };
+
+  const exportExcel = () => {
+    const rows = exportRows();
+    if (rows.length === 0) return;
+    const headers = Object.keys(rows[0]);
+    const table =
+      "<table><tr>" +
+      headers.map((h) => `<th>${h}</th>`).join("") +
+      "</tr>" +
+      rows
+        .map(
+          (r) =>
+            "<tr>" + headers.map((h) => `<td>${r[h]}</td>`).join("") + "</tr>"
+        )
+        .join("") +
+      "</table>";
+    downloadFile(table, "orders.xls", "application/vnd.ms-excel");
+  };
+
   return (
     <div
       style={{
@@ -61,21 +117,13 @@ function Admin() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: "22px" }}>🛠️ Admin — ภาพรวมทั้งหมด</h1>
-        <Link to="/">
-          <button
-            style={{
-              padding: "8px 16px",
-              borderRadius: "20px",
-              border: "none",
-              background: "#ff8c00",
-              color: "#fff",
-              fontWeight: "bold",
-              cursor: "pointer",
-            }}
-          >
-            🍗 หน้าแรก
-          </button>
-        </Link>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button onClick={exportCSV} style={hdrBtn("#22c55e")}>⬇️ CSV</button>
+          <button onClick={exportExcel} style={hdrBtn("#2e7d32")}>⬇️ Excel</button>
+          <Link to="/">
+            <button style={hdrBtn("#ff8c00")}>🍗 หน้าแรก</button>
+          </Link>
+        </div>
       </div>
 
       <p style={{ color: "#888" }}>ทั้งหมด {orders.length} ออเดอร์ (ดูอย่างเดียว)</p>
@@ -191,5 +239,15 @@ function Admin() {
     </div>
   );
 }
+
+const hdrBtn = (bg) => ({
+  padding: "8px 16px",
+  borderRadius: "20px",
+  border: "none",
+  background: bg,
+  color: "#fff",
+  fontWeight: "bold",
+  cursor: "pointer",
+});
 
 export default Admin;

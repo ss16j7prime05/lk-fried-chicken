@@ -73,6 +73,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- reviews ----------
+    // ลูกค้าเขียนรีวิวได้ ; ทุก role ที่เกี่ยวข้องอ่านได้
+    match /reviews/{id} {
+      allow read: if role() == "admin" || role() == "store" ||
+                     role() == "rider" || role() == "customer";
+      allow create: if role() == "customer";
+      allow update, delete: if false;
+    }
+
     // ---------- counters (เลขออเดอร์รันต่อวัน) ----------
     // หน้าร้านสาธารณะต้องเพิ่มเลขรันได้ตอนสร้างออเดอร์
     match /counters/{id} {

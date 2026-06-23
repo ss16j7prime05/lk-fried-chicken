@@ -1,5 +1,6 @@
 import { db } from "./firebase";
 import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction } from "firebase/firestore";
+import { STORE_ID } from "./config";
 
 // เลขออเดอร์อัตโนมัติแบบรันต่อวัน เช่น LK2506240001
 const generateOrderNo = async (database) => {
@@ -368,6 +369,12 @@ if (orderType === "delivery") {
   const orderNo = await generateOrderNo(db);
  await addDoc(collection(db, "orders"), {
   orderNo: orderNo,
+
+  storeId: STORE_ID,
+
+  riderLat: null,
+
+  riderLng: null,
 
   customerName: customerName,
 

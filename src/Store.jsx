@@ -26,7 +26,7 @@ const STATUS_ACTIONS = {
   "กำลังจัดส่ง": [{ label: "เสร็จสิ้น", to: "เสร็จสิ้น", color: "#22c55e" }],
 };
 
-const CANCEL_REASONS = ["สินค้าหมด", "ลูกค้าขอยกเลิก", "ร้านปิด"];
+const CANCEL_REASONS = ["สินค้าไม่พอ", "ร้านปิด", "ลูกค้ายกเลิก", "อื่นๆ"];
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -52,6 +52,9 @@ function Store() {
   const [editId, setEditId] = useState(null);
   const [draftItems, setDraftItems] = useState([]);
   const [draftNote, setDraftNote] = useState("");
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
+  const [cancelOther, setCancelOther] = useState("");
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
@@ -83,16 +86,17 @@ function Store() {
     return STATUS_ACTIONS[normalized] || [];
   };
 
-  const cancelOrder = async (id) => {
-    const reason = window.prompt(
-      "เหตุผลการยกเลิก:\n- " + CANCEL_REASONS.join("\n- "),
-      CANCEL_REASONS[0]
-    );
-    if (reason === null) return;
-    await updateDoc(doc(db, "orders", id), {
+  const confirmCancel = async () => {
+    if (!cancelTarget) return;
+    const reason =
+      cancelReason === "อื่นๆ" ? cancelOther.trim() || "อื่นๆ" : cancelReason;
+    await updateDoc(doc(db, "orders", cancelTarget), {
       status: "ยกเลิก",
       cancelReason: reason,
     });
+    setCancelTarget(null);
+    setCancelReason(CANCEL_REASONS[0]);
+    setCancelOther("");
   };
 
   const deleteOrder = async (id) => {
@@ -428,7 +432,7 @@ function Store() {
                       <button onClick={() => startEdit(order)} style={btn("#5c6bc0")}>
                         ✏️ แก้ไข
                       </button>
-                      <button onClick={() => cancelOrder(order.id)} style={btn("#e53935")}>
+                      <button onClick={() => setCancelTarget(order.id)} style={btn("#e53935")}>
                         ❌ ยกเลิกออเดอร์
                       </button>
                     </>
@@ -442,6 +446,59 @@ function Store() {
           );
         })}
       </div>
+
+      {/* Modal ยกเลิกออเดอร์ */}
+      {cancelTarget && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 4000,
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              background: "#1e1e1e",
+              borderRadius: "16px",
+              padding: "20px",
+              width: "100%",
+              maxWidth: "360px",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>เหตุผลการยกเลิก</h3>
+            <select
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              style={inputStyle}
+            >
+              {CANCEL_REASONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+            {cancelReason === "อื่นๆ" && (
+              <input
+                placeholder="ระบุเหตุผล"
+                value={cancelOther}
+                onChange={(e) => setCancelOther(e.target.value)}
+                style={inputStyle}
+              />
+            )}
+            <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+              <button onClick={confirmCancel} style={btn("#e53935")}>
+                ยืนยันยกเลิก
+              </button>
+              <button onClick={() => setCancelTarget(null)} style={btn("#777")}>
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import NewOrderNotifier from "./NewOrderNotifier.jsx";
 import { useAuth } from "./AuthContext.jsx";
+import { STORE_ID } from "./config";
 
 const toDate = (createdAt) => {
   if (!createdAt) return null;
@@ -28,13 +29,21 @@ const card = {
 
 function StoreDashboard() {
   const [orders, setOrders] = useState([]);
+  const [reviews, setReviews] = useState([]);
   const { logout } = useAuth();
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
       setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => unsubscribe();
+    const rq = query(collection(db, "reviews"), where("storeId", "==", STORE_ID));
+    const unsubRev = onSnapshot(rq, (snapshot) => {
+      setReviews(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => {
+      unsubscribe();
+      unsubRev();
+    };
   }, []);
 
   const now = new Date();
@@ -58,6 +67,25 @@ function StoreDashboard() {
     });
   });
   const bestSeller = Object.entries(menuCount).sort((a, b) => b[1] - a[1])[0];
+
+  // คะแนนร้าน
+  const reviewCount = reviews.length;
+  const storeRating =
+    reviewCount > 0
+      ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviewCount).toFixed(1)
+      : "-";
+
+  // กราฟยอดขาย 7 วันล่าสุด
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const total = completed
+      .filter((o) => isSameDay(toDate(o.createdAt), d))
+      .reduce((s, o) => s + (o.grandTotal || 0), 0);
+    days.push({ label: `${d.getDate()}/${d.getMonth() + 1}`, total });
+  }
+  const maxSale = Math.max(1, ...days.map((d) => d.total));
 
   const Stat = ({ label, value, color }) => (
     <div style={card}>
@@ -125,6 +153,65 @@ function StoreDashboard() {
           label="เมนูขายดีที่สุด"
           value={bestSeller ? `${bestSeller[0]} (${bestSeller[1]})` : "-"}
         />
+        <Stat label="คะแนนร้าน" value={`⭐ ${storeRating}`} color="#ffd54f" />
+        <Stat label="จำนวนรีวิว" value={reviewCount} />
+      </div>
+
+      {/* กราฟยอดขาย 7 วัน */}
+      <div style={{ ...card, marginTop: "16px" }}>
+        <div style={{ color: "#999", fontSize: "14px", marginBottom: "10px" }}>
+          กราฟยอดขาย 7 วันล่าสุด
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "8px",
+            height: "160px",
+          }}
+        >
+          {days.map((d) => (
+            <div key={d.label} style={{ flex: 1, textAlign: "center" }}>
+              <div
+                title={`${d.total} ฿`}
+                style={{
+                  height: `${(d.total / maxSale) * 120}px`,
+                  background: "#ff8c00",
+                  borderRadius: "6px 6px 0 0",
+                  minHeight: "2px",
+                }}
+              />
+              <div style={{ fontSize: "11px", color: "#999", marginTop: "4px" }}>
+                {d.label}
+              </div>
+              <div style={{ fontSize: "11px" }}>{d.total}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* รีวิวทั้งหมด */}
+      <div style={{ ...card, marginTop: "16px" }}>
+        <div style={{ color: "#999", fontSize: "14px", marginBottom: "10px" }}>
+          รีวิวทั้งหมด ({reviewCount})
+        </div>
+        {reviews.length === 0 && <div style={{ color: "#777" }}>ยังไม่มีรีวิว</div>}
+        {reviews.map((r) => (
+          <div
+            key={r.id}
+            style={{
+              borderTop: "1px solid #333",
+              padding: "8px 0",
+              fontSize: "14px",
+            }}
+          >
+            <div style={{ color: "#ffd54f" }}>
+              {"★".repeat(r.rating || 0)}{" "}
+              <span style={{ color: "#999" }}>{r.customerName}</span>
+            </div>
+            {r.comment && <div>{r.comment}</div>}
+          </div>
+        ))}
       </div>
     </div>
   );

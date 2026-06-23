@@ -1,8 +1,101 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { db } from "./firebase";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { Link } from "react-router-dom";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 import Chat from "./Chat.jsx";
+
+const riderIcon = L.divIcon({
+  className: "",
+  html: '<div style="font-size:26px;line-height:26px">🛵</div>',
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
+});
+
+// ฟอร์มให้คะแนนเมื่อออเดอร์เสร็จสิ้น
+function ReviewForm({ order }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [done, setDone] = useState(false);
+
+  const submit = async () => {
+    await addDoc(collection(db, "reviews"), {
+      orderId: order.id,
+      customerName: order.customerName || "",
+      riderId: order.riderId || "",
+      storeId: order.storeId || "",
+      rating: Number(rating),
+      comment: comment.trim(),
+      createdAt: serverTimestamp(),
+    });
+    setDone(true);
+  };
+
+  if (done) {
+    return (
+      <div style={{ marginTop: "10px", color: "#22c55e" }}>
+        ขอบคุณสำหรับรีวิว ⭐
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: "10px", background: "#161616", borderRadius: "12px", padding: "12px" }}>
+      <div style={{ fontWeight: "bold", marginBottom: "6px" }}>ให้คะแนนการจัดส่ง</div>
+      <div style={{ fontSize: "24px", marginBottom: "6px" }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <span
+            key={n}
+            onClick={() => setRating(n)}
+            style={{ cursor: "pointer", color: n <= rating ? "#ffd54f" : "#555" }}
+          >
+            ★
+          </span>
+        ))}
+      </div>
+      <textarea
+        placeholder="เขียนรีวิว (ไม่บังคับ)"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        style={{
+          width: "100%",
+          minHeight: "50px",
+          borderRadius: "8px",
+          border: "none",
+          background: "#2a2a2a",
+          color: "#fff",
+          padding: "8px",
+          boxSizing: "border-box",
+        }}
+      />
+      <button
+        onClick={submit}
+        style={{
+          width: "100%",
+          marginTop: "8px",
+          padding: "10px",
+          borderRadius: "10px",
+          border: "none",
+          background: "#ff8c00",
+          color: "#fff",
+          fontWeight: "bold",
+          cursor: "pointer",
+        }}
+      >
+        ส่งรีวิว
+      </button>
+    </div>
+  );
+}
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -57,6 +150,8 @@ function TrackOrder() {
   const [phone, setPhone] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
   const [orders, setOrders] = useState([]);
+  const [toast, setToast] = useState(null);
+  const prevStatus = useRef({});
 
   useEffect(() => {
     if (!searchPhone) {
@@ -69,6 +164,17 @@ function TrackOrder() {
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // แจ้งเตือนเมื่อสถานะเปลี่ยน (realtime)
+      data.forEach((o) => {
+        const prev = prevStatus.current[o.id];
+        if (prev && prev !== o.status) {
+          setToast(`ออเดอร์ ${o.orderNo || ""} : ${o.status}`);
+          setTimeout(() => setToast(null), 4000);
+        }
+        prevStatus.current[o.id] = o.status;
+      });
+
       data.sort((a, b) => {
         const ta = a.createdAt?.toDate
           ? a.createdAt.toDate().getTime()
@@ -106,6 +212,25 @@ function TrackOrder() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: "22px" }}>🚚 ติดตามออเดอร์</h1>
+        {toast && (
+          <div
+            style={{
+              position: "fixed",
+              top: "16px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 5000,
+              background: "#ff8c00",
+              color: "#fff",
+              padding: "12px 18px",
+              borderRadius: "12px",
+              fontWeight: "bold",
+              boxShadow: "0 6px 18px rgba(0,0,0,0.4)",
+            }}
+          >
+            🔔 {toast}
+          </div>
+        )}
         <Link to="/">
           <button
             style={{
@@ -380,9 +505,41 @@ function TrackOrder() {
                     </button>
                   </a>
                 )}
+
+                {/* แผนที่ตำแหน่งไรเดอร์ realtime */}
+                {order.riderLat != null && order.riderLng != null && (
+                  <div style={{ marginTop: "10px" }}>
+                    <MapContainer
+                      center={[order.riderLat, order.riderLng]}
+                      zoom={15}
+                      style={{ width: "100%", height: "220px", borderRadius: "12px" }}
+                      key={`${order.riderLat}-${order.riderLng}`}
+                    >
+                      <TileLayer
+                        attribution="© OpenStreetMap"
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <Marker position={[order.riderLat, order.riderLng]} icon={riderIcon}>
+                        <Popup>ตำแหน่งไรเดอร์</Popup>
+                      </Marker>
+                    </MapContainer>
+                    <a
+                      href={`https://www.google.com/maps?q=${order.riderLat},${order.riderLng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#4fc3f7", fontSize: "13px" }}
+                    >
+                      เปิดใน Google Maps
+                    </a>
+                  </div>
+                )}
+
                 <Chat orderId={order.id} sender="customer" />
               </>
             )}
+
+            {/* ให้คะแนนเมื่อเสร็จสิ้น */}
+            {order.status === "เสร็จสิ้น" && <ReviewForm order={order} />}
           </div>
         ))}
       </div>

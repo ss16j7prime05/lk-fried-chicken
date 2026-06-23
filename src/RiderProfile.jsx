@@ -20,6 +20,7 @@ const vehicleLabel = (v) =>
 function RiderProfile() {
   const { profile, logout } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     const uid = auth.currentUser?.uid;
@@ -28,15 +29,25 @@ function RiderProfile() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => unsubscribe();
+    const rq = query(collection(db, "reviews"), where("riderId", "==", uid));
+    const unsubRev = onSnapshot(rq, (snapshot) => {
+      setReviews(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => {
+      unsubscribe();
+      unsubRev();
+    };
   }, []);
 
   const now = new Date();
   const totalJobs = orders.length;
   const todayJobs = orders.filter((o) => isToday(toDate(o.createdAt), now)).length;
-  // คะแนนเฉลี่ย (ถ้ายังไม่มีระบบรีวิว แสดงค่าเริ่มต้น)
+  // คะแนนเฉลี่ยจากรีวิวจริง
+  const reviewCount = reviews.length;
   const rating =
-    profile?.rating != null ? Number(profile.rating).toFixed(1) : "5.0";
+    reviewCount > 0
+      ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviewCount).toFixed(1)
+      : "-";
 
   const Row = ({ label, value }) => (
     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #333" }}>
@@ -89,7 +100,8 @@ function RiderProfile() {
         <Row label="ประเภทรถ" value={vehicleLabel(profile?.vehicleType)} />
         <Row label="จำนวนงานทั้งหมด" value={totalJobs} />
         <Row label="งานวันนี้" value={todayJobs} />
-        <Row label="คะแนน" value={`⭐ ${rating}`} />
+        <Row label="คะแนนเฉลี่ย" value={`⭐ ${rating}`} />
+        <Row label="จำนวนรีวิว" value={reviewCount} />
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Link } from "react-router-dom";
+import { STORE_ID } from "./config";
 
 const CATEGORIES = [
   "ข้าวหน้าไก่ทอด",
@@ -89,6 +90,7 @@ function StoreMenu() {
       image: form.image.trim(),
       category: form.category,
       available: form.available,
+      storeId: STORE_ID,
     };
     if (editId) {
       await updateDoc(doc(db, "menus", editId), payload);
