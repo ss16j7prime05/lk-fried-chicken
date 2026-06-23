@@ -1,0 +1,81 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function role() {
+      return isSignedIn() ? userDoc().role : "";
+    }
+
+    function myPhone() {
+      return isSignedIn() ? userDoc().phone : "";
+    }
+
+    // ---------- users ----------
+    // ผู้ใช้แก้ไขเอกสารของตัวเองได้ / admin อ่านได้ทั้งหมด
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || role() == "admin");
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if role() == "admin";
+    }
+
+    // ---------- menus / options ----------
+    // หน้าร้านสาธารณะอ่านเมนูได้ / แก้ไขเฉพาะ admin หรือ store
+    match /menus/{id} {
+      allow read: if true;
+      allow write: if role() == "admin" || role() == "store";
+    }
+    match /options/{id} {
+      allow read: if true;
+      allow write: if role() == "admin" || role() == "store";
+    }
+
+    // ---------- orders ----------
+    match /orders/{orderId} {
+      // ลูกค้าสั่งจากหน้าร้านสาธารณะ -> สร้างออเดอร์ได้
+      allow create: if true;
+
+      // อ่าน
+      allow read: if
+        role() == "admin" ||
+        role() == "store" ||
+        (role() == "customer" && resource.data.phone == myPhone()) ||
+        (role() == "rider" &&
+          (resource.data.riderId == request.auth.uid ||
+           resource.data.status == "กำลังจัดส่ง"));
+
+      // แก้ไข / เปลี่ยนสถานะ / ยกเลิก
+      // store = เต็มสิทธิ์ ; rider = เฉพาะงานที่รับ (หรือกำลังจัดส่งเพื่อรับงาน)
+      allow update: if
+        role() == "store" ||
+        (role() == "rider" &&
+          (resource.data.riderId == request.auth.uid ||
+           resource.data.status == "กำลังจัดส่ง"));
+
+      // ลบ = admin หรือ store
+      allow delete: if role() == "admin" || role() == "store";
+    }
+
+    // ---------- chats (ลูกค้า <-> ไรเดอร์) ----------
+    match /chats/{chatId} {
+      allow read: if role() == "admin" || role() == "store" ||
+                     role() == "customer" || role() == "rider";
+      allow create: if role() == "customer" || role() == "rider";
+      allow update, delete: if false;
+    }
+
+    // ---------- deny all others ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
