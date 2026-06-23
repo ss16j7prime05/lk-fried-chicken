@@ -1086,7 +1086,7 @@ onClick={() => openMenu(menu)}
 ))}
 </div>
 <div style={{ textAlign: "center", marginTop: "30px" }}>
-  <Link to="/orders">
+  <Link to="/store">
     <button
       style={{
         padding: "12px 25px",
@@ -1098,7 +1098,7 @@ onClick={() => openMenu(menu)}
         cursor: "pointer"
       }}
     >
-      📦 ดูออเดอร์
+      🏪 ร้านค้า
     </button>
   </Link>
   <Link to="/history">

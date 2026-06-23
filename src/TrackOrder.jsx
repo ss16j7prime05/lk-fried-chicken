@@ -42,7 +42,7 @@ const STEPS = ["ร้านรับออเดอร์", "กำลังท
 // แปลงสถานะจริงใน Firestore -> index ของ STEPS
 const statusToStep = (status) => {
   const s = status === "pending" ? "ออเดอร์ใหม่" : status;
-  if (s === "ออเดอร์ใหม่") return 0;
+  if (s === "ออเดอร์ใหม่" || s === "ร้านรับออเดอร์") return 0;
   if (s === "กำลังทำ") return 1;
   if (s === "ส่งให้ไรเดอร์" || s === "จัดส่ง" || s === "กำลังจัดส่ง") return 2;
   if (s === "เสร็จสิ้น") return 3;
@@ -323,6 +323,11 @@ function TrackOrder() {
             <h3 style={{ color: "#ff8c00", marginTop: "10px", marginBottom: "10px" }}>
               💰 รวมทั้งหมด {order.grandTotal} บาท
             </h3>
+
+            {/* แจ้งเตือนการยกเลิก */}
+            <p style={{ fontSize: "12px", color: "#ffb74d", margin: "0 0 8px" }}>
+              หากต้องการยกเลิกออเดอร์ กรุณาโทรติดต่อร้าน
+            </p>
 
             {/* เบอร์โทรร้าน (แสดงตลอด) */}
             <a href={`tel:${STORE_PHONE}`}>
