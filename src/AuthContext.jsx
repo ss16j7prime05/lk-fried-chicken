@@ -17,6 +17,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
+      // ต้องตั้ง loading=true ทันทีที่ auth state เปลี่ยน (ไม่ใช่แค่ตอน mount ครั้งแรก)
+      // ไม่งั้นช่วงที่กำลังอ่าน Firestore role ใหม่ ProtectedRoute จะเห็น loading=false + user เก่า (null)
+      // ค้างอยู่ชั่วขณะ แล้วเด้งกลับ /login ทั้งที่ login สำเร็จแล้ว (race condition)
+      setLoading(true);
       setUser(u);
       if (u) {
         try {

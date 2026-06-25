@@ -78,8 +78,38 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const snap = await getDoc(doc(db, "users", cred.user.uid));
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      // ใช้ auth.currentUser.uid เสมอ (ไม่ใช่ cred.user หรือ id ที่ hardcode) เพื่ออ้างอิง users/{uid} ที่ถูกต้องแน่นอน
+      const uid = auth.currentUser.uid;
+
+      // ---- Admin: เส้นทางตรวจสอบเฉพาะ (ไม่ใช้ logic ร่วมกับ customer/store/rider ด้านล่าง) ----
+      if (role === "admin") {
+        const snap = await getDoc(doc(db, "users", uid));
+        if (!snap.exists()) {
+          console.log({ uid, role: null, status: null });
+          await signOut(auth);
+          setError("User profile not found.");
+          return;
+        }
+        const data = snap.data();
+        console.log("uid:", uid, "role:", data.role, "status:", data.status);
+
+        if (data.role !== "admin") {
+          await signOut(auth);
+          setError("You are not an admin.");
+          return;
+        }
+        if (data.status !== "active") {
+          await signOut(auth);
+          setError("Account not approved.");
+          return;
+        }
+        navigate("/admin");
+        return;
+      }
+
+      // ---- Customer / Store / Rider: logic เดิม ไม่เปลี่ยนแปลง ----
+      const snap = await getDoc(doc(db, "users", uid));
       const data = snap.exists() ? snap.data() : null;
       const actualRole = data?.role ?? null;
 
@@ -89,7 +119,7 @@ export default function Login() {
         return;
       }
 
-      // ตรวจสถานะการอนุมัติ: customer ต้อง active, store/rider ต้อง approved, admin เข้าได้เสมอ
+      // ตรวจสถานะการอนุมัติ: customer ต้อง active, store/rider ต้อง approved
       // (ไม่มีฟิลด์ status เลย = บัญชีเก่าก่อนมีระบบอนุมัติ ถือว่าอนุมัติแล้ว ไม่ล็อกผู้ใช้เดิม)
       const status = data?.status;
       if (role === "customer" && status && status !== "active") {
