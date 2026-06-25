@@ -44,7 +44,15 @@ const button = {
   cursor: "pointer",
 };
 
+// เส้นทางหลังสมัครสมาชิกสำเร็จของแต่ละ role
+const ROLE_HOME = {
+  customer: "/customer",
+  store: "/store",
+  rider: "/rider",
+};
+
 // สมัครสมาชิกด้วย email/password แล้วบันทึก role ลง Firestore users/{uid}
+// เปิดให้สมัครได้เฉพาะ customer / store / rider เท่านั้น ห้ามสมัคร admin จากหน้านี้
 export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -82,7 +90,7 @@ export default function Register() {
         email: email.trim(),
         createdAt: serverTimestamp(),
       });
-      navigate("/", { replace: true });
+      navigate(ROLE_HOME[role] || "/login", { replace: true });
     } catch (err) {
       console.error(err);
       if (err.code === "auth/email-already-in-use") {
@@ -121,8 +129,8 @@ export default function Register() {
           style={input}
         >
           <option value="customer">ลูกค้า</option>
+          <option value="store">ร้านค้า</option>
           <option value="rider">ไรเดอร์</option>
-          <option value="admin">แอดมิน</option>
         </select>
         <input
           type="password"

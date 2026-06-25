@@ -60,7 +60,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/admin"
             element={
-              <ProtectedRoute role="admin" loginPath="/login/admin">
+              <ProtectedRoute role="admin" loginPath="/login">
                 <Admin />
               </ProtectedRoute>
             }
@@ -68,7 +68,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/admin/dashboard"
             element={
-              <ProtectedRoute role="admin" loginPath="/login/admin">
+              <ProtectedRoute role="admin" loginPath="/login">
                 <AdminDashboard />
               </ProtectedRoute>
             }
@@ -76,7 +76,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/admin/center"
             element={
-              <ProtectedRoute role="admin" loginPath="/login/admin">
+              <ProtectedRoute role="admin" loginPath="/login">
                 <AdminControlCenter />
               </ProtectedRoute>
             }
@@ -84,7 +84,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/store"
             element={
-              <ProtectedRoute role="store" loginPath="/login/store">
+              <ProtectedRoute role="store" loginPath="/login">
                 <Store />
               </ProtectedRoute>
             }
@@ -92,7 +92,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/store/dashboard"
             element={
-              <ProtectedRoute role="store" loginPath="/login/store">
+              <ProtectedRoute role="store" loginPath="/login">
                 <StoreDashboard />
               </ProtectedRoute>
             }
@@ -100,7 +100,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/store/orders"
             element={
-              <ProtectedRoute role="store" loginPath="/login/store">
+              <ProtectedRoute role="store" loginPath="/login">
                 <StoreOrdersDashboard />
               </ProtectedRoute>
             }
@@ -108,7 +108,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/store/menu"
             element={
-              <ProtectedRoute role="store" loginPath="/login/store">
+              <ProtectedRoute role="store" loginPath="/login">
                 <StoreMenu />
               </ProtectedRoute>
             }
@@ -124,7 +124,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/track"
             element={
-              <ProtectedRoute role="customer" loginPath="/login/customer">
+              <ProtectedRoute role="customer" loginPath="/login">
                 <TrackOrder />
               </ProtectedRoute>
             }
@@ -132,7 +132,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/rider"
             element={
-              <ProtectedRoute role="rider" loginPath="/login/rider">
+              <ProtectedRoute role="rider" loginPath="/login">
                 <Rider />
               </ProtectedRoute>
             }
@@ -140,7 +140,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/rider/dashboard"
             element={
-              <ProtectedRoute role="rider" loginPath="/login/rider">
+              <ProtectedRoute role="rider" loginPath="/login">
                 <RiderOrdersDashboard />
               </ProtectedRoute>
             }
@@ -148,7 +148,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/rider/profile"
             element={
-              <ProtectedRoute role="rider" loginPath="/login/rider">
+              <ProtectedRoute role="rider" loginPath="/login">
                 <RiderProfile />
               </ProtectedRoute>
             }
@@ -157,7 +157,7 @@ createRoot(document.getElementById('root')).render(
           <Route
             path="/history"
             element={
-              <ProtectedRoute role="customer" loginPath="/login/customer">
+              <ProtectedRoute role="customer" loginPath="/login">
                 <CustomerOrderHistory />
               </ProtectedRoute>
             }
