@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import Chat from "../Chat.jsx";
 import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
@@ -9,6 +11,8 @@ import {
   READY_STATUS,
   STATUS_LABEL,
 } from "./riderStatus";
+
+const GPS_UPDATE_INTERVAL_MS = 5000;
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -65,6 +69,59 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
       cancelled = true;
     };
   }, [dLat, dLng, storeLocation]);
+
+  // อัปเดตตำแหน่ง GPS ของไรเดอร์ทุก 5 วินาที เฉพาะตอนสถานะ "delivering" และเป็นไรเดอร์ที่รับงานนี้เท่านั้น
+  // (ความปลอดภัย: Firestore rule อนุญาตแก้ไข order นี้เฉพาะ riderId == auth.uid)
+  useEffect(() => {
+    if (effectiveStatus !== DELIVERING_STATUS) return;
+    if (!navigator.geolocation) return;
+
+    let cancelled = false;
+
+    const updateLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          if (cancelled) return;
+          const { latitude, longitude, heading, speed } = pos.coords;
+          let remainingDistance;
+          let estimatedArrival = null;
+          try {
+            const r = await getRoute(latitude, longitude, dLat, dLng);
+            remainingDistance = r.distanceKm;
+            estimatedArrival = new Date(Date.now() + r.durationMin * 60000).toISOString();
+          } catch {
+            remainingDistance = haversineKm(latitude, longitude, dLat, dLng);
+          }
+          if (cancelled) return;
+          await updateDoc(doc(db, "orders", order.id), {
+            riderLocation: {
+              lat: latitude,
+              lng: longitude,
+              heading: heading ?? null,
+              speed: speed ?? null,
+              updatedAt: serverTimestamp(),
+              estimatedArrival,
+              remainingDistance,
+            },
+          });
+        },
+        (err) => console.warn("ดึงตำแหน่ง GPS ไม่สำเร็จ", err),
+        { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 }
+      );
+    };
+
+    updateLocation();
+    const interval = setInterval(updateLocation, GPS_UPDATE_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [effectiveStatus, order.id, dLat, dLng]);
+
+  const markNear = async () => {
+    await updateDoc(doc(db, "orders", order.id), { nearPressed: true });
+    alert("แจ้งลูกค้าว่าใกล้ถึงแล้ว");
+  };
 
   return (
     <div
@@ -195,12 +252,17 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
           </button>
         )}
         {effectiveStatus === DELIVERING_STATUS && (
-          <button
-            onClick={() => onDelivered(order.id)}
-            style={{ ...actionBtn, background: "#22c55e" }}
-          >
-            🎉 ส่งสำเร็จ (Delivered)
-          </button>
+          <>
+            <button onClick={markNear} style={{ ...actionBtn, background: "#4fc3f7", color: "#000" }}>
+              📍 ใกล้ถึงแล้ว (I'm Near)
+            </button>
+            <button
+              onClick={() => onDelivered(order.id)}
+              style={{ ...actionBtn, background: "#22c55e" }}
+            >
+              🎉 ส่งสำเร็จ (Delivered)
+            </button>
+          </>
         )}
       </div>
 

@@ -4,6 +4,7 @@ import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
 import { PAYMENT_STATUS } from "../payment/paymentUtils";
+import TrackingPanel from "../tracking/TrackingPanel.jsx";
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -29,7 +30,7 @@ const actionBtn = {
 };
 
 // การ์ดออเดอร์เดียว ใช้ใน Store Dashboard ใหม่ (รับ order + status ปัจจุบัน + callback)
-export default function OrderCard({ order, status, onAdvance, onCancel, onVerifyPayment }) {
+export default function OrderCard({ order, status, onAdvance, onCancel, onVerifyPayment, storeLocation }) {
   const nextAction = NEXT_ACTION[status];
   const [showMap, setShowMap] = useState(false);
   const dLat = order.deliveryLocation?.lat ?? order.lat ?? order.latitude;
@@ -140,6 +141,39 @@ export default function OrderCard({ order, status, onAdvance, onCancel, onVerify
           <DeliveryMap lat={dLat} lng={dLng} address={dAddress} height="180px" />
         </div>
       )}
+
+      {order.riderPhone && (
+        <a href={`tel:${order.riderPhone}`} style={{ display: "block", marginBottom: "8px" }}>
+          <button
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "10px",
+              border: "none",
+              background: "#22c55e",
+              color: "#fff",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            📞 โทรหาไรเดอร์ ({order.riderPhone})
+          </button>
+        </a>
+      )}
+
+      <TrackingPanel
+        storeLocation={storeLocation}
+        customerLocation={dLat != null && dLng != null ? { lat: dLat, lng: dLng, address: dAddress } : null}
+        riderLocation={
+          order.riderLocation
+            ? { lat: order.riderLocation.lat, lng: order.riderLocation.lng }
+            : order.riderLat != null && order.riderLng != null
+            ? { lat: order.riderLat, lng: order.riderLng }
+            : null
+        }
+        estimatedArrival={order.riderLocation?.estimatedArrival}
+        remainingDistance={order.riderLocation?.remainingDistance}
+      />
 
       <div style={{ marginTop: "10px" }}>
         {(order.items || []).map((item, index) => (

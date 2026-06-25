@@ -6,21 +6,15 @@ import {
   where,
   onSnapshot,
   addDoc,
+  doc,
+  getDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
 import Chat from "./Chat.jsx";
 import PaymentStatusBadge from "./payment/PaymentStatusBadge.jsx";
-
-const riderIcon = L.divIcon({
-  className: "",
-  html: '<div style="font-size:26px;line-height:26px">🛵</div>',
-  iconSize: [26, 26],
-  iconAnchor: [13, 13],
-});
+import TrackingPanel from "./tracking/TrackingPanel.jsx";
+import { STORE_ID } from "./config";
 
 // ฟอร์มให้คะแนนเมื่อออเดอร์เสร็จสิ้น
 function ReviewForm({ order }) {
@@ -188,7 +182,19 @@ function TrackOrder() {
   const [searchPhone, setSearchPhone] = useState("");
   const [orders, setOrders] = useState([]);
   const [toast, setToast] = useState(null);
+  const [storeLocation, setStoreLocation] = useState(null);
   const prevStatus = useRef({});
+
+  useEffect(() => {
+    getDoc(doc(db, "stores", STORE_ID)).then((snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.lat != null && data.lng != null) {
+          setStoreLocation({ lat: data.lat, lng: data.lng, name: data.storeName || "ร้าน" });
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!searchPhone) {
@@ -573,33 +579,24 @@ function TrackOrder() {
                   </a>
                 )}
 
-                {/* แผนที่ตำแหน่งไรเดอร์ realtime */}
-                {order.riderLat != null && order.riderLng != null && (
-                  <div style={{ marginTop: "10px" }}>
-                    <MapContainer
-                      center={[order.riderLat, order.riderLng]}
-                      zoom={15}
-                      style={{ width: "100%", height: "220px", borderRadius: "12px" }}
-                      key={`${order.riderLat}-${order.riderLng}`}
-                    >
-                      <TileLayer
-                        attribution="© OpenStreetMap"
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
-                      <Marker position={[order.riderLat, order.riderLng]} icon={riderIcon}>
-                        <Popup>ตำแหน่งไรเดอร์</Popup>
-                      </Marker>
-                    </MapContainer>
-                    <a
-                      href={`https://www.google.com/maps?q=${order.riderLat},${order.riderLng}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "#4fc3f7", fontSize: "13px" }}
-                    >
-                      เปิดใน Google Maps
-                    </a>
-                  </div>
-                )}
+                {/* ติดตามไรเดอร์ realtime: แผนที่ + เส้นทาง + ระยะทาง/เวลาที่เหลือ */}
+                <TrackingPanel
+                  storeLocation={storeLocation}
+                  customerLocation={{
+                    lat: order.deliveryLocation?.lat ?? order.lat ?? order.latitude,
+                    lng: order.deliveryLocation?.lng ?? order.lng ?? order.longitude,
+                    address: order.deliveryAddress || order.address,
+                  }}
+                  riderLocation={
+                    order.riderLocation
+                      ? { lat: order.riderLocation.lat, lng: order.riderLocation.lng }
+                      : order.riderLat != null && order.riderLng != null
+                      ? { lat: order.riderLat, lng: order.riderLng }
+                      : null
+                  }
+                  estimatedArrival={order.riderLocation?.estimatedArrival}
+                  remainingDistance={order.riderLocation?.remainingDistance}
+                />
 
                 <Chat orderId={order.id} sender="customer" />
               </>

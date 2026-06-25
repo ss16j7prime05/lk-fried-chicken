@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { db } from "../firebase";
+import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
 import OrderCard from "./OrderCard.jsx";
 import { ORDER_STATUSES, STATUS_LABEL, normalizeStatus } from "./orderStatus";
@@ -45,6 +46,19 @@ export default function StoreOrdersDashboard() {
   const knownIds = useRef(new Set());
   const initialized = useRef(false);
   const { logout, user } = useAuth();
+  const [storeLocation, setStoreLocation] = useState(null);
+
+  useEffect(() => {
+    const unsubStore = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.lat != null && data.lng != null) {
+          setStoreLocation({ lat: data.lat, lng: data.lng, name: data.storeName || "ร้าน" });
+        }
+      }
+    });
+    return () => unsubStore();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
@@ -242,6 +256,7 @@ export default function StoreOrdersDashboard() {
             onAdvance={advanceStatus}
             onCancel={cancelOrder}
             onVerifyPayment={verifyPayment}
+            storeLocation={storeLocation}
           />
         ))}
       </div>

@@ -148,11 +148,16 @@ export const onOrderStatusChange = onDocumentUpdated(
       await markNotified(orderId, "delivering");
     }
 
-    // Notification 6: ระยะห่างไรเดอร์-ลูกค้า <= 300 เมตร หรือไรเดอร์กดปุ่ม "ใกล้ถึงแล้ว"
+    // Notification 6: ระยะห่างไรเดอร์-ลูกค้า <= 300 เมตร (จาก riderLocation ใหม่ หรือ riderLat/riderLng เดิม)
+    // หรือไรเดอร์กดปุ่ม "ใกล้ถึงแล้ว"
+    const beforeRiderLat = before.riderLocation?.lat ?? before.riderLat;
+    const beforeRiderLng = before.riderLocation?.lng ?? before.riderLng;
+    const afterRiderLat = after.riderLocation?.lat ?? after.riderLat;
+    const afterRiderLng = after.riderLocation?.lng ?? after.riderLng;
     const riderMoved =
-      after.riderLat != null &&
-      after.riderLng != null &&
-      (before.riderLat !== after.riderLat || before.riderLng !== after.riderLng);
+      afterRiderLat != null &&
+      afterRiderLng != null &&
+      (beforeRiderLat !== afterRiderLat || beforeRiderLng !== afterRiderLng);
     const nearPressed = !before.nearPressed && after.nearPressed === true;
 
     if ((riderMoved || nearPressed) && !(await alreadyNotified(orderId, "near"))) {
@@ -160,7 +165,7 @@ export const onOrderStatusChange = onDocumentUpdated(
       const destLng = after.deliveryLocation?.lng ?? after.lng ?? after.longitude;
       const distanceKm = nearPressed
         ? 0
-        : haversineKm(after.riderLat, after.riderLng, destLat, destLng);
+        : haversineKm(afterRiderLat, afterRiderLng, destLat, destLng);
 
       if (nearPressed || (distanceKm != null && distanceKm <= NEAR_DISTANCE_KM)) {
         const to = await getCustomerLineId(after);
