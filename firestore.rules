@@ -20,11 +20,30 @@ service cloud.firestore {
       return isSignedIn() ? userDoc().phone : "";
     }
 
+    // ไม่มีฟิลด์ status เลย = บัญชีเก่าก่อนมีระบบอนุมัติ ถือว่าอนุมัติแล้ว (ไม่ล็อกผู้ใช้เดิม)
+    function myStatus() {
+      return isSignedIn() ? userDoc().status : null;
+    }
+    function isApprovedOrLegacy() {
+      return myStatus() == null || myStatus() == "approved" || myStatus() == "active";
+    }
+
     // ---------- users ----------
-    // ผู้ใช้แก้ไขเอกสารของตัวเองได้ / admin อ่านได้ทั้งหมด
+    // ผู้ใช้แก้ไขเอกสารของตัวเองได้ (ยกเว้นฟิลด์ status) / admin อ่าน-แก้ไขได้ทั้งหมด (รวมการอนุมัติ/ปฏิเสธ)
     match /users/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || role() == "admin");
-      allow create, update: if isSignedIn() && request.auth.uid == uid;
+
+      // สมัครสมาชิกใหม่: ตั้ง status ได้แค่ "active" (customer) หรือ "pending" (store/rider) เท่านั้น
+      // ห้ามสมัครมาแล้วตั้ง status เป็น "approved" เอง
+      allow create: if isSignedIn() && request.auth.uid == uid &&
+        (request.resource.data.status == "active" || request.resource.data.status == "pending");
+
+      // แก้ไขโปรไฟล์ตัวเองได้ตามปกติ แต่ "ห้ามเปลี่ยน status เอง" (ป้องกันร้าน/ไรเดอร์ตั้ง approved เอง)
+      // admin แก้ไขได้ทุกฟิลด์ รวมการอนุมัติ/ปฏิเสธ (เปลี่ยน status)
+      allow update: if role() == "admin" ||
+        (isSignedIn() && request.auth.uid == uid &&
+          request.resource.data.status == resource.data.status);
+
       allow delete: if role() == "admin";
     }
 
@@ -32,11 +51,11 @@ service cloud.firestore {
     // หน้าร้านสาธารณะอ่านเมนูได้ / แก้ไขเฉพาะ admin หรือ store
     match /menus/{id} {
       allow read: if true;
-      allow write: if role() == "admin" || role() == "store";
+      allow write: if role() == "admin" || (role() == "store" && isApprovedOrLegacy());
     }
     match /options/{id} {
       allow read: if true;
-      allow write: if role() == "admin" || role() == "store";
+      allow write: if role() == "admin" || (role() == "store" && isApprovedOrLegacy());
     }
 
     // ---------- orders ----------
@@ -53,20 +72,20 @@ service cloud.firestore {
                resource.data.status == "ready_for_delivery";
       }
 
-      // อ่าน
+      // อ่าน (store/rider ต้อง approved แล้วเท่านั้น - ร้าน/ไรเดอร์ที่ pending เข้าไม่ได้)
       allow read: if
         role() == "admin" ||
-        role() == "store" ||
+        (role() == "store" && isApprovedOrLegacy()) ||
         (role() == "customer" && resource.data.phone == myPhone()) ||
-        (role() == "rider" &&
+        (role() == "rider" && isApprovedOrLegacy() &&
           (resource.data.riderId == request.auth.uid || isReadyForDelivery()));
 
       // แก้ไข / เปลี่ยนสถานะ / ยกเลิก
-      // admin/store = เต็มสิทธิ์ ; rider = เฉพาะงานที่รับ (หรือพร้อมส่งเพื่อรับงาน)
+      // admin/store(approved) = เต็มสิทธิ์ ; rider(approved) = เฉพาะงานที่รับ (หรือพร้อมส่งเพื่อรับงาน)
       allow update: if
         role() == "admin" ||
-        role() == "store" ||
-        (role() == "rider" &&
+        (role() == "store" && isApprovedOrLegacy()) ||
+        (role() == "rider" && isApprovedOrLegacy() &&
           (resource.data.riderId == request.auth.uid || isReadyForDelivery()));
 
       // ลบ = admin หรือ store
@@ -85,7 +104,7 @@ service cloud.firestore {
     // ลูกค้าหน้าร้านสาธารณะอ่านสถานะร้านได้ ; แก้ไขเฉพาะ store/admin
     match /stores/{id} {
       allow read: if true;
-      allow write: if role() == "store" || role() == "admin";
+      allow write: if role() == "admin" || (role() == "store" && isApprovedOrLegacy());
     }
 
     // ---------- reviews ----------

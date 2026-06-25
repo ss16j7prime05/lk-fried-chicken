@@ -14,6 +14,7 @@ import RidersPanel from "./RidersPanel.jsx";
 import StoresPanel from "./StoresPanel.jsx";
 import ReportsPanel from "./ReportsPanel.jsx";
 import PaymentsPanel from "./PaymentsPanel.jsx";
+import ApprovalsPanel from "./ApprovalsPanel.jsx";
 import NewOrderAlert from "./NewOrderAlert.jsx";
 
 const navBtn = {
@@ -26,9 +27,10 @@ const navBtn = {
   cursor: "pointer",
 };
 
-const TABS = ["dashboard", "orders", "payments", "customers", "riders", "stores", "reports"];
+const TABS = ["dashboard", "approvals", "orders", "payments", "customers", "riders", "stores", "reports"];
 const TAB_LABEL = {
   dashboard: "📊 ภาพรวม",
+  approvals: "✅ คำขออนุมัติ",
   orders: "📦 ออเดอร์",
   payments: "💳 การชำระเงิน",
   customers: "👤 ลูกค้า",
@@ -179,6 +181,7 @@ export default function AdminControlCenter() {
         </div>
       )}
 
+      {tab === "approvals" && <ApprovalsPanel users={users} />}
       {tab === "orders" && <OrdersPanel orders={orders} />}
       {tab === "payments" && <PaymentsPanel orders={orders} />}
       {tab === "customers" && (

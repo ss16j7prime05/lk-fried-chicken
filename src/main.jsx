@@ -14,6 +14,9 @@ import { AuthProvider } from './AuthContext.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import Login from './login/Login.jsx'
 import Register from './login/Register.jsx'
+import RegisterCustomer from './register/RegisterCustomer.jsx'
+import RegisterStore from './register/RegisterStore.jsx'
+import RegisterRider from './register/RegisterRider.jsx'
 import ForgotPassword from './login/ForgotPassword.jsx'
 import AdminLogin from './login/AdminLogin.jsx'
 import StoreLogin from './login/StoreLogin.jsx'
@@ -46,6 +49,9 @@ createRoot(document.getElementById('root')).render(
           {/* Login pages */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/register/customer" element={<RegisterCustomer />} />
+          <Route path="/register/store" element={<RegisterStore />} />
+          <Route path="/register/rider" element={<RegisterRider />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/login/admin" element={<AdminLogin />} />
           <Route path="/login/store" element={<StoreLogin />} />

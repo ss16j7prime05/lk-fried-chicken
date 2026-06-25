@@ -80,11 +80,26 @@ export default function Login() {
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       const snap = await getDoc(doc(db, "users", cred.user.uid));
-      const actualRole = snap.exists() ? snap.data().role : null;
+      const data = snap.exists() ? snap.data() : null;
+      const actualRole = data?.role ?? null;
 
       if (actualRole !== role) {
         await signOut(auth);
         setError("Permission denied");
+        return;
+      }
+
+      // ตรวจสถานะการอนุมัติ: customer ต้อง active, store/rider ต้อง approved, admin เข้าได้เสมอ
+      // (ไม่มีฟิลด์ status เลย = บัญชีเก่าก่อนมีระบบอนุมัติ ถือว่าอนุมัติแล้ว ไม่ล็อกผู้ใช้เดิม)
+      const status = data?.status;
+      if (role === "customer" && status && status !== "active") {
+        await signOut(auth);
+        setError("Your account has not been approved yet.");
+        return;
+      }
+      if ((role === "store" || role === "rider") && status && status !== "approved") {
+        await signOut(auth);
+        setError("Your account has not been approved yet.");
         return;
       }
 

@@ -1,8 +1,4 @@
-import { useState } from "react";
-import { auth, db } from "../firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 const wrap = {
   minHeight: "100vh",
@@ -22,139 +18,34 @@ const card = {
   maxWidth: "380px",
   boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
 };
-const input = {
+const choiceBtn = {
+  display: "block",
   width: "100%",
-  padding: "12px",
+  padding: "14px",
   marginBottom: "12px",
-  borderRadius: "10px",
+  borderRadius: "12px",
   border: "none",
   background: "#2a2a2a",
   color: "#fff",
-  boxSizing: "border-box",
-};
-const button = {
-  width: "100%",
-  padding: "12px",
-  borderRadius: "10px",
-  border: "none",
-  background: "#ff8c00",
-  color: "#fff",
   fontWeight: "bold",
   fontSize: "16px",
+  textAlign: "center",
+  textDecoration: "none",
   cursor: "pointer",
 };
 
-// เส้นทางหลังสมัครสมาชิกสำเร็จของแต่ละ role
-const ROLE_HOME = {
-  customer: "/customer",
-  store: "/store",
-  rider: "/rider",
-};
-
-// สมัครสมาชิกด้วย email/password แล้วบันทึก role ลง Firestore users/{uid}
-// เปิดให้สมัครได้เฉพาะ customer / store / rider เท่านั้น ห้ามสมัคร admin จากหน้านี้
+// หน้าเลือกประเภทผู้ใช้ก่อนไปยังหน้าสมัครสมาชิกของแต่ละ role (มีเฉพาะ customer/store/rider ห้ามสมัคร admin)
 export default function Register() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("customer");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-
-  const handleRegister = async () => {
-    setError("");
-    if (!email.trim() || !password.trim()) {
-      setError("กรุณากรอกอีเมลและรหัสผ่าน");
-      return;
-    }
-    if (password.length < 6) {
-      setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("รหัสผ่านไม่ตรงกัน");
-      return;
-    }
-    setLoading(true);
-    try {
-      const cred = await createUserWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
-      );
-      await setDoc(doc(db, "users", cred.user.uid), {
-        role,
-        name: name.trim(),
-        email: email.trim(),
-        createdAt: serverTimestamp(),
-      });
-      navigate(ROLE_HOME[role] || "/login", { replace: true });
-    } catch (err) {
-      console.error(err);
-      if (err.code === "auth/email-already-in-use") {
-        setError("อีเมลนี้ถูกใช้สมัครแล้ว");
-      } else if (err.code === "auth/invalid-email") {
-        setError("รูปแบบอีเมลไม่ถูกต้อง");
-      } else {
-        setError("สมัครสมาชิกไม่สำเร็จ");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div style={wrap}>
       <div style={card}>
         <h2 style={{ marginTop: 0, textAlign: "center" }}>📝 สมัครสมาชิก</h2>
-        <input
-          type="text"
-          placeholder="ชื่อ"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          style={input}
-        />
-        <input
-          type="email"
-          placeholder="อีเมล"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={input}
-        />
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          style={input}
-        >
-          <option value="customer">ลูกค้า</option>
-          <option value="store">ร้านค้า</option>
-          <option value="rider">ไรเดอร์</option>
-        </select>
-        <input
-          type="password"
-          placeholder="รหัสผ่าน"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={input}
-        />
-        <input
-          type="password"
-          placeholder="ยืนยันรหัสผ่าน"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleRegister()}
-          style={input}
-        />
-        {error && (
-          <div style={{ color: "#e53935", marginBottom: "10px", fontSize: "14px" }}>
-            {error}
-          </div>
-        )}
-        <button onClick={handleRegister} disabled={loading} style={button}>
-          {loading ? "กำลังสมัคร..." : "สมัครสมาชิก"}
-        </button>
+        <p style={{ textAlign: "center", color: "#999", fontSize: "14px", marginBottom: "20px" }}>
+          เลือกประเภทบัญชีที่ต้องการสมัคร
+        </p>
+        <Link to="/register/customer" style={choiceBtn}>👤 สมัครสมาชิกลูกค้า</Link>
+        <Link to="/register/store" style={choiceBtn}>🏪 สมัครสมาชิกร้านค้า</Link>
+        <Link to="/register/rider" style={choiceBtn}>🛵 สมัครสมาชิกไรเดอร์</Link>
         <div style={{ textAlign: "center", marginTop: "12px", fontSize: "14px" }}>
           มีบัญชีแล้ว? <Link to="/login" style={{ color: "#ff8c00" }}>เข้าสู่ระบบ</Link>
         </div>
