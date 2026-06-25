@@ -32,7 +32,7 @@ async function callLinePush(to, text) {
     }
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new Error(`LINE push timeout after ${REQUEST_TIMEOUT_MS}ms`);
+      throw new Error(`LINE push timeout after ${REQUEST_TIMEOUT_MS}ms`, { cause: err });
     }
     throw err;
   } finally {

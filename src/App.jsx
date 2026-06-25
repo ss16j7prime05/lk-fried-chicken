@@ -95,7 +95,6 @@ const [deliveryAddress, setDeliveryAddress] = useState("");
 const [distanceKm, setDistanceKm] = useState(null);
 const [deliveryFee, setDeliveryFee] = useState(0);
 const [showMapModal, setShowMapModal] = useState(false);
-console.log(options);
 useEffect(() => {
   const fetchMenus = async () => {
     const querySnapshot = await getDocs(collection(db, "menus"));
@@ -131,8 +130,6 @@ useEffect(() => {
         ...doc.data(),
       }));
 setOptions(optionData);
-console.log(optionData);
-   
   };
 
   fetchOptions();
@@ -327,8 +324,6 @@ if (orderType === "delivery") {
     console.warn(e);
   }
 
-  console.log("เริ่มบันทึกออเดอร์");
-
   // อัปโหลดสลิปถ้ามี
   let slipImage = "";
   let paymentTime = null;
@@ -425,7 +420,6 @@ if (orderType === "delivery") {
 
   createdAt: serverTimestamp(),
 });
-console.log("บันทึกสำเร็จ");
   alert("สั่งซื้อสำเร็จ");
   setCart([]);
 setCustomerName("");
@@ -1413,8 +1407,6 @@ const item = {
 
   qty: quantity
 };
-
-console.log(item);
 
 if (selectedMenu?.category === "ข้าวหน้าไก่ทอด" && !selectedTopChicken) {
   alert("กรุณาเลือกไก่ทอด");

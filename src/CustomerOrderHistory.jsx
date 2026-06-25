@@ -70,7 +70,6 @@ function CustomerOrderHistory() {
           : new Date(b.createdAt || 0).getTime();
         return tb - ta;
       });
-      console.log(data);
       setOrders(data);
     });
     return () => unsubscribe();
