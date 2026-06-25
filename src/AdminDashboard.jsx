@@ -131,6 +131,9 @@ function AdminDashboard() {
           <Link to="/admin">
             <button style={navBtn}>📦 ออเดอร์</button>
           </Link>
+          <Link to="/admin/center">
+            <button style={navBtn}>🛠️ Admin Control Center</button>
+          </Link>
           <button style={{ ...navBtn, background: "#e53935" }} onClick={logout}>
             ออกจากระบบ
           </button>

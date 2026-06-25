@@ -8,6 +8,10 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
+import DeliveryMap from "./location/DeliveryMap.jsx";
+import MapButton from "./location/MapButton.jsx";
+import PaymentStatusBadge from "./payment/PaymentStatusBadge.jsx";
+import { PAYMENT_STATUS } from "./payment/paymentUtils";
 
 const TABS = [
   "ออเดอร์ใหม่",
@@ -57,6 +61,7 @@ function Store() {
   const [cancelOther, setCancelOther] = useState("");
   const [cookTarget, setCookTarget] = useState(null);
   const [cookMinutes, setCookMinutes] = useState(15);
+  const [mapOpenId, setMapOpenId] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
@@ -121,6 +126,12 @@ function Store() {
   const deleteOrder = async (id) => {
     if (!window.confirm("ลบออเดอร์นี้ใช่ไหม?")) return;
     await deleteDoc(doc(db, "orders", id));
+  };
+
+  const verifyPayment = async (id, approved) => {
+    await updateDoc(doc(db, "orders", id), {
+      "payment.status": approved ? PAYMENT_STATUS.APPROVED : PAYMENT_STATUS.REJECTED,
+    });
   };
 
   // ----- แก้ไขออเดอร์ -----
@@ -278,25 +289,82 @@ function Store() {
                   <p style={{ margin: "4px 0" }}>
                     🏠 {order.deliveryAddress || order.address || "-"}
                   </p>
-                  {order.gpsLocation && (
-                    <p style={{ margin: "4px 0" }}>
-                      📍{" "}
-                      <a
-                        href={`https://www.google.com/maps?q=${order.gpsLocation}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: "#4fc3f7" }}
+                  {(order.deliveryLocation || order.gpsLocation) && (
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", margin: "6px 0" }}>
+                      <MapButton
+                        lat={order.deliveryLocation?.lat ?? order.lat ?? order.latitude}
+                        lng={order.deliveryLocation?.lng ?? order.lng ?? order.longitude}
+                        mode="view"
+                        style={{ padding: "6px 12px", fontSize: "13px" }}
+                      />
+                      <button
+                        onClick={() =>
+                          setMapOpenId(mapOpenId === order.id ? null : order.id)
+                        }
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "10px",
+                          border: "none",
+                          background: "#2a2a2a",
+                          color: "#fff",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                        }}
                       >
-                        เปิดแผนที่
-                      </a>
-                    </p>
+                        {mapOpenId === order.id ? "ซ่อนแผนที่" : "🗺️ ดูแผนที่"}
+                      </button>
+                    </div>
+                  )}
+                  {mapOpenId === order.id && (
+                    <div style={{ marginBottom: "8px" }}>
+                      <DeliveryMap
+                        lat={order.deliveryLocation?.lat ?? order.lat ?? order.latitude}
+                        lng={order.deliveryLocation?.lng ?? order.lng ?? order.longitude}
+                        address={order.deliveryLocation?.address || order.deliveryAddress}
+                        height="180px"
+                      />
+                    </div>
                   )}
                   <p style={{ margin: "4px 0" }}>
                     🛵 ค่าส่ง: {order.deliveryFee || 0} บาท
                   </p>
                 </>
               )}
-              <p style={{ margin: "4px 0" }}>💳 {order.paymentMethod}</p>
+              <p style={{ margin: "4px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+                💳 {order.paymentMethod}
+                <PaymentStatusBadge status={order.payment?.status} />
+              </p>
+
+              {order.payment?.slipUrl && (
+                <div style={{ margin: "8px 0" }}>
+                  <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>
+                    📸 สลิปการโอน
+                  </div>
+                  <a href={order.payment.slipUrl} target="_blank" rel="noreferrer">
+                    <img
+                      src={order.payment.slipUrl}
+                      alt="สลิป"
+                      style={{ width: "100px", borderRadius: "10px" }}
+                    />
+                  </a>
+                  {order.payment.status === PAYMENT_STATUS.PENDING_VERIFICATION && (
+                    <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                      <button
+                        onClick={() => verifyPayment(order.id, true)}
+                        style={btn("#22c55e")}
+                      >
+                        ✅ อนุมัติ
+                      </button>
+                      <button
+                        onClick={() => verifyPayment(order.id, false)}
+                        style={btn("#e53935")}
+                      >
+                        ❌ ปฏิเสธ
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {order.riderName && (
                 <p style={{ margin: "4px 0", color: "#4fc3f7" }}>

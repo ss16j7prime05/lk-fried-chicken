@@ -25,7 +25,9 @@ import StoreDashboard from './StoreDashboard.jsx'
 import StoreOrdersDashboard from './store/StoreOrdersDashboard.jsx'
 import StoreMenu from './StoreMenu.jsx'
 import RiderProfile from './RiderProfile.jsx'
+import RiderOrdersDashboard from './rider/RiderOrdersDashboard.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
+import AdminControlCenter from './admin/AdminControlCenter.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -68,6 +70,14 @@ createRoot(document.getElementById('root')).render(
             element={
               <ProtectedRoute role="admin" loginPath="/login/admin">
                 <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/center"
+            element={
+              <ProtectedRoute role="admin" loginPath="/login/admin">
+                <AdminControlCenter />
               </ProtectedRoute>
             }
           />
@@ -124,6 +134,14 @@ createRoot(document.getElementById('root')).render(
             element={
               <ProtectedRoute role="rider" loginPath="/login/rider">
                 <Rider />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/rider/dashboard"
+            element={
+              <ProtectedRoute role="rider" loginPath="/login/rider">
+                <RiderOrdersDashboard />
               </ProtectedRoute>
             }
           />

@@ -13,6 +13,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import Chat from "./Chat.jsx";
+import PaymentStatusBadge from "./payment/PaymentStatusBadge.jsx";
 
 const riderIcon = L.divIcon({
   className: "",
@@ -106,19 +107,38 @@ const optionLabel = (value) => {
 const statusColor = (status) => {
   switch (status) {
     case "กำลังทำ":
+    case "cooking":
       return "#ff8c00";
     case "ส่งให้ไรเดอร์":
     case "จัดส่ง":
+    case "delivering":
+    case "ready_for_delivery":
+    case "out_for_delivery":
+    case "picked_up":
       return "#4fc3f7";
     case "เสร็จสิ้น":
+    case "completed":
       return "#22c55e";
     default:
-      return "#ffd54f"; // ออเดอร์ใหม่ / pending = yellow
+      return "#ffd54f"; // ออเดอร์ใหม่ / pending / accepted = yellow
   }
 };
 
+// ป้ายสถานะภาษาไทยสำหรับสถานะอังกฤษ (Store/Rider Dashboard ใหม่)
+const ENGLISH_STATUS_LABEL = {
+  pending: "ออเดอร์ใหม่",
+  accepted: "ร้านรับออเดอร์แล้ว",
+  cooking: "กำลังทำ",
+  ready_for_delivery: "กำลังจัดส่ง",
+  delivering: "กำลังจัดส่ง",
+  out_for_delivery: "ไรเดอร์กำลังไปส่ง",
+  picked_up: "ไรเดอร์รับอาหารแล้ว",
+  completed: "เสร็จสิ้น",
+  cancelled: "ยกเลิกแล้ว",
+};
+
 const statusLabel = (status) =>
-  status === "pending" ? "ออเดอร์ใหม่" : status || "ออเดอร์ใหม่";
+  ENGLISH_STATUS_LABEL[status] || status || "ออเดอร์ใหม่";
 
 const formatDate = (createdAt) => {
   if (!createdAt) return "";
@@ -135,16 +155,33 @@ const STEPS = ["ร้านรับออเดอร์", "กำลังท
 // แปลงสถานะจริงใน Firestore -> index ของ STEPS
 const statusToStep = (status) => {
   const s = status === "pending" ? "ออเดอร์ใหม่" : status;
-  if (s === "ออเดอร์ใหม่" || s === "ร้านรับออเดอร์") return 0;
-  if (s === "กำลังทำ") return 1;
-  if (s === "ส่งให้ไรเดอร์" || s === "จัดส่ง" || s === "กำลังจัดส่ง") return 2;
-  if (s === "เสร็จสิ้น") return 3;
+  if (s === "ออเดอร์ใหม่" || s === "ร้านรับออเดอร์" || s === "accepted") return 0;
+  if (s === "กำลังทำ" || s === "cooking") return 1;
+  if (
+    s === "ส่งให้ไรเดอร์" ||
+    s === "จัดส่ง" ||
+    s === "กำลังจัดส่ง" ||
+    s === "delivering" ||
+    s === "ready_for_delivery" ||
+    s === "out_for_delivery" ||
+    s === "picked_up"
+  )
+    return 2;
+  if (s === "เสร็จสิ้น" || s === "completed") return 3;
   return 0;
 };
 
 // กำลังจัดส่งอยู่หรือไม่ (สำหรับแสดงไรเดอร์ + แชท)
 const isDelivering = (status) =>
-  status === "ส่งให้ไรเดอร์" || status === "จัดส่ง" || status === "กำลังจัดส่ง";
+  [
+    "ส่งให้ไรเดอร์",
+    "จัดส่ง",
+    "กำลังจัดส่ง",
+    "delivering",
+    "ready_for_delivery",
+    "out_for_delivery",
+    "picked_up",
+  ].includes(status);
 
 function TrackOrder() {
   const [phone, setPhone] = useState("");
@@ -327,9 +364,15 @@ function TrackOrder() {
               </span>
             </div>
 
-            <div style={{ fontSize: "12px", color: "#999", marginBottom: "10px" }}>
+            <div style={{ fontSize: "12px", color: "#999", marginBottom: "6px" }}>
               🕒 {formatDate(order.createdAt)}
             </div>
+
+            {order.payment?.status && (
+              <div style={{ marginBottom: "10px" }}>
+                <PaymentStatusBadge status={order.payment.status} />
+              </div>
+            )}
 
             {/* progress bar */}
             <div
@@ -381,7 +424,8 @@ function TrackOrder() {
             </div>
 
             {/* เวลาทำอาหาร */}
-            {order.status === "กำลังทำ" && order.estimatedFinishTime && (
+            {(order.status === "กำลังทำ" || order.status === "cooking") &&
+              order.estimatedFinishTime && (
               <div
                 style={{
                   background: "#161616",

@@ -44,22 +44,30 @@ service cloud.firestore {
       // ลูกค้าสั่งจากหน้าร้านสาธารณะ -> สร้างออเดอร์ได้
       allow create: if true;
 
+      // สถานะที่ถือว่า "พร้อมส่ง / รอไรเดอร์รับ" (รองรับทั้งระบบเก่า/ใหม่)
+      // หมายเหตุ: "delivering"/"picked_up" ไม่อยู่ในกลุ่มนี้ เพราะหมายถึงงานที่มีไรเดอร์รับแล้ว
+      // (เข้าถึงได้เฉพาะผ่าน riderId == uid เท่านั้น ไม่เปิดให้ไรเดอร์คนอื่นแย่งงาน)
+      function isReadyForDelivery() {
+        return resource.data.status == "กำลังจัดส่ง" ||
+               resource.data.status == "ส่งให้ไรเดอร์" ||
+               resource.data.status == "ready_for_delivery";
+      }
+
       // อ่าน
       allow read: if
         role() == "admin" ||
         role() == "store" ||
         (role() == "customer" && resource.data.phone == myPhone()) ||
         (role() == "rider" &&
-          (resource.data.riderId == request.auth.uid ||
-           resource.data.status == "กำลังจัดส่ง"));
+          (resource.data.riderId == request.auth.uid || isReadyForDelivery()));
 
       // แก้ไข / เปลี่ยนสถานะ / ยกเลิก
-      // store = เต็มสิทธิ์ ; rider = เฉพาะงานที่รับ (หรือกำลังจัดส่งเพื่อรับงาน)
+      // admin/store = เต็มสิทธิ์ ; rider = เฉพาะงานที่รับ (หรือพร้อมส่งเพื่อรับงาน)
       allow update: if
+        role() == "admin" ||
         role() == "store" ||
         (role() == "rider" &&
-          (resource.data.riderId == request.auth.uid ||
-           resource.data.status == "กำลังจัดส่ง"));
+          (resource.data.riderId == request.auth.uid || isReadyForDelivery()));
 
       // ลบ = admin หรือ store
       allow delete: if role() == "admin" || role() == "store";

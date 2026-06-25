@@ -3,6 +3,8 @@ import CustomerProfileHeader from "./CustomerProfileHeader";
 import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction, onSnapshot, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { STORE_ID } from "./config";
+import PromptPayQR from "./payment/PromptPayQR.jsx";
+import { PAYMENT_STATUS } from "./payment/paymentUtils";
 
 // เลขออเดอร์อัตโนมัติแบบรันต่อวัน เช่น LK2506240001
 const generateOrderNo = async (database) => {
@@ -28,95 +30,18 @@ const generateOrderNo = async (database) => {
 };
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import LocationPicker from "./location/LocationPicker.jsx";
 import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  useMapEvents,
-} from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
+  calcDeliveryFee,
+  getRoute,
+  haversineKm,
+  reverseGeocode,
+} from "./location/locationUtils";
 
-// LK Fried Chicken store location
+// LK Fried Chicken store location (ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID})
 // 526 ซอย ประปานคร 3 ต.นครปฐม อ.เมืองนครปฐม จ.นครปฐม 73000
 const SHOP_LAT = 13.8294079;
 const SHOP_LNG = 100.0529543;
-
-const storeDivIcon = L.divIcon({
-  className: "",
-  html: '<div style="font-size:28px;line-height:28px">🏪</div>',
-  iconSize: [28, 28],
-  iconAnchor: [14, 28],
-});
-const customerDivIcon = L.divIcon({
-  className: "",
-  html: '<div style="width:22px;height:22px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.4)"></div>',
-  iconSize: [22, 22],
-  iconAnchor: [11, 11],
-});
-
-// Draggable customer marker + tap-to-move (react-leaflet)
-function DraggableCustomerMarker({ position, onChange }) {
-  useMapEvents({
-    click(e) {
-      onChange(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return (
-    <Marker
-      draggable
-      icon={customerDivIcon}
-      position={[position.lat, position.lng]}
-      eventHandlers={{
-        dragend(e) {
-          const m = e.target.getLatLng();
-          onChange(m.lat, m.lng);
-        },
-      }}
-    />
-  );
-}
-
-const calcDeliveryFee = (distanceKm) =>
-  distanceKm <= 3 ? 20 : 20 + Math.round((distanceKm - 3) * 10);
-
-const STORE = {
-  lat: SHOP_LAT,
-  lng: SHOP_LNG,
-  name: "LK Fried Chicken",
-  address:
-    "526 ซอย ประปานคร 3 ตำบลนครปฐม อำเภอเมืองนครปฐม จังหวัดนครปฐม 73000",
-};
-
-// Real road-route distance (km) from store to customer via OSRM
-async function getRouteDistanceKm(customerLat, customerLng) {
-  const url =
-    `https://router.project-osrm.org/route/v1/driving/` +
-    `${STORE.lng},${STORE.lat};${customerLng},${customerLat}?overview=false`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error("OSRM error: " + res.status);
-  }
-  const data = await res.json();
-  const meters = data?.routes?.[0]?.distance;
-  if (meters == null) {
-    throw new Error("No route distance in response");
-  }
-  return meters / 1000;
-}
-
-const reverseGeocode = async (lat, lng) => {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-    );
-    const data = await res.json();
-    return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  } catch {
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }
-};
 
 const MAX_RADIUS_KM = 8;
 
@@ -170,11 +95,6 @@ const [deliveryAddress, setDeliveryAddress] = useState("");
 const [distanceKm, setDistanceKm] = useState(null);
 const [deliveryFee, setDeliveryFee] = useState(0);
 const [showMapModal, setShowMapModal] = useState(false);
-const [selectedLocation, setSelectedLocation] = useState({
-  lat: SHOP_LAT,
-  lng: SHOP_LNG,
-  address: "",
-});
 console.log(options);
 useEffect(() => {
   const fetchMenus = async () => {
@@ -310,9 +230,15 @@ const outOfArea =
   orderType === "delivery" &&
   distanceKm != null &&
   distanceKm > MAX_RADIUS_KM;
-const applyLocation = async (latValue, lngValue, knownAddress) => {
-  console.log("selectedLocation", selectedLocation);
 
+// ตำแหน่งร้าน: อ่านจาก Firestore stores/{STORE_ID} ถ้ามี lat/lng ไม่งั้น fallback ค่าคงที่
+const storeLocation = {
+  lat: storeData.lat ?? SHOP_LAT,
+  lng: storeData.lng ?? SHOP_LNG,
+  name: storeData.storeName || "LK Fried Chicken",
+};
+
+const applyLocation = async (latValue, lngValue, knownAddress) => {
   // Always persist coordinates + address (independent of route lookup)
   setLat(latValue);
   setLng(lngValue);
@@ -323,33 +249,21 @@ const applyLocation = async (latValue, lngValue, knownAddress) => {
   setAddress(addr);
 
   try {
-    const km = await getRouteDistanceKm(latValue, lngValue);
-    console.log("km=", km);
+    const { distanceKm: km } = await getRoute(
+      storeLocation.lat,
+      storeLocation.lng,
+      latValue,
+      lngValue
+    );
     setDistanceKm(km);
-    const fee = calcDeliveryFee(km);
-    setDeliveryFee(fee);
-    console.log("route distance", km);
-    console.log("delivery fee", fee);
+    setDeliveryFee(calcDeliveryFee(km));
   } catch (err) {
     console.error(err);
 
     // Fallback to straight-line (Haversine) distance if routing fails
-    const toRad = (deg) => (deg * Math.PI) / 180;
-    const R = 6371;
-    const dLat = toRad(latValue - SHOP_LAT);
-    const dLng = toRad(lngValue - SHOP_LNG);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(SHOP_LAT)) *
-        Math.cos(toRad(latValue)) *
-        Math.sin(dLng / 2) ** 2;
-    const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    const fee = calcDeliveryFee(km);
+    const km = haversineKm(storeLocation.lat, storeLocation.lng, latValue, lngValue);
     setDistanceKm(km);
-    setDeliveryFee(fee);
-    console.log("route distance", km);
-    console.log("delivery fee", fee);
+    setDeliveryFee(calcDeliveryFee(km));
 
     alert("ไม่สามารถคำนวณระยะทางได้");
   }
@@ -366,24 +280,8 @@ const getLocation = () => {
   );
 };
 
-const handleConfirmLocation = async () => {
-  if (
-    !selectedLocation ||
-    selectedLocation.lat === null ||
-    selectedLocation.lng === null
-  ) {
-    alert("กรุณาลากหมุดก่อน");
-    return;
-  }
-
-  console.log("selectedLocation", selectedLocation);
-
-  await applyLocation(
-    selectedLocation?.lat,
-    selectedLocation?.lng,
-    selectedLocation?.address
-  );
-
+const handleConfirmLocation = async ({ lat: latValue, lng: lngValue, address: addr }) => {
+  await applyLocation(latValue, lngValue, addr);
   setShowMapModal(false);
 };
 const submitOrder = async () => {
@@ -459,6 +357,18 @@ if (orderType === "delivery") {
 
   paymentTime: paymentTime,
 
+  payment: {
+    method: paymentMethod,
+    status: slipImage
+      ? PAYMENT_STATUS.PENDING_VERIFICATION
+      : paymentMethod === "cash"
+      ? PAYMENT_STATUS.UNPAID
+      : PAYMENT_STATUS.PENDING_VERIFICATION,
+    slipUrl: slipImage,
+    paidAt: paymentTime,
+    verifiedBy: null,
+  },
+
   customerName: customerName,
 
   phone: phone,
@@ -477,15 +387,21 @@ if (orderType === "delivery") {
 
   gpsLocation: gpsLocation,
 
+  deliveryLocation: {
+    lat: lat,
+    lng: lng,
+    address: deliveryAddress,
+  },
+
   distanceKm: distanceKm,
 
   distance: distanceKm,
 
   deliveryDistance: distanceKm,
 
-  storeLat: SHOP_LAT,
+  storeLat: storeLocation.lat,
 
-  storeLng: SHOP_LNG,
+  storeLng: storeLocation.lng,
 
   orderType: orderType,
 
@@ -501,7 +417,7 @@ if (orderType === "delivery") {
 
   grandTotal: totalPrice + (orderType === "delivery" ? deliveryFee : 0),
 
-  status: "ออเดอร์ใหม่",
+  status: "pending",
 
   riderStatus: "",
 
@@ -912,18 +828,26 @@ return (
 
           {(paymentMethod === "transfer" || paymentMethod === "promptpay") && (
             <div style={{ textAlign: "center", marginBottom: "12px" }}>
-              <div style={{ marginBottom: "6px" }}>สแกนเพื่อชำระเงิน</div>
-              <img
-                src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=LK-Fried-Chicken-PromptPay"
-                alt="QR PromptPay"
-                style={{
-                  width: "200px",
-                  maxWidth: "100%",
-                  borderRadius: "12px",
-                  background: "#fff",
-                  padding: "8px",
-                }}
-              />
+              {paymentMethod === "promptpay" ? (
+                <PromptPayQR
+                  amount={totalPrice + (orderType === "delivery" ? deliveryFee : 0)}
+                />
+              ) : (
+                <>
+                  <div style={{ marginBottom: "6px" }}>สแกนเพื่อชำระเงิน</div>
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=LK-Fried-Chicken-PromptPay"
+                    alt="QR PromptPay"
+                    style={{
+                      width: "200px",
+                      maxWidth: "100%",
+                      borderRadius: "12px",
+                      background: "#fff",
+                      padding: "8px",
+                    }}
+                  />
+                </>
+              )}
               <div style={{ marginTop: "8px", fontSize: "14px" }}>แนบสลิปการโอน</div>
               <input
                 type="file"
@@ -1010,125 +934,13 @@ return (
 </div>
 
 {/* Map Picker Modal */}
-{showMapModal && (
-  <div
-    style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      width: "100%",
-      height: "100%",
-      background: "rgba(0,0,0,0.7)",
-      zIndex: 3000,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "16px",
-    }}
-  >
-    <div
-      style={{
-        background: "#fff",
-        color: "#222",
-        borderRadius: "20px",
-        padding: "16px",
-        width: "100%",
-        maxWidth: "480px",
-      }}
-    >
-      <h3 style={{ marginTop: 0 }}>🗺️ ลากหมุดเพื่อเลือกตำแหน่ง</h3>
-      <MapContainer
-        center={[SHOP_LAT, SHOP_LNG]}
-        zoom={14}
-        style={{
-          width: "100%",
-          height: "320px",
-          borderRadius: "12px",
-          marginBottom: "12px",
-        }}
-      >
-        <TileLayer
-          attribution="© OpenStreetMap"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <Marker position={[SHOP_LAT, SHOP_LNG]} icon={storeDivIcon}>
-          <Popup>LK Fried Chicken</Popup>
-        </Marker>
-        <DraggableCustomerMarker
-          position={selectedLocation}
-          onChange={(la, lo) =>
-            setSelectedLocation({ lat: la, lng: lo, address: "" })
-          }
-        />
-      </MapContainer>
-      <button
-        onClick={() =>
-          navigator.geolocation.getCurrentPosition(
-            (pos) =>
-              setSelectedLocation({
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-                address: "",
-              }),
-            () => alert("ไม่สามารถดึงตำแหน่งได้")
-          )
-        }
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: "8px",
-          borderRadius: "10px",
-          border: "none",
-          background: "#444",
-          color: "#fff",
-          cursor: "pointer",
-        }}
-      >
-        📍 ใช้ตำแหน่งปัจจุบัน
-      </button>
-      {(() => {
-        const locationReady =
-          selectedLocation &&
-          selectedLocation.lat != null &&
-          selectedLocation.lng != null;
-        return (
-          <button
-            disabled={!locationReady}
-            onClick={handleConfirmLocation}
-            style={{
-              width: "100%",
-              padding: "12px",
-              borderRadius: "12px",
-              background: locationReady ? "#ff9800" : "#ccc",
-              color: "#fff",
-              border: "none",
-              fontSize: "16px",
-              fontWeight: "bold",
-              cursor: locationReady ? "pointer" : "not-allowed",
-              marginBottom: "8px",
-            }}
-          >
-            ยืนยันหมุด
-          </button>
-        );
-      })()}
-      <button
-        onClick={() => setShowMapModal(false)}
-        style={{
-          width: "100%",
-          padding: "10px",
-          borderRadius: "12px",
-          background: "#fff",
-          color: "#666",
-          border: "1px solid #ccc",
-          cursor: "pointer",
-        }}
-      >
-        ยกเลิก
-      </button>
-    </div>
-  </div>
-)}
+<LocationPicker
+  isOpen={showMapModal}
+  storeLocation={storeLocation}
+  initialPosition={lat != null && lng != null ? { lat, lng } : null}
+  onConfirm={handleConfirmLocation}
+  onClose={() => setShowMapModal(false)}
+/>
 
 <div
   style={{

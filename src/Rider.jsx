@@ -178,6 +178,21 @@ function Rider() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: "22px" }}>🛵 ไรเดอร์</h1>
+        <Link to="/rider/dashboard">
+          <button
+            style={{
+              padding: "8px 16px",
+              borderRadius: "20px",
+              border: "none",
+              background: "#4fc3f7",
+              color: "#000",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            🧾 Rider Dashboard
+          </button>
+        </Link>
         <Link to="/">
           <button
             style={{

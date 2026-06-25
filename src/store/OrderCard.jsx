@@ -1,4 +1,9 @@
+import { useState } from "react";
 import { NEXT_ACTION, STATUS_COLOR, STATUS_LABEL } from "./orderStatus";
+import DeliveryMap from "../location/DeliveryMap.jsx";
+import MapButton from "../location/MapButton.jsx";
+import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
+import { PAYMENT_STATUS } from "../payment/paymentUtils";
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -24,8 +29,12 @@ const actionBtn = {
 };
 
 // การ์ดออเดอร์เดียว ใช้ใน Store Dashboard ใหม่ (รับ order + status ปัจจุบัน + callback)
-export default function OrderCard({ order, status, onAdvance, onCancel }) {
+export default function OrderCard({ order, status, onAdvance, onCancel, onVerifyPayment }) {
   const nextAction = NEXT_ACTION[status];
+  const [showMap, setShowMap] = useState(false);
+  const dLat = order.deliveryLocation?.lat ?? order.lat ?? order.latitude;
+  const dLng = order.deliveryLocation?.lng ?? order.lng ?? order.longitude;
+  const dAddress = order.deliveryLocation?.address || order.deliveryAddress;
 
   return (
     <div
@@ -71,9 +80,66 @@ export default function OrderCard({ order, status, onAdvance, onCancel }) {
       <p style={{ margin: "4px 0" }}>
         🏠 {order.deliveryAddress || order.address || "-"}
       </p>
-      <p style={{ margin: "4px 0" }}>
+      <p style={{ margin: "4px 0", display: "flex", alignItems: "center", gap: "8px" }}>
         💳 ชำระเงิน: {order.paymentMethod || "-"}
+        <PaymentStatusBadge status={order.payment?.status} />
       </p>
+
+      {order.payment?.slipUrl && (
+        <div style={{ margin: "8px 0" }}>
+          <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>
+            📸 สลิปการโอน
+          </div>
+          <a href={order.payment.slipUrl} target="_blank" rel="noreferrer">
+            <img
+              src={order.payment.slipUrl}
+              alt="สลิป"
+              style={{ width: "100px", borderRadius: "10px" }}
+            />
+          </a>
+          {order.payment.status === PAYMENT_STATUS.PENDING_VERIFICATION && (
+            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+              <button
+                onClick={() => onVerifyPayment(order.id, true)}
+                style={{ ...actionBtn, background: "#22c55e", flex: 1 }}
+              >
+                ✅ อนุมัติการชำระเงิน
+              </button>
+              <button
+                onClick={() => onVerifyPayment(order.id, false)}
+                style={{ ...actionBtn, background: "#e53935", flex: 1 }}
+              >
+                ❌ ปฏิเสธสลิป
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {dLat != null && dLng != null && (
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", margin: "6px 0" }}>
+          <MapButton lat={dLat} lng={dLng} mode="view" style={{ padding: "6px 12px", fontSize: "13px" }} />
+          <button
+            onClick={() => setShowMap((v) => !v)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "10px",
+              border: "none",
+              background: "#2a2a2a",
+              color: "#fff",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            {showMap ? "ซ่อนแผนที่" : "🗺️ ดูแผนที่"}
+          </button>
+        </div>
+      )}
+      {showMap && (
+        <div style={{ marginBottom: "8px" }}>
+          <DeliveryMap lat={dLat} lng={dLng} address={dAddress} height="180px" />
+        </div>
+      )}
 
       <div style={{ marginTop: "10px" }}>
         {(order.items || []).map((item, index) => (
@@ -123,7 +189,7 @@ export default function OrderCard({ order, status, onAdvance, onCancel }) {
             onClick={() => onCancel(order.id)}
             style={{ ...actionBtn, background: "#e53935" }}
           >
-            ❌ ยกเลิกออเดอร์
+            {status === "pending" ? "❌ ปฏิเสธออเดอร์ (Reject)" : "❌ ยกเลิกออเดอร์ (Cancel)"}
           </button>
         )}
       </div>
