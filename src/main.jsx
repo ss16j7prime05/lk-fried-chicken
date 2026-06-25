@@ -12,6 +12,9 @@ import Rider from './Rider.jsx'
 
 import { AuthProvider } from './AuthContext.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
+import Login from './login/Login.jsx'
+import Register from './login/Register.jsx'
+import ForgotPassword from './login/ForgotPassword.jsx'
 import AdminLogin from './login/AdminLogin.jsx'
 import StoreLogin from './login/StoreLogin.jsx'
 import CustomerLogin from './login/CustomerLogin.jsx'
@@ -19,18 +22,29 @@ import RiderLogin from './login/RiderLogin.jsx'
 import SignupStore from './signup/SignupStore.jsx'
 import SignupRider from './signup/SignupRider.jsx'
 import StoreDashboard from './StoreDashboard.jsx'
+import StoreOrdersDashboard from './store/StoreOrdersDashboard.jsx'
 import StoreMenu from './StoreMenu.jsx'
 import RiderProfile from './RiderProfile.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AuthProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
         <Routes>
-          <Route path="/" element={<App />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute loginPath="/login">
+                <App />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Login pages */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/login/admin" element={<AdminLogin />} />
           <Route path="/login/store" element={<StoreLogin />} />
           <Route path="/login/customer" element={<CustomerLogin />} />
@@ -74,10 +88,26 @@ createRoot(document.getElementById('root')).render(
             }
           />
           <Route
+            path="/store/orders"
+            element={
+              <ProtectedRoute role="store" loginPath="/login/store">
+                <StoreOrdersDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/store/menu"
             element={
               <ProtectedRoute role="store" loginPath="/login/store">
                 <StoreMenu />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customer"
+            element={
+              <ProtectedRoute role="customer" loginPath="/login">
+                <App />
               </ProtectedRoute>
             }
           />
@@ -115,7 +145,7 @@ createRoot(document.getElementById('root')).render(
             }
           />
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+      </AuthProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

@@ -1,4 +1,5 @@
 import { db, storage } from "./firebase";
+import CustomerProfileHeader from "./CustomerProfileHeader";
 import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction, onSnapshot, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { STORE_ID } from "./config";
@@ -588,6 +589,7 @@ return (
 </div>
 
 <div style={{ padding: "20px" }}>
+      <CustomerProfileHeader />
       <h2 style={{ marginTop: 0 }}>🍗 LK Fried Chicken</h2>
 {!storeOpen && (
   <div

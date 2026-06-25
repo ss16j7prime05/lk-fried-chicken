@@ -4,7 +4,7 @@ import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAZN_49Dr5kIh8cNYaC8_JTtA4ypX89lbY",
+  apiKey: "AIzaSyAZN_49Dr5kIh8cNYaC8_jItA4ypX89lbY",
   authDomain: "food-order-system-61f13.firebaseapp.com",
   projectId: "food-order-system-61f13",
   storageBucket: "food-order-system-61f13.firebasestorage.app",

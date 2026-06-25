@@ -148,6 +148,9 @@ function StoreDashboard() {
           <Link to="/store">
             <button style={navBtn}>📦 ออเดอร์</button>
           </Link>
+          <Link to="/store/orders">
+            <button style={navBtn}>🧾 Store Dashboard</button>
+          </Link>
           <Link to="/store/menu">
             <button style={navBtn}>🍽️ จัดการเมนู</button>
           </Link>
