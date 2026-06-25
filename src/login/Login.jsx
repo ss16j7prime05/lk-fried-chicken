@@ -136,7 +136,8 @@ export default function Login() {
       navigate(ROLE_HOME[role] || "/", { replace: true });
     } catch (err) {
       console.error(err);
-      setError("เข้าสู่ระบบไม่สำเร็จ ตรวจสอบอีเมล/รหัสผ่าน");
+      // แสดง error code จริงจาก Firebase เสมอ (ไม่ใช่แค่ข้อความทั่วไป) เพื่อ debug ปัญหาที่เกิดเฉพาะบางเครื่อง/บางเบราว์เซอร์ได้
+      setError(`เข้าสู่ระบบไม่สำเร็จ: ${err.code || err.message || "unknown error"}`);
     } finally {
       setLoading(false);
     }
