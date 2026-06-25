@@ -73,7 +73,9 @@ export default function SignupStore() {
         f.password
       );
       await setDoc(doc(db, "users", cred.user.uid), {
+        uid: cred.user.uid,
         role: "store",
+        status: "pending",
         storeName: f.storeName.trim(),
         ownerName: f.ownerName.trim(),
         phone: f.phone.trim(),

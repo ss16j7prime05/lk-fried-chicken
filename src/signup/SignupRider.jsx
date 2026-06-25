@@ -72,7 +72,9 @@ export default function SignupRider() {
         f.password
       );
       await setDoc(doc(db, "users", cred.user.uid), {
+        uid: cred.user.uid,
         role: "rider",
+        status: "pending",
         name: f.name.trim(),
         riderName: f.name.trim(),
         phone: f.phone.trim(),

@@ -78,6 +78,7 @@ export default function RegisterCustomer() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, f.email.trim(), f.password);
       await setDoc(doc(db, "users", cred.user.uid), {
+        uid: cred.user.uid,
         role: "customer",
         status: "active",
         firstName: f.firstName.trim(),

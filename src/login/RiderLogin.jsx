@@ -68,6 +68,7 @@ export default function RiderLogin() {
     const email = phoneToEmail(phone);
     try {
       let cred;
+      let isNewAccount = false;
       try {
         cred = await signInWithEmailAndPassword(auth, email, password);
       } catch (err) {
@@ -77,6 +78,7 @@ export default function RiderLogin() {
           err.code === "auth/invalid-credential"
         ) {
           cred = await createUserWithEmailAndPassword(auth, email, password);
+          isNewAccount = true;
         } else {
           throw err;
         }
@@ -84,9 +86,13 @@ export default function RiderLogin() {
       await setDoc(
         doc(db, "users", cred.user.uid),
         {
+          uid: cred.user.uid,
           role: "rider",
           phone: phone.trim(),
           riderName: name.trim() || "ไรเดอร์",
+          // ตั้ง status="pending" เฉพาะตอนสร้างบัญชีใหม่เท่านั้น ป้องกันรอบ login ครั้งต่อไป
+          // เขียนทับ status="approved" ที่แอดมินอนุมัติไปแล้วกลับเป็น pending
+          ...(isNewAccount ? { status: "pending" } : {}),
         },
         { merge: true }
       );

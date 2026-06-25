@@ -98,6 +98,7 @@ export default function RegisterStore() {
       ]);
 
       await setDoc(doc(db, "users", uid), {
+        uid,
         role: "store",
         status: "pending",
         storeName: f.storeName.trim(),

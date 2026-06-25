@@ -1,41 +1,50 @@
-import { StrictMode } from 'react'
+/* eslint-disable react-refresh/only-export-components -- entry point ไม่ใช่ component module, ไม่ผ่าน Fast Refresh boundary อยู่แล้ว */
+import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 
-import App from './App.jsx'
-import Admin from './Admin.jsx'
-import Store from './Store.jsx'
-import CustomerOrderHistory from './CustomerOrderHistory.jsx'
-import TrackOrder from './TrackOrder.jsx'
-import Rider from './Rider.jsx'
+// code splitting: โหลดทุกหน้าแบบ lazy ตาม route (ลด bundle หลักที่โหลดตอนเปิดเว็บครั้งแรก)
+const App = lazy(() => import('./App.jsx'))
+const Admin = lazy(() => import('./Admin.jsx'))
+const Store = lazy(() => import('./Store.jsx'))
+const CustomerOrderHistory = lazy(() => import('./CustomerOrderHistory.jsx'))
+const TrackOrder = lazy(() => import('./TrackOrder.jsx'))
+const Rider = lazy(() => import('./Rider.jsx'))
 
 import { AuthProvider } from './AuthContext.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
-import Login from './login/Login.jsx'
-import Register from './login/Register.jsx'
-import RegisterCustomer from './register/RegisterCustomer.jsx'
-import RegisterStore from './register/RegisterStore.jsx'
-import RegisterRider from './register/RegisterRider.jsx'
-import ForgotPassword from './login/ForgotPassword.jsx'
-import AdminLogin from './login/AdminLogin.jsx'
-import StoreLogin from './login/StoreLogin.jsx'
-import CustomerLogin from './login/CustomerLogin.jsx'
-import RiderLogin from './login/RiderLogin.jsx'
-import SignupStore from './signup/SignupStore.jsx'
-import SignupRider from './signup/SignupRider.jsx'
-import StoreDashboard from './StoreDashboard.jsx'
-import StoreOrdersDashboard from './store/StoreOrdersDashboard.jsx'
-import StoreMenu from './StoreMenu.jsx'
-import RiderProfile from './RiderProfile.jsx'
-import RiderOrdersDashboard from './rider/RiderOrdersDashboard.jsx'
-import AdminDashboard from './AdminDashboard.jsx'
-import AdminControlCenter from './admin/AdminControlCenter.jsx'
+const Login = lazy(() => import('./login/Login.jsx'))
+const Register = lazy(() => import('./login/Register.jsx'))
+const RegisterCustomer = lazy(() => import('./register/RegisterCustomer.jsx'))
+const RegisterStore = lazy(() => import('./register/RegisterStore.jsx'))
+const RegisterRider = lazy(() => import('./register/RegisterRider.jsx'))
+const ForgotPassword = lazy(() => import('./login/ForgotPassword.jsx'))
+const AdminLogin = lazy(() => import('./login/AdminLogin.jsx'))
+const StoreLogin = lazy(() => import('./login/StoreLogin.jsx'))
+const CustomerLogin = lazy(() => import('./login/CustomerLogin.jsx'))
+const RiderLogin = lazy(() => import('./login/RiderLogin.jsx'))
+const SignupStore = lazy(() => import('./signup/SignupStore.jsx'))
+const SignupRider = lazy(() => import('./signup/SignupRider.jsx'))
+const StoreDashboard = lazy(() => import('./StoreDashboard.jsx'))
+const StoreOrdersDashboard = lazy(() => import('./store/StoreOrdersDashboard.jsx'))
+const StoreMenu = lazy(() => import('./StoreMenu.jsx'))
+const RiderProfile = lazy(() => import('./RiderProfile.jsx'))
+const RiderOrdersDashboard = lazy(() => import('./rider/RiderOrdersDashboard.jsx'))
+const AdminDashboard = lazy(() => import('./AdminDashboard.jsx'))
+const AdminControlCenter = lazy(() => import('./admin/AdminControlCenter.jsx'))
+
+const PageLoading = () => (
+  <div style={{ minHeight: '100vh', background: '#121212', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+    กำลังโหลด...
+  </div>
+)
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route
             path="/"
@@ -169,6 +178,7 @@ createRoot(document.getElementById('root')).render(
             }
           />
         </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

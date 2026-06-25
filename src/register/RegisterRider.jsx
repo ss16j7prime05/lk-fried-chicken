@@ -99,6 +99,7 @@ export default function RegisterRider() {
       ]);
 
       await setDoc(doc(db, "users", uid), {
+        uid,
         role: "rider",
         status: "pending",
         firstName: f.firstName.trim(),

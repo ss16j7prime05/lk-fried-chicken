@@ -103,6 +103,7 @@ export default function CustomerLogin() {
       await setDoc(
         doc(db, "users", cred.user.uid),
         {
+          uid: cred.user.uid,
           role: "customer",
           phone: phone.trim(),
           ...(lineUserId.trim() ? { lineUserId: lineUserId.trim() } : {}),
