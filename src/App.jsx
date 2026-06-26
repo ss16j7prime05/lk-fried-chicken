@@ -5,6 +5,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { STORE_ID } from "./config";
 import PromptPayQR from "./payment/PromptPayQR.jsx";
 import { PAYMENT_STATUS } from "./payment/paymentUtils";
+import "./checkout.css";
 
 // เลขออเดอร์อัตโนมัติแบบรันต่อวัน เช่น LK2506240001
 const generateOrderNo = async (database) => {
@@ -87,6 +88,7 @@ const [itemNote, setItemNote] = useState("");
 const [lat, setLat] = useState(null);
 const [lng, setLng] = useState(null);
 const [cartOpen, setCartOpen] = useState(false);
+const [cartItemsExpanded, setCartItemsExpanded] = useState(false);
 const [searchTerm, setSearchTerm] = useState("");
 const [storeData, setStoreData] = useState({ isOpen: true });
 const [, setTick] = useState(0);
@@ -368,6 +370,8 @@ if (orderType === "delivery") {
 
   phone: phone,
 
+  note: note,
+
   address: address,
 
   deliveryAddress: deliveryAddress,
@@ -519,301 +523,263 @@ return (
 
 {/* Overlay */}
 {cartOpen && (
-  <div
-    onClick={() => setCartOpen(false)}
-    style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      width: "100%",
-      height: "100%",
-      background: "rgba(0,0,0,0.5)",
-      zIndex: 1001,
-    }}
-  />
+  <div className="checkout-overlay" onClick={() => setCartOpen(false)} />
 )}
 
-{/* Slide Drawer */}
-<div
-  style={{
-    position: "fixed",
-    top: 0,
-    right: 0,
-    height: "100%",
-    width: "100%",
-    maxWidth: "420px",
-    background: "#1e1e1e",
-    color: "#fff",
-    zIndex: 1002,
-    boxShadow: "-4px 0 16px rgba(0,0,0,0.4)",
-    transform: cartOpen ? "translateX(0)" : "translateX(100%)",
-    transition: "transform 0.3s ease",
-    display: "flex",
-    flexDirection: "column",
-  }}
->
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      padding: "16px",
-      borderBottom: "1px solid #333",
-    }}
-  >
-    <h2 style={{ margin: 0, fontSize: "20px" }}>🛒 รายการที่สั่ง</h2>
+{/* Checkout drawer: full-screen sheet on mobile, centered two-column modal on desktop */}
+<div className={`checkout-drawer${cartOpen ? " open" : ""}`}>
+  <div className="checkout-header">
+    <h2>🛒 รายการที่สั่ง · ตะกร้า</h2>
     <button
+      className="checkout-close-btn"
       onClick={() => setCartOpen(false)}
-      style={{
-        background: "none",
-        border: "none",
-        color: "#fff",
-        fontSize: "24px",
-        cursor: "pointer",
-      }}
+      aria-label="ปิด"
     >
       ✕
     </button>
   </div>
 
-  <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
-    {cart.length === 0 && (
-      <p style={{ color: "#888" }}>ยังไม่มีสินค้าในตะกร้า</p>
-    )}
-
-    {cart.map((item, index) => (
-      <div
-        key={index}
-        style={{
-          display: "flex",
-          gap: "12px",
-          background: "#2a2a2a",
-          borderRadius: "12px",
-          padding: "12px",
-          marginBottom: "12px",
-        }}
-      >
-        {item.image && (
-          <img
-            src={item.image}
-            alt={item.name}
-            style={{
-              width: "60px",
-              height: "60px",
-              objectFit: "cover",
-              borderRadius: "8px",
-            }}
-          />
-        )}
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: "bold" }}>{item.name}</div>
-          {item.top_chicken && <div>🍖 {item.top_chicken}</div>}
-          {item.spicy && <div>🌶️ {item.spicy}</div>}
-          {item.Sauce && <div>🍟 ซอส : {item.Sauce.name} (+{item.Sauce.price || 0})</div>}
-          {item.sauce && <div>🥫 เพิ่มซอส : {item.sauce.name} (+{item.sauce.price || 0})</div>}
-          {item.powder && <div>🧂 ผงเขย่า : {item.powder.name} (+{item.powder.price || 0})</div>}
-          {item.tableCheese && <div>🧀 ชีส : {item.tableCheese.name} (+{item.tableCheese.price || 0})</div>}
-          {item.note && <div>📝 {item.note}</div>}
-          <div>ราคา : {itemTotal(item)} บาท</div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              marginTop: "8px",
-            }}
-          >
-            <button
-              onClick={() => {
-                if (item.qty > 1) {
-                  setCart(
-                    cart.map((cartItem, i) =>
-                      i === index
-                        ? { ...cartItem, qty: cartItem.qty - 1 }
-                        : cartItem
-                    )
-                  );
-                }
-              }}
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "50%",
-                border: "none",
-                background: "#444",
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              -
-            </button>
-            <span>{item.qty}</span>
-            <button
-              onClick={() => {
-                setCart(
-                  cart.map((cartItem, i) =>
-                    i === index
-                      ? { ...cartItem, qty: cartItem.qty + 1 }
-                      : cartItem
-                  )
-                );
-              }}
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "50%",
-                border: "none",
-                background: "#444",
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              +
-            </button>
-            <span style={{ marginLeft: "auto", color: "#ff9800" }}>
-              {itemTotal(item)} บาท
-            </span>
-          </div>
-
+  <div className="checkout-body">
+    <div className="checkout-grid">
+      <div className="checkout-col-left">
+        {/* 1. Cart Items: collapsed by default, shows item count */}
+        <div className="checkout-section">
           <button
-            onClick={() => {
-              setCart(cart.filter((_, i) => i !== index));
-            }}
-            style={{
-              marginTop: "8px",
-              background: "none",
-              border: "none",
-              color: "#e53935",
-              cursor: "pointer",
-              padding: 0,
-            }}
+            type="button"
+            className="cart-toggle"
+            onClick={() => setCartItemsExpanded((v) => !v)}
           >
-            ❌ ลบ
+            <span>
+              📋 รายการอาหาร ({cart.reduce((sum, i) => sum + i.qty, 0)} ชิ้น)
+            </span>
+            <span className={`cart-toggle-chevron${cartItemsExpanded ? " expanded" : ""}`}>
+              ▼
+            </span>
           </button>
+
+          {cartItemsExpanded && (
+            <div className="cart-items-list">
+              {cart.length === 0 && (
+                <p style={{ color: "#888", margin: 0 }}>ยังไม่มีสินค้าในตะกร้า</p>
+              )}
+
+              {cart.map((item, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: "flex",
+                    gap: "12px",
+                    background: "#2a2a2a",
+                    borderRadius: "12px",
+                    padding: "12px",
+                  }}
+                >
+                  {item.image && (
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      style={{
+                        width: "60px",
+                        height: "60px",
+                        objectFit: "cover",
+                        borderRadius: "8px",
+                      }}
+                    />
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: "bold" }}>{item.name}</div>
+                    {item.top_chicken && <div>🍖 {item.top_chicken}</div>}
+                    {item.spicy && <div>🌶️ {item.spicy}</div>}
+                    {item.Sauce && <div>🍟 ซอส : {item.Sauce.name} (+{item.Sauce.price || 0})</div>}
+                    {item.sauce && <div>🥫 เพิ่มซอส : {item.sauce.name} (+{item.sauce.price || 0})</div>}
+                    {item.powder && <div>🧂 ผงเขย่า : {item.powder.name} (+{item.powder.price || 0})</div>}
+                    {item.tableCheese && <div>🧀 ชีส : {item.tableCheese.name} (+{item.tableCheese.price || 0})</div>}
+                    {item.note && <div>📝 {item.note}</div>}
+                    <div>ราคา : {itemTotal(item)} บาท</div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginTop: "8px",
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          if (item.qty > 1) {
+                            setCart(
+                              cart.map((cartItem, i) =>
+                                i === index
+                                  ? { ...cartItem, qty: cartItem.qty - 1 }
+                                  : cartItem
+                              )
+                            );
+                          }
+                        }}
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "50%",
+                          border: "none",
+                          background: "#444",
+                          color: "#fff",
+                          cursor: "pointer",
+                        }}
+                      >
+                        -
+                      </button>
+                      <span>{item.qty}</span>
+                      <button
+                        onClick={() => {
+                          setCart(
+                            cart.map((cartItem, i) =>
+                              i === index
+                                ? { ...cartItem, qty: cartItem.qty + 1 }
+                                : cartItem
+                            )
+                          );
+                        }}
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "50%",
+                          border: "none",
+                          background: "#444",
+                          color: "#fff",
+                          cursor: "pointer",
+                        }}
+                      >
+                        +
+                      </button>
+                      <span style={{ marginLeft: "auto", color: "#ff9800" }}>
+                        {itemTotal(item)} บาท
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setCart(cart.filter((_, i) => i !== index));
+                      }}
+                      style={{
+                        marginTop: "8px",
+                        background: "none",
+                        border: "none",
+                        color: "#e53935",
+                        cursor: "pointer",
+                        padding: 0,
+                        minHeight: "32px",
+                      }}
+                    >
+                      ❌ ลบ
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
-    ))}
-  </div>
 
-  <div style={{ padding: "16px", borderTop: "1px solid #333" }}>
-
-    {/* Checkout form */}
-    {(() => {
-      const fieldStyle = {
-        width: "100%",
-        padding: "10px",
-        marginBottom: "10px",
-        borderRadius: "10px",
-        border: "1px solid #444",
-        background: "#2a2a2a",
-        color: "#fff",
-        boxSizing: "border-box",
-        fontFamily: "inherit",
-      };
-      return (
-        <>
+        {/* 2. Customer Information */}
+        <div className="checkout-section">
           <input
             type="text"
             placeholder="ชื่อ"
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
-            style={fieldStyle}
+            className="field"
           />
-
           <input
             type="tel"
             placeholder="เบอร์โทร"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            style={fieldStyle}
+            className="field"
+            style={{ marginBottom: 0 }}
           />
+        </div>
 
-          <label style={{ display: "block", marginBottom: "4px" }}>
+        {/* 3. Delivery / Pickup + Address */}
+        <div className="checkout-section">
+          <label style={{ display: "block", marginBottom: "8px" }}>
             รูปแบบการสั่ง
           </label>
           <select
             value={orderType}
             onChange={(e) => setOrderType(e.target.value)}
-            style={fieldStyle}
+            className="field"
+            style={{ marginBottom: orderType === "delivery" ? "10px" : 0 }}
           >
             <option value="pickup">รับที่ร้าน</option>
             <option value="delivery">ส่งถึงบ้าน</option>
           </select>
 
           {orderType === "delivery" && (
-            <>
-              <textarea
-                placeholder="ที่อยู่จัดส่ง"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                style={{ ...fieldStyle, minHeight: "60px" }}
-              />
-
-              <button
-                onClick={getLocation}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  marginBottom: "10px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: "#444",
-                  color: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                📍 ใช้ตำแหน่งปัจจุบัน
-              </button>
-
-              <button
-                onClick={() => setShowMapModal(true)}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  marginBottom: "10px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: "#444",
-                  color: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                🗺️ เลือกตำแหน่งบนแผนที่
-              </button>
-
-              {gpsLocation && (
-                <div
-                  style={{
-                    background: "#2a2a2a",
-                    borderRadius: "10px",
-                    padding: "10px",
-                    marginBottom: "10px",
-                    fontSize: "14px",
-                  }}
-                >
-                  <div>📍 ที่อยู่จัดส่ง</div>
-                  <div style={{ color: "#ccc", marginBottom: "8px" }}>
-                    {deliveryAddress}
-                  </div>
-                  <div>🚗 ระยะทางตามเส้นทางจริง</div>
-                  <div style={{ marginBottom: "8px" }}>
-                    {distanceKm != null ? distanceKm.toFixed(1) : "-"} กม.
-                  </div>
-                  <div>🛵 ค่าส่ง</div>
-                  <div>{deliveryFee} บาท</div>
-                </div>
-              )}
-            </>
+            <textarea
+              placeholder="ที่อยู่จัดส่ง"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="field"
+              style={{ marginBottom: 0 }}
+            />
           )}
+        </div>
+      </div>
 
-          <label style={{ display: "block", marginBottom: "4px" }}>
+      <div className="checkout-col-right">
+        {/* 4-5. GPS + Map (delivery only) */}
+        {orderType === "delivery" && (
+          <div className="checkout-section">
+            <button onClick={getLocation} className="btn btn-secondary">
+              📍 ใช้ตำแหน่งปัจจุบัน
+            </button>
+
+            <button
+              onClick={() => setShowMapModal(true)}
+              className="btn btn-secondary"
+              style={{ marginBottom: gpsLocation ? "10px" : 0 }}
+            >
+              🗺️ เลือกตำแหน่งบนแผนที่
+            </button>
+
+            {gpsLocation && (
+              <div
+                style={{
+                  background: "#2a2a2a",
+                  borderRadius: "10px",
+                  padding: "10px",
+                  fontSize: "14px",
+                }}
+              >
+                <div>📍 ที่อยู่จัดส่ง</div>
+                <div style={{ color: "#ccc", marginBottom: "8px" }}>
+                  {deliveryAddress}
+                </div>
+                {/* 6. Shipping fee */}
+                <div>🚗 ระยะทางตามเส้นทางจริง</div>
+                <div style={{ marginBottom: "8px" }}>
+                  {distanceKm != null ? distanceKm.toFixed(1) : "-"} กม.
+                </div>
+                <div>🛵 ค่าส่ง</div>
+                <div>{deliveryFee} บาท</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 7. Payment Method */}
+        <div className="checkout-section">
+          <label style={{ display: "block", marginBottom: "8px" }}>
             วิธีชำระเงิน
           </label>
           <select
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value)}
-            style={fieldStyle}
+            className="field"
+            style={{
+              marginBottom:
+                paymentMethod === "transfer" || paymentMethod === "promptpay" ? "12px" : 0,
+            }}
           >
             <option value="cash">เงินสด</option>
             <option value="transfer">โอนเงิน</option>
@@ -821,7 +787,7 @@ return (
           </select>
 
           {(paymentMethod === "transfer" || paymentMethod === "promptpay") && (
-            <div style={{ textAlign: "center", marginBottom: "12px" }}>
+            <div style={{ textAlign: "center" }}>
               {paymentMethod === "promptpay" ? (
                 <PromptPayQR
                   amount={totalPrice + (orderType === "delivery" ? deliveryFee : 0)}
@@ -858,71 +824,81 @@ return (
               )}
             </div>
           )}
-        </>
-      );
-    })()}
-
-    <div style={{ marginBottom: "12px", fontSize: "15px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span>ค่าอาหาร</span>
-        <span>{totalPrice} บาท</span>
-      </div>
-      {orderType === "delivery" && (
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>ค่าส่ง</span>
-          <span>{deliveryFee} บาท</span>
         </div>
-      )}
-    </div>
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        fontSize: "18px",
-        fontWeight: "bold",
-        marginBottom: "12px",
-      }}
-    >
-      <span>💰 รวมทั้งหมด</span>
-      <span style={{ color: "#ff9800" }}>
-        {totalPrice + (orderType === "delivery" ? deliveryFee : 0)} บาท
-      </span>
-    </div>
-    {outOfArea && (
-      <div
-        style={{
-          background: "#e53935",
-          color: "#fff",
-          padding: "10px",
-          borderRadius: "10px",
-          textAlign: "center",
-          marginBottom: "10px",
-          fontWeight: "bold",
-        }}
-      >
-        ขออภัย อยู่นอกพื้นที่จัดส่ง (เกิน {MAX_RADIUS_KM} กม.)
+
+        {/* 8. Note */}
+        <div className="checkout-section">
+          <label style={{ display: "block", marginBottom: "8px" }}>
+            หมายเหตุเพิ่มเติม (ถ้ามี)
+          </label>
+          <textarea
+            placeholder="เช่น ไม่เผ็ด, แยกถุงน้ำจิ้ม ฯลฯ"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="field"
+            style={{ marginBottom: 0 }}
+          />
+        </div>
+
+        {/* 9. Order Summary */}
+        <div className="checkout-section">
+          <div style={{ marginBottom: "12px", fontSize: "15px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>ค่าอาหาร</span>
+              <span>{totalPrice} บาท</span>
+            </div>
+            {orderType === "delivery" && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>ค่าส่ง</span>
+                <span>{deliveryFee} บาท</span>
+              </div>
+            )}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: "18px",
+              fontWeight: "bold",
+              marginBottom: outOfArea ? "12px" : 0,
+            }}
+          >
+            <span>💰 รวมทั้งหมด</span>
+            <span style={{ color: "#ff9800" }}>
+              {totalPrice + (orderType === "delivery" ? deliveryFee : 0)} บาท
+            </span>
+          </div>
+          {outOfArea && (
+            <div
+              style={{
+                background: "#e53935",
+                color: "#fff",
+                padding: "10px",
+                borderRadius: "10px",
+                textAlign: "center",
+                fontWeight: "bold",
+              }}
+            >
+              ขออภัย อยู่นอกพื้นที่จัดส่ง (เกิน {MAX_RADIUS_KM} กม.)
+            </div>
+          )}
+        </div>
       </div>
-    )}
+    </div>
+  </div>
+
+  {/* 10. Sticky Confirm Order Button */}
+  <div className="checkout-footer">
     <button
       onClick={submitOrder}
       disabled={!storeOpen || outOfArea}
-      style={{
-        width: "100%",
-        padding: "14px",
-        borderRadius: "12px",
-        background: storeOpen && !outOfArea ? "#ff9800" : "#777",
-        color: "#fff",
-        border: "none",
-        fontSize: "18px",
-        fontWeight: "bold",
-        cursor: storeOpen && !outOfArea ? "pointer" : "not-allowed",
-      }}
+      className="btn btn-primary"
     >
       {!storeOpen
         ? "ร้านปิดรับออเดอร์"
         : outOfArea
         ? "นอกพื้นที่จัดส่ง"
-        : "📦 สั่งซื้อ"}
+        : "📦 ยืนยันสั่งซื้อ"}
     </button>
   </div>
 </div>
