@@ -14,6 +14,7 @@ const Rider = lazy(() => import('./Rider.jsx'))
 
 import { AuthProvider } from './AuthContext.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
+import { CartProvider } from './context/CartContext.jsx'
 const Login = lazy(() => import('./login/Login.jsx'))
 const Register = lazy(() => import('./login/Register.jsx'))
 const RegisterCustomer = lazy(() => import('./register/RegisterCustomer.jsx'))
@@ -33,6 +34,15 @@ const RiderProfile = lazy(() => import('./RiderProfile.jsx'))
 const RiderOrdersDashboard = lazy(() => import('./rider/RiderOrdersDashboard.jsx'))
 const AdminDashboard = lazy(() => import('./AdminDashboard.jsx'))
 const AdminControlCenter = lazy(() => import('./admin/AdminControlCenter.jsx'))
+
+// New customer UI (Tailwind redesign) — not yet connected to Firestore
+const CustomerLayout = lazy(() => import('./layouts/CustomerLayout.jsx').then((m) => ({ default: m.CustomerLayout })))
+const CustomerHome = lazy(() => import('./pages/customer/Home.jsx').then((m) => ({ default: m.Home })))
+const CustomerOrders = lazy(() => import('./pages/customer/Orders.jsx').then((m) => ({ default: m.Orders })))
+const CustomerOrderDetail = lazy(() => import('./pages/customer/OrderDetail.jsx').then((m) => ({ default: m.OrderDetail })))
+const CustomerCheckout = lazy(() => import('./pages/customer/Checkout.jsx').then((m) => ({ default: m.Checkout })))
+const CustomerProfile = lazy(() => import('./pages/customer/Profile.jsx').then((m) => ({ default: m.Profile })))
+const CustomerNotifications = lazy(() => import('./pages/customer/Notifications.jsx').then((m) => ({ default: m.Notifications })))
 
 const PageLoading = () => (
   <div style={{ minHeight: '100vh', background: '#121212', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
@@ -177,6 +187,24 @@ createRoot(document.getElementById('root')).render(
               </ProtectedRoute>
             }
           />
+
+          {/* New customer UI (Tailwind redesign) — mock data only, not yet wired to Firestore */}
+          <Route
+            element={
+              <ProtectedRoute role="customer" loginPath="/login">
+                <CartProvider>
+                  <CustomerLayout />
+                </CartProvider>
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/shop" element={<CustomerHome />} />
+            <Route path="/shop/orders" element={<CustomerOrders />} />
+            <Route path="/shop/orders/:orderId" element={<CustomerOrderDetail />} />
+            <Route path="/shop/checkout" element={<CustomerCheckout />} />
+            <Route path="/shop/profile" element={<CustomerProfile />} />
+            <Route path="/shop/notifications" element={<CustomerNotifications />} />
+          </Route>
         </Routes>
         </Suspense>
       </AuthProvider>

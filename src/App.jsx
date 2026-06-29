@@ -1,34 +1,12 @@
 import { db, storage } from "./firebase";
 import CustomerProfileHeader from "./CustomerProfileHeader";
-import { collection, getDocs, addDoc, serverTimestamp, doc, runTransaction, onSnapshot, getDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, serverTimestamp, doc, onSnapshot, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { STORE_ID } from "./config";
 import PromptPayQR from "./payment/PromptPayQR.jsx";
 import { PAYMENT_STATUS } from "./payment/paymentUtils";
+import { generateOrderNo } from "./orderNoUtils";
 import "./checkout.css";
-
-// เลขออเดอร์อัตโนมัติแบบรันต่อวัน เช่น LK2506240001
-const generateOrderNo = async (database) => {
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const dayKey = `${yy}${mm}${dd}`;
-  const counterRef = doc(database, "counters", dayKey);
-  try {
-    const seq = await runTransaction(database, async (tx) => {
-      const snap = await tx.get(counterRef);
-      const current = snap.exists() ? snap.data().count || 0 : 0;
-      const next = current + 1;
-      tx.set(counterRef, { count: next }, { merge: true });
-      return next;
-    });
-    return `LK${dayKey}${String(seq).padStart(4, "0")}`;
-  } catch (err) {
-    console.error(err);
-    return `LK${dayKey}${String(Date.now()).slice(-4)}`;
-  }
-};
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import LocationPicker from "./location/LocationPicker.jsx";
