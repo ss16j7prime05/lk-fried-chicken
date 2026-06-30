@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { db } from "../../firebase";
-import { KITCHEN_STATUSES, KitchenView } from "./Orders.jsx";
+import { KITCHEN_STATUSES, KitchenView, printKitchenTicket } from "./Orders.jsx";
 import { normalizeStatus } from "../../store/orderStatus";
 import { getAlarmAudioCtx } from "../../store/alarmSounds";
 
@@ -47,6 +47,9 @@ export function Kitchen() {
     const v = localStorage.getItem("kitchen_volume");
     return v !== null ? Number(v) : 0.6;
   });
+
+  /* print size — mirrors Settings page */
+  const printSize = localStorage.getItem("store_print_size") || "80mm";
 
   /* fullscreen */
   const [fullscreen, setFullscreen] = useState(() => localStorage.getItem("kitchen_fullscreen") === "1");
@@ -112,9 +115,12 @@ export function Kitchen() {
           // Record initial statuses silently
           prevStatusesRef.current[order.id] = newStatus;
         } else if (isNowKitchen && !wasKitchen) {
-          // Transitioned into kitchen — play sound
+          // Transitioned into kitchen — play sound + optional auto-print
           newKitchenOrder = true;
           prevStatusesRef.current[order.id] = newStatus;
+          if (localStorage.getItem("store_auto_print") === "1") {
+            printKitchenTicket(order, localStorage.getItem("store_print_size") || "80mm");
+          }
         } else {
           prevStatusesRef.current[order.id] = newStatus;
         }
@@ -135,6 +141,8 @@ export function Kitchen() {
   }, [muted, volume, autoScroll]);
 
   const onAdvance = useCallback((id, to) => updateDoc(doc(db, "orders", id), { status: to }), []);
+
+  const onPrint = useCallback((order, size) => printKitchenTicket(order, size || printSize), [printSize]);
 
   /* Batch complete — mark all ready_for_delivery as picked_up (delivery) or completed (pickup) */
   const batchComplete = useCallback(async () => {
@@ -297,7 +305,7 @@ export function Kitchen() {
             <p className="font-bold">Loading kitchen orders…</p>
           </div>
         ) : (
-          <KitchenView orders={orders} onAdvance={onAdvance} />
+          <KitchenView orders={orders} onAdvance={onAdvance} onPrint={onPrint} printSize={printSize} />
         )}
       </div>
     </div>

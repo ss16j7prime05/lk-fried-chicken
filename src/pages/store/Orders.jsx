@@ -184,41 +184,70 @@ const notifyBrowser = (order) => {
 /* ═══════════════════════ print system ═══════════════════════ */
 const PRINT_WIDTHS = { "58mm": "58mm", "80mm": "80mm", a4: "210mm" };
 
+/* shared ESC/POS-ready base CSS for thermal printers */
+const thermalCss = (width, fontSize) => `
+  @page { size: ${width} auto; margin: 1mm 2mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: ${fontSize};
+    width: ${width};
+    margin: 0;
+    padding: 6px 4px;
+    color: #000;
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .center { text-align: center; }
+  .right  { text-align: right; }
+  .bold   { font-weight: 900; }
+  .sep    { border: none; border-top: 1px dashed #000; margin: 5px 0; }
+  .sep2   { border: none; border-top: 2px solid #000; margin: 5px 0; }
+`;
+
+/* ── Customer receipt (with prices) ── */
 const buildReceiptHtml = (order, size = "80mm") => {
+  const is58  = size === "58mm";
+  const isA4  = size === "a4";
+  const width = isA4 ? "210mm" : (is58 ? "56mm" : "78mm");
+  const fs    = is58 ? "11px" : isA4 ? "13px" : "12px";
+
   const items = (order.items || []).map((it) => {
     const opts = [optionLabel(it.top_chicken), optionLabel(it.spicy), optionLabel(it.sauce), optionLabel(it.powder)].filter(Boolean).join(", ");
     return `
       <tr>
-        <td style="padding:4px 0;">${it.qty || 1}× ${it.name}${opts ? `<div style="font-size:11px;color:#666">${opts}</div>` : ""}${it.note ? `<div style="font-size:11px;color:#999">Note: ${it.note}</div>` : ""}</td>
-        <td style="padding:4px 0;text-align:right;white-space:nowrap;">฿${fmtMoney((it.price || 0) * (it.qty || 1))}</td>
+        <td style="padding:3px 0;">${it.qty || 1}x ${it.name}
+          ${opts ? `<div style="font-size:${is58 ? "9px" : "10px"};color:#555;">${opts}</div>` : ""}
+          ${it.note ? `<div style="font-size:${is58 ? "9px" : "10px"};color:#888;">Note: ${it.note}</div>` : ""}
+        </td>
+        <td style="padding:3px 0;text-align:right;white-space:nowrap;">฿${fmtMoney((it.price || 0) * (it.qty || 1))}</td>
       </tr>`;
   }).join("");
-  const width = PRINT_WIDTHS[size] || "80mm";
-  return `
-    <html>
-      <head>
-        <title>Receipt ${order.orderNo || order.id}</title>
-        <style>
-          @page { size: ${size === "a4" ? "A4" : `${width} auto`}; margin: ${size === "a4" ? "16mm" : "2mm"}; }
-          body { font-family: monospace; width: ${size === "a4" ? "auto" : width}; margin: 0 auto; padding: 10px; color: #111; }
-          h2 { margin: 0 0 4px; text-align:center; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          .total-row td { border-top: 1px dashed #999; padding-top: 8px; font-weight: bold; font-size: 14px; }
-          .muted { color: #666; font-size: 11px; }
-          .center { text-align: center; }
-        </style>
-      </head>
-      <body>
-        <h2>LK Fried Chicken</h2>
-        <p class="muted center">Order ${order.orderNo || order.id}<br/>${fmtDateTime(order.createdAt)}</p>
-        <hr/>
-        <p>${order.customerName || "—"}<br/>${order.phone || ""}<br/>${order.deliveryAddress || order.address || ""}</p>
-        <hr/>
-        <table>${items}<tr class="total-row"><td>Total</td><td style="text-align:right">฿${fmtMoney(order.grandTotal ?? order.subtotal)}</td></tr></table>
-        <p class="muted center">Payment: ${order.paymentMethod === "promptpay" ? "PromptPay" : "Cash on Delivery"}</p>
-        <p class="muted center">Order ID: ${order.id}</p>
-      </body>
-    </html>`;
+
+  const baseStyle = isA4
+    ? `<style>@page{margin:16mm;} body{font-family:'Courier New',Courier,monospace;font-size:13px;color:#111;padding:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact;} table{width:100%;border-collapse:collapse;} .center{text-align:center;} .muted{color:#666;font-size:11px;} hr{border:none;border-top:1px dashed #999;margin:6px 0;} .total td{border-top:2px solid #111;padding-top:6px;font-weight:900;font-size:14px;}</style>`
+    : `<style>${thermalCss(width, fs)} table{width:100%;border-collapse:collapse;} .total td{border-top:2px solid #000;padding-top:5px;font-weight:900;font-size:${is58 ? "13px" : "14px"};}</style>`;
+
+  return `<html><head><title>Receipt ${order.orderNo || order.id}</title>${baseStyle}</head>
+    <body>
+      <div class="center bold" style="font-size:${is58 ? "11px" : "13px"};">LK Fried Chicken</div>
+      <div class="center" style="font-size:${is58 ? "9px" : "10px"};">Order ${order.orderNo || order.id} &nbsp;·&nbsp; ${fmtDateTime(order.createdAt)}</div>
+      <hr class="sep2"/>
+      <div style="font-size:${is58 ? "10px" : "11px"};">
+        <div class="bold">${order.customerName || "—"}</div>
+        ${order.phone ? `<div>${order.phone}</div>` : ""}
+        ${order.deliveryAddress || order.address ? `<div>${order.deliveryAddress || order.address}</div>` : ""}
+      </div>
+      <hr class="sep"/>
+      <table><tbody>${items}</tbody>
+        <tr class="total"><td class="bold">TOTAL</td><td class="right bold">฿${fmtMoney(order.grandTotal ?? order.subtotal)}</td></tr>
+      </table>
+      <hr class="sep"/>
+      <div class="center" style="font-size:${is58 ? "9px" : "10px"};">Payment: ${order.paymentMethod === "promptpay" ? "PromptPay" : "Cash on Delivery"}</div>
+      <div class="center" style="font-size:${is58 ? "8px" : "9px"};margin-top:4px;">ID: ${order.id}</div>
+      <div class="center" style="font-size:${is58 ? "8px" : "9px"};margin-top:8px;">Thank you!</div>
+    </body></html>`;
 };
 
 const printReceipt = (order, size = "80mm") => {
@@ -227,7 +256,53 @@ const printReceipt = (order, size = "80mm") => {
   win.document.write(buildReceiptHtml(order, size));
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 250);
+  setTimeout(() => { win.print(); setTimeout(() => win.close(), 800); }, 300);
+};
+
+/* ── Kitchen ticket (no prices — for kitchen staff) ── */
+export const buildKitchenTicketHtml = (order, size = "80mm") => {
+  const is58  = size === "58mm";
+  const width = is58 ? "56mm" : "78mm";
+  const fs    = is58 ? "11px" : "12px";
+  const fsBig = is58 ? "16px" : "20px";
+  const fsXL  = is58 ? "22px" : "28px";
+
+  const items = (order.items || []).map((it) => {
+    const opts = [optionLabel(it.top_chicken), optionLabel(it.spicy), optionLabel(it.sauce), optionLabel(it.powder)].filter(Boolean);
+    return `
+      <div style="margin:5px 0;padding-bottom:5px;border-bottom:1px dashed #000;">
+        <div style="font-size:${fsBig};font-weight:900;">${it.qty || 1}x ${it.name}</div>
+        ${opts.length ? `<div style="padding-left:8px;font-size:${fs};">${opts.join(" / ")}</div>` : ""}
+        ${it.note ? `<div style="padding-left:8px;font-size:${fs};font-weight:900;">** ${it.note.toUpperCase()} **</div>` : ""}
+      </div>`;
+  }).join("");
+
+  const typeLabel = order.orderType === "pickup" ? "[ PICKUP ]" : "[ DELIVERY ]";
+
+  return `<html><head><title>Kitchen #${order.orderNo || order.id}</title>
+    <style>${thermalCss(width, fs)}
+      .badge { display:inline-block; border:2px solid #000; padding:1px 8px; font-weight:900; font-size:${fsBig}; }
+    </style></head>
+    <body>
+      <div class="center" style="font-size:${fs};">LK FRIED CHICKEN</div>
+      <div class="center bold" style="font-size:${fsXL};margin:3px 0;">KITCHEN</div>
+      <div class="center"><span class="badge">${typeLabel}</span></div>
+      <hr class="sep2"/>
+      <div class="bold" style="font-size:${fsBig};">#${order.orderNo || order.id?.slice(-8)}</div>
+      <div style="font-size:${fs};">${order.customerName || "—"} &nbsp;·&nbsp; ${fmtDateTime(order.createdAt)}</div>
+      <hr class="sep"/>
+      ${items}
+      <div class="center" style="font-size:${fs};margin-top:6px;">--- END OF TICKET ---</div>
+    </body></html>`;
+};
+
+export const printKitchenTicket = (order, size = "80mm") => {
+  const win = window.open("", "_blank", "width=400,height=600");
+  if (!win) return;
+  win.document.write(buildKitchenTicketHtml(order, size));
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); setTimeout(() => win.close(), 800); }, 300);
 };
 
 /* ═══════════════════════ CSV export ═══════════════════════ */
@@ -450,7 +525,33 @@ function CardSkeleton() {
 /* ═══════════════════════ Kitchen view (shared, rendered at /store/v2/kitchen) ═══════════════════════ */
 export const KITCHEN_STATUSES = ["accepted", "cooking", "ready_for_delivery"];
 
-export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance }) {
+/* Tracks whether a kitchen ticket was printed this session (per order id) */
+function KitchenPrintButton({ order, onPrint, printSize }) {
+  const key = `kprinted_${order.id}`;
+  const [printed, setPrinted] = useState(() => sessionStorage.getItem(key) === "1");
+
+  const handlePrint = () => {
+    onPrint(order, printSize || "80mm");
+    sessionStorage.setItem(key, "1");
+    setPrinted(true);
+  };
+
+  return (
+    <button
+      onClick={handlePrint}
+      className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 text-sm font-black transition-colors
+        ${printed
+          ? "border-gray-300 bg-gray-50 text-gray-500 hover:bg-gray-100"
+          : "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"}`}
+    >
+      <Printer size={16} />
+      {printed ? "Reprint Ticket" : "Print Ticket"}
+      <span className="text-[10px] font-bold opacity-60">{printSize || "80mm"}</span>
+    </button>
+  );
+}
+
+export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance, onPrint, printSize }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -605,12 +706,17 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance 
             Waiting for Rider
           </div>
         )}
+
+        {/* Print / Reprint kitchen ticket */}
+        {onPrint && (
+          <KitchenPrintButton order={order} onPrint={onPrint} printSize={printSize} />
+        )}
       </div>
     </div>
   );
 });
 
-export function KitchenView({ orders, onAdvance }) {
+export function KitchenView({ orders, onAdvance, onPrint, printSize }) {
   const cards = useMemo(() =>
     orders
       .map((o) => ({ ...o, _status: normalizeStatus(o.status) }))
@@ -631,7 +737,7 @@ export function KitchenView({ orders, onAdvance }) {
   return (
     <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))" }}>
       {cards.map((order) => (
-        <KitchenCard key={order.id} order={order} status={order._status} onAdvance={onAdvance} />
+        <KitchenCard key={order.id} order={order} status={order._status} onAdvance={onAdvance} onPrint={onPrint} printSize={printSize} />
       ))}
     </div>
   );
