@@ -62,15 +62,15 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
   const handleReject = async () => { setRejecting(true); try { await onReject(order.id); } finally { setRejecting(false); } };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-[fadeInUp_0.2s_ease]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/65 backdrop-blur-md">
+      <div className="w-full sm:max-w-md bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden animate-[popupIn_0.28s_cubic-bezier(0.34,1.42,0.64,1)]">
         {/* Alert banner */}
-        <div className="bg-red-500 px-5 py-3.5 flex items-center gap-3">
+        <div className="bg-gradient-to-r from-red-500 to-red-600 px-5 py-3.5 flex items-center gap-3">
           <div className="relative flex h-3 w-3 flex-shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-200 opacity-75" />
             <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
           </div>
-          <p className="text-white font-black flex-1">NEW ORDER RECEIVED</p>
+          <p className="text-white font-black flex-1 tracking-wide">NEW ORDER</p>
           {queueLength > 1 && (
             <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full">
               +{queueLength - 1} more
@@ -140,14 +140,14 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
           <button
             onClick={handleReject}
             disabled={rejecting || accepting}
-            className="flex-1 py-4 rounded-2xl border-2 border-gray-200 font-black text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors disabled:opacity-50"
+            className="flex-1 py-4 rounded-2xl border-2 border-gray-200 font-black text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
           >
             {rejecting ? "Rejecting…" : "✕ Reject"}
           </button>
           <button
             onClick={handleAccept}
             disabled={accepting || rejecting}
-            className="flex-[2] py-4 rounded-2xl bg-primary text-white font-black hover:bg-primary-dark transition-colors disabled:opacity-50 text-lg"
+            className="flex-[2] py-4 rounded-2xl bg-primary text-white font-black hover:bg-primary-dark active:scale-[0.97] transition-all duration-150 disabled:opacity-50 text-lg shadow-sm shadow-primary/30"
           >
             {accepting ? "Accepting…" : "✓ Accept Order"}
           </button>
@@ -155,9 +155,9 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
       </div>
 
       <style>{`
-        @keyframes fadeInUp {
-          from { opacity:0; transform:translateY(20px) scale(0.97); }
-          to   { opacity:1; transform:translateY(0)   scale(1);    }
+        @keyframes popupIn {
+          from { opacity:0; transform:translateY(28px) scale(0.94); }
+          to   { opacity:1; transform:translateY(0)    scale(1);    }
         }
       `}</style>
     </div>
@@ -324,8 +324,8 @@ export function StoreLayout() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed md:static inset-y-0 left-0 z-30 flex flex-col w-64 bg-white border-r border-gray-100 shadow-sm transition-transform duration-200
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      <aside className={`fixed md:static inset-y-0 left-0 z-30 flex flex-col w-64 bg-white border-r border-gray-100 transition-transform duration-300 ease-out
+        ${sidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0 shadow-sm"}`}>
         {/* Brand */}
         <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-100 flex-shrink-0">
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
@@ -366,20 +366,25 @@ export function StoreLayout() {
               to={path}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-colors group
-                ${isActive ? "bg-primary-light text-primary" : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"}`
+                `relative flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-150 group
+                ${isActive
+                  ? "bg-primary/10 text-primary shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"}`
               }
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={20} className={isActive ? "text-primary flex-shrink-0" : "text-gray-400 group-hover:text-gray-600 flex-shrink-0"} />
+                  {isActive && (
+                    <span className="absolute left-0 top-1/4 bottom-1/4 w-[3px] bg-primary rounded-r-full" />
+                  )}
+                  <Icon size={20} className={`flex-shrink-0 transition-colors duration-150 ${isActive ? "text-primary" : "text-gray-400 group-hover:text-gray-600"}`} />
                   <span className="flex-1 text-sm">{label}</span>
                   {label === "Orders" && pendingOrders.length > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
                       {pendingOrders.length > 9 ? "9+" : pendingOrders.length}
                     </span>
                   )}
-                  {isActive && pendingOrders.length === 0 && <ChevronRight size={15} className="text-primary" />}
+                  {isActive && pendingOrders.length === 0 && <ChevronRight size={14} className="text-primary/60" />}
                 </>
               )}
             </NavLink>
@@ -393,7 +398,7 @@ export function StoreLayout() {
           </p>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+            className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] transition-all duration-150"
           >
             <LogOut size={16} />
             Sign Out
@@ -413,12 +418,12 @@ export function StoreLayout() {
 
           {/* Flashing "NEW ORDER" alert when pending */}
           {pendingOrders.length > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-full animate-pulse">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-xs font-black text-red-600 uppercase tracking-wide hidden sm:block">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500 rounded-full shadow-sm shadow-red-200 animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-white" />
+              <span className="text-xs font-black text-white uppercase tracking-wide hidden sm:block">
                 {pendingOrders.length} New Order{pendingOrders.length !== 1 ? "s" : ""}
               </span>
-              <span className="text-xs font-black text-red-600 sm:hidden">{pendingOrders.length}</span>
+              <span className="text-xs font-black text-white sm:hidden">{pendingOrders.length}</span>
             </div>
           )}
 

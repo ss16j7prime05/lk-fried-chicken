@@ -53,7 +53,7 @@ const ACTIVITY_ICON = {
 /* ─── StatCard ─── */
 function StatCard({ icon:Icon, iconBg, iconColor, label, value, accent, pulse, onClick }) {
   return (
-    <button onClick={onClick} className={`bg-white rounded-2xl p-4 border text-left transition-all hover:shadow-md active:scale-[0.98] w-full relative overflow-hidden ${accent?"border-red-200 bg-red-50/40 shadow-sm":"border-gray-100"}`}>
+    <button onClick={onClick} className={`bg-white rounded-2xl p-4 border text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.97] active:shadow-none w-full relative overflow-hidden ${accent?"border-red-200 bg-red-50/40 shadow-sm":"border-gray-100 hover:border-gray-200"}`}>
       {pulse && (
         <span className="absolute top-3 right-3 flex h-2.5 w-2.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
@@ -399,10 +399,41 @@ export function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
-          <p className="text-sm font-medium text-gray-500">Loading dashboard…</p>
+      <div className="p-3 md:p-4 lg:p-5 space-y-4 max-w-[1600px] mx-auto animate-pulse">
+        {/* Header skeleton */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 space-y-2">
+            <div className="h-7 w-32 bg-gray-200 rounded-xl" />
+            <div className="h-4 w-48 bg-gray-100 rounded-lg" />
+          </div>
+          <div className="h-10 w-32 bg-gray-200 rounded-xl" />
+        </div>
+        {/* Hero skeleton */}
+        <div className="h-24 bg-gradient-to-br from-gray-200 to-gray-300 rounded-2xl" />
+        {/* Revenue cards skeleton */}
+        <div className="flex gap-3">
+          {[1,2,3].map(i => (
+            <div key={i} className="flex-1 bg-white rounded-2xl border border-gray-100 p-4 space-y-2">
+              <div className="h-8 w-8 bg-gray-100 rounded-lg" />
+              <div className="h-6 w-24 bg-gray-100 rounded-lg" />
+              <div className="h-3 w-20 bg-gray-100 rounded" />
+            </div>
+          ))}
+        </div>
+        {/* KPI grid skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {Array.from({length:6}).map((_,i) => (
+            <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 space-y-3">
+              <div className="w-10 h-10 bg-gray-100 rounded-xl" />
+              <div className="h-8 w-12 bg-gray-100 rounded-lg" />
+              <div className="h-3 w-16 bg-gray-100 rounded" />
+            </div>
+          ))}
+        </div>
+        {/* Charts skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 h-48" />
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 h-48" />
         </div>
       </div>
     );
