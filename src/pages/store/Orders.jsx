@@ -463,41 +463,60 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance 
     : null;
 
   return (
-    <div className={`rounded-3xl border-2 ${p.border} ${p.bg} p-6 flex flex-col gap-4 shadow-soft`}>
-      <div className="flex items-center justify-between">
-        <p className="text-2xl font-black text-gray-900">{order.orderNo || order.id?.slice(0, 10)}</p>
-        <span className={`flex items-center gap-1.5 text-2xl font-black tabular-nums ${p.text} ${p.blink ? "animate-pulse" : ""}`}>
-          <Clock size={24} />{mm}:{String(ss).padStart(2, "0")}
-        </span>
+    <div className={`rounded-3xl border-2 ${p.border} ${p.bg} p-5 md:p-6 flex flex-col gap-4 shadow-soft`}>
+      {/* Header: order number + elapsed timer */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xl md:text-2xl font-black text-gray-900">{order.orderNo || order.id?.slice(0, 10)}</p>
+          <p className="text-sm font-bold text-gray-500 mt-0.5">
+            {order.orderType === "pickup" ? "Pickup" : "Delivery"} · {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
+          </p>
+        </div>
+        {/* Large elapsed timer */}
+        <div className={`flex flex-col items-end ${p.text}`}>
+          <span className={`flex items-center gap-1.5 text-3xl md:text-4xl font-black tabular-nums leading-none ${p.blink ? "animate-pulse" : ""}`}>
+            <Clock size={28} className="flex-shrink-0 mt-1" />
+            {mm}:{String(ss).padStart(2, "0")}
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-wider mt-1 opacity-70">elapsed</span>
+        </div>
       </div>
 
-      <div>
-        <p className="text-xl font-black text-gray-800">{order.customerName || "—"}</p>
-        <p className="text-sm font-bold text-gray-400 mt-0.5">
-          {order.orderType === "pickup" ? "Pickup" : "Delivery"} · {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
-        </p>
-        {countdown != null && <p className="text-sm font-black text-amber-600 mt-1">Est. {countdown} min remaining</p>}
+      {/* Customer */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xl md:text-2xl font-black text-gray-800 truncate">{order.customerName || "—"}</p>
+        {countdown != null && (
+          <span className="text-sm font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-full flex-shrink-0">
+            ~{countdown} min left
+          </span>
+        )}
       </div>
 
-      <div className="bg-white/70 rounded-2xl p-4 space-y-2">
+      {/* Items list */}
+      <div className="bg-white/70 rounded-2xl p-4 space-y-3 flex-1">
         {(order.items || []).map((item, i) => {
           const opts = [optionLabel(item.top_chicken), optionLabel(item.spicy), optionLabel(item.sauce), optionLabel(item.powder)].filter(Boolean).join(" · ");
           return (
             <div key={i}>
-              <p className="text-lg font-black text-gray-900">{item.qty || 1}× {item.name}</p>
-              {opts && <p className="text-sm font-bold text-gray-500">{opts}</p>}
-              {item.note && <p className="text-sm font-bold text-primary">Note: {item.note}</p>}
+              <p className="text-lg md:text-xl font-black text-gray-900">{item.qty || 1}× {item.name}</p>
+              {opts && <p className="text-sm font-bold text-gray-500 mt-0.5">{opts}</p>}
+              {item.note && <p className="text-sm font-black text-primary mt-0.5">⚠ Note: {item.note}</p>}
             </div>
           );
         })}
       </div>
 
       {actionLabel ? (
-        <button onClick={() => onAdvance(order.id, actionTo)} className="w-full py-5 rounded-2xl bg-gray-900 text-white text-xl font-black hover:bg-gray-700 transition-colors">
-          {actionLabel}
+        <button
+          onClick={() => onAdvance(order.id, actionTo)}
+          className="w-full py-6 rounded-2xl bg-gray-900 text-white text-xl md:text-2xl font-black hover:bg-gray-700 active:scale-[0.98] transition-all"
+        >
+          {actionLabel} →
         </button>
       ) : (
-        <div className="w-full py-5 rounded-2xl bg-white/70 text-gray-400 text-lg font-black text-center">Waiting for Rider</div>
+        <div className="w-full py-6 rounded-2xl bg-white/70 text-gray-400 text-lg font-black text-center">
+          Waiting for Rider
+        </div>
       )}
     </div>
   );
@@ -522,7 +541,7 @@ export function KitchenView({ orders, onAdvance }) {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
       {cards.map((order) => (
         <KitchenCard key={order.id} order={order} status={order._status} onAdvance={onAdvance} />
       ))}
@@ -794,7 +813,7 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-xl bg-white shadow-2xl flex flex-col animate-[slideIn_0.2s_ease]">
+      <div className="fixed inset-y-0 right-0 z-50 w-full md:max-w-xl lg:max-w-2xl bg-white shadow-2xl flex flex-col animate-[slideIn_0.2s_ease]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <p className="text-lg font-black text-gray-900">{order.orderNo || order.id}</p>
@@ -1728,14 +1747,19 @@ export function Orders() {
 
       {/* Search + filter toggle */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+        <div className="relative flex-1 min-w-[220px]">
+          <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search order, name, phone, item, address, notes…"
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            placeholder="Search order, name, phone, item…"
+            className="w-full pl-10 pr-3 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600 p-0.5">
+              <X size={15} />
+            </button>
+          )}
         </div>
         <button onClick={() => setShowFilters((v) => !v)} className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-sm font-bold ${showFilters ? "bg-primary-light border-primary text-primary" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
           <SlidersHorizontal size={15} /> Filters
@@ -1797,16 +1821,18 @@ export function Orders() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => { setActiveTab(tab.key); setSelected(new Set()); setVisibleCount(PAGE_SIZE); }}
-            className={`flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black whitespace-nowrap transition-colors
+            className={`flex-shrink-0 flex items-center gap-2 px-4 py-3 md:py-3.5 rounded-xl text-sm font-black whitespace-nowrap transition-colors min-h-[48px]
               ${activeTab === tab.key ? "bg-gray-900 text-white" : "bg-white text-gray-500 border border-gray-100 hover:bg-gray-50"}`}
           >
             {tab.label}
-            <span className={`text-xs px-1.5 py-0.5 rounded-md ${activeTab === tab.key ? "bg-white/20" : "bg-gray-100"}`}>{tabCounts[tab.key] || 0}</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold ${activeTab === tab.key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
+              {tabCounts[tab.key] || 0}
+            </span>
           </button>
         ))}
       </div>
@@ -1828,14 +1854,14 @@ export function Orders() {
       {/* Order grid */}
       <div ref={listRef} />
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState type={search || paymentFilter !== "all" || typeFilter !== "all" || dateFilter !== "all" ? "no-results" : "no-orders"} />
       ) : (
         <>
-          <div className={cardSize === "compact" ? "flex flex-col gap-2" : "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"}>
+          <div className={cardSize === "compact" ? "flex flex-col gap-2" : "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"}>
             {visible.map((order) => (
               <OrderCard
                 key={order.id}

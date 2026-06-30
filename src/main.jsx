@@ -41,6 +41,7 @@ const StoreDashboardNew = lazy(() => import('./pages/store/Dashboard.jsx').then(
 const StoreOrdersNew = lazy(() => import('./pages/store/Orders.jsx').then((m) => ({ default: m.Orders })))
 const StoreKitchenNew = lazy(() => import('./pages/store/Kitchen.jsx').then((m) => ({ default: m.Kitchen })))
 const StoreMenuNew = lazy(() => import('./pages/store/Menu.jsx').then((m) => ({ default: m.Menu })))
+const StoreSettingsNew = lazy(() => import('./pages/store/Settings.jsx').then((m) => ({ default: m.Settings })))
 
 // New customer UI (Tailwind redesign) — not yet connected to Firestore
 const CustomerLayout = lazy(() => import('./layouts/CustomerLayout.jsx').then((m) => ({ default: m.CustomerLayout })))
@@ -198,6 +199,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/store/v2/orders" element={<StoreOrdersNew />} />
             <Route path="/store/v2/kitchen" element={<StoreKitchenNew />} />
             <Route path="/store/v2/menu" element={<StoreMenuNew />} />
+            <Route path="/store/v2/settings" element={<StoreSettingsNew />} />
           </Route>
 
           <Route

@@ -33,12 +33,12 @@ function LiveClock() {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="hidden md:flex flex-col items-end">
+    <div className="flex flex-col items-end">
       <span className="text-sm font-black text-gray-800 tabular-nums tracking-tight">
         {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
       </span>
-      <span className="text-[10px] font-medium text-gray-400">
-        {now.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+      <span className="text-[10px] font-medium text-gray-400 hidden sm:block">
+        {now.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
       </span>
     </div>
   );
@@ -81,30 +81,30 @@ export function StoreLayout() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Mobile overlay */}
+      {/* Mobile overlay — only below md */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/40 z-20 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — always visible md+, drawer on mobile */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-30 flex flex-col w-60 bg-white border-r border-gray-100 shadow-sm transition-transform duration-200
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+        className={`fixed md:static inset-y-0 left-0 z-30 flex flex-col w-64 bg-white border-r border-gray-100 shadow-sm transition-transform duration-200
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
       >
         {/* Brand */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-100">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-            <Store size={18} className="text-white" />
+        <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-100 flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
+            <Store size={20} className="text-white" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-black text-gray-900 truncate">{storeName}</p>
             <p className="text-xs text-gray-400 font-medium">Store Portal</p>
           </div>
           <button
-            className="ml-auto lg:hidden text-gray-400 hover:text-gray-700"
+            className="md:hidden text-gray-400 hover:text-gray-700 p-1"
             onClick={() => setSidebarOpen(false)}
           >
             <X size={18} />
@@ -112,22 +112,22 @@ export function StoreLayout() {
         </div>
 
         {/* Store open/close */}
-        <div className="mx-4 my-3 p-3 rounded-2xl bg-gray-50 border border-gray-100">
+        <div className="mx-4 my-3 p-4 rounded-2xl bg-gray-50 border border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Store Status</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Store Status</p>
               <p className={`text-sm font-black mt-0.5 ${isOpen ? "text-primary" : "text-gray-400"}`}>
                 {isOpen ? "Open for orders" : "Closed"}
               </p>
             </div>
             <button
               onClick={toggleStore}
-              className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none
+              className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0
                 ${isOpen ? "bg-primary" : "bg-gray-300"}`}
             >
               <span
                 className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200
-                  ${isOpen ? "translate-x-6" : "translate-x-1"}`}
+                  ${isOpen ? "translate-x-7" : "translate-x-1"}`}
               />
             </button>
           </div>
@@ -141,7 +141,7 @@ export function StoreLayout() {
               to={path}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors group
+                `flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-colors group
                 ${isActive
                   ? "bg-primary-light text-primary"
                   : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"}`
@@ -149,9 +149,12 @@ export function StoreLayout() {
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={18} className={isActive ? "text-primary" : "text-gray-400 group-hover:text-gray-600"} />
-                  <span className="flex-1">{label}</span>
-                  {isActive && <ChevronRight size={14} className="text-primary" />}
+                  <Icon
+                    size={20}
+                    className={isActive ? "text-primary flex-shrink-0" : "text-gray-400 group-hover:text-gray-600 flex-shrink-0"}
+                  />
+                  <span className="flex-1 text-sm">{label}</span>
+                  {isActive && <ChevronRight size={15} className="text-primary" />}
                 </>
               )}
             </NavLink>
@@ -159,13 +162,13 @@ export function StoreLayout() {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100 flex-shrink-0">
           <p className="text-xs text-gray-400 font-medium mb-3 truncate">
             {profile?.name || profile?.email || "Store Manager"}
           </p>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl text-sm font-bold text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+            className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
           >
             <LogOut size={16} />
             Sign Out
@@ -174,11 +177,12 @@ export function StoreLayout() {
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
         <header className="flex-shrink-0 h-14 bg-white border-b border-gray-100 flex items-center px-4 gap-3">
+          {/* Hamburger — mobile only */}
           <button
-            className="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+            className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu size={20} />
@@ -189,13 +193,14 @@ export function StoreLayout() {
           <div className="flex-1" />
 
           {/* Status pill */}
-          <span
-            className={`hidden sm:inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full
-              ${isOpen ? "bg-primary-light text-primary" : "bg-gray-100 text-gray-500"}`}
+          <button
+            onClick={toggleStore}
+            className={`hidden sm:inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full transition-colors
+              ${isOpen ? "bg-primary-light text-primary hover:bg-primary/20" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? "bg-primary animate-pulse" : "bg-gray-400"}`} />
-            {isOpen ? "Store Open" : "Store Closed"}
-          </span>
+            {isOpen ? "Open" : "Closed"}
+          </button>
 
           {/* Notification bell */}
           <button className="relative p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors">
