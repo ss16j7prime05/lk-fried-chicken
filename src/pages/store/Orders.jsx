@@ -264,7 +264,7 @@ function BigTimer({ createdAt, size = "sm" }) {
   const sizeCls = size === "lg" ? "text-3xl gap-2" : size === "md" ? "text-lg gap-1.5" : "text-xs gap-1";
   const iconSize = size === "lg" ? 24 : size === "md" ? 16 : 12;
   return (
-    <span className={`inline-flex items-center font-black tabular-nums ${p.text} ${p.blink ? "animate-pulse" : ""} ${sizeCls}`}>
+    <span className={`inline-flex items-center font-black tabular-nums transition-colors duration-700 ${p.text} ${p.blink ? "animate-pulse" : ""} ${sizeCls}`}>
       <Clock size={iconSize} />
       {m}:{String(s).padStart(2, "0")}
     </span>
@@ -345,47 +345,56 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
 
   // ── Large / Medium full card ──
   const isLarge = displaySize === "large";
+  const thumbnail = order.items?.[0]?.imageUrl || null;
 
   return (
     <div
       role="button" tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onOpen(order)}
       onClick={() => onOpen(order)}
-      className={`bg-white rounded-2xl border shadow-soft transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
-        ${status === "pending" ? "border-red-200" : !isDone ? p.border : "border-gray-100"}`}
+      className={`bg-white rounded-2xl border transition-all cursor-pointer hover:shadow-lg hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+        ${status === "pending" ? "border-red-200 shadow-sm" : !isDone ? `${p.border} shadow-sm` : "border-gray-100"}`}
     >
-      {/* top strip: order# + timer */}
-      <div className={`flex items-center justify-between px-4 ${isLarge ? "pt-5" : "pt-4"}`}>
-        <div className="flex items-center gap-2 min-w-0">
-          {selectable && (
-            <button onClick={(e) => { e.stopPropagation(); onSelect(order.id); }} className="text-gray-400 hover:text-primary flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
-              {selected ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} />}
-            </button>
-          )}
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[status]} ${status === "pending" ? "animate-pulse" : ""}`} />
-          <p className={`font-black text-gray-900 truncate ${isLarge ? "text-xl" : "text-lg"}`}>{order.orderNo || order.id?.slice(0, 10)}</p>
+      {/* header: thumbnail + order# + customer + timer + status badge */}
+      <div className={`flex items-start gap-3 px-4 ${isLarge ? "pt-5" : "pt-4"}`}>
+        {thumbnail && (
+          <img
+            src={thumbnail}
+            alt=""
+            className={`rounded-xl object-cover flex-shrink-0 ${isLarge ? "w-16 h-16" : "w-14 h-14"}`}
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {selectable && (
+              <button onClick={(e) => { e.stopPropagation(); onSelect(order.id); }} className="text-gray-400 hover:text-primary flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+                {selected ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} />}
+              </button>
+            )}
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[status]} ${status === "pending" ? "animate-pulse" : ""}`} />
+            <p className={`font-black text-gray-900 truncate ${isLarge ? "text-2xl" : "text-xl"}`}>{order.orderNo || order.id?.slice(0, 10)}</p>
+          </div>
+          <p className={`font-bold text-gray-800 truncate mt-1 ${isLarge ? "text-lg" : "text-base"}`}>{order.customerName || "—"}</p>
+          <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Phone size={11} />{order.phone || "—"}</p>
         </div>
-        {!isDone ? <BigTimer createdAt={order.createdAt} size={isLarge ? "lg" : "md"} /> : <span className="text-[10px] font-bold text-gray-300">{fmtTime(order.createdAt)}</span>}
-      </div>
-
-      {/* customer */}
-      <div className="px-4 mt-2">
-        <p className={`font-bold text-gray-800 truncate ${isLarge ? "text-base" : "text-sm"}`}>{order.customerName || "—"}</p>
-        <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Phone size={11} />{order.phone || "—"}</p>
+        <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
+          {!isDone ? <BigTimer createdAt={order.createdAt} size={isLarge ? "lg" : "md"} /> : <span className="text-[10px] font-bold text-gray-300">{fmtTime(order.createdAt)}</span>}
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE[status]}`}>{STATUS_LABEL_EN[status]}</span>
+        </div>
       </div>
 
       {/* badges */}
       <div className="flex items-center gap-1.5 px-4 mt-3 flex-wrap">
-        <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-gray-50 text-gray-600">
+        <span className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-50 text-gray-600 border border-gray-100">
           {order.orderType === "pickup" ? <Package size={11} /> : <Bike size={11} />}
           {order.orderType === "pickup" ? "Pickup" : "Delivery"}
         </span>
-        <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${order.paymentMethod === "promptpay" ? "bg-blue-50 text-blue-600" : "bg-gray-50 text-gray-500"}`}>
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${order.paymentMethod === "promptpay" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-gray-50 text-gray-500 border-gray-100"}`}>
           {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
         </span>
-        <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-gray-50 text-gray-500">{itemCount(order)} item{itemCount(order) !== 1 ? "s" : ""}</span>
+        <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-100">{itemCount(order)} item{itemCount(order) !== 1 ? "s" : ""}</span>
         {order.estimatedMinutes && !isDone && (
-          <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-amber-50 text-amber-600">{order.estimatedMinutes}m ETA</span>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">{order.estimatedMinutes}m ETA</span>
         )}
       </div>
 
@@ -399,16 +408,16 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
       <div className="flex items-center gap-2 px-4 py-3.5 mt-2 border-t border-gray-50" onClick={(e) => e.stopPropagation()}>
         {status === "pending" && (
           <>
-            <button onClick={() => onReject(order.id)} className="px-3.5 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-xs font-black hover:bg-red-50 hover:text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">Reject</button>
-            <button onClick={() => onAcceptETA(order)} className="flex-1 py-2.5 rounded-xl bg-primary text-white text-xs font-black hover:bg-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Accept</button>
+            <button onClick={() => onReject(order.id)} className="px-3.5 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-red-50 hover:text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">Reject</button>
+            <button onClick={() => onAcceptETA(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">✓ Accept</button>
           </>
         )}
         {next && (
-          <button onClick={() => onAdvance(order.id, next.to)} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-black hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700">{next.label}</button>
+          <button onClick={() => onAdvance(order.id, next.to)} className="flex-1 py-3 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700">{next.label} →</button>
         )}
         {isDone && <span className="flex-1 text-xs font-bold text-gray-300 text-center">{STATUS_LABEL_EN[status]}</span>}
         {order.phone && (
-          <a href={`tel:${order.phone}`} onClick={(e) => e.stopPropagation()} className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl" aria-label="Call Customer">
+          <a href={`tel:${order.phone}`} onClick={(e) => e.stopPropagation()} className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Call Customer">
             <Phone size={15} />
           </a>
         )}
@@ -462,45 +471,52 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance 
     ? Math.max(0, Math.round((toDate(order.estimatedFinishTime).getTime() - now) / 60000))
     : null;
 
+  const actionBtnCls = actionTo === "cooking"
+    ? "bg-orange-500 hover:bg-orange-600 text-white"
+    : actionTo === "ready_for_delivery"
+    ? "bg-blue-600 hover:bg-blue-700 text-white"
+    : "bg-green-600 hover:bg-green-700 text-white";
+
   return (
-    <div className={`rounded-3xl border-2 ${p.border} ${p.bg} p-5 md:p-6 flex flex-col gap-4 shadow-soft`}>
-      {/* Header: order number + elapsed timer */}
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xl md:text-2xl font-black text-gray-900">{order.orderNo || order.id?.slice(0, 10)}</p>
-          <p className="text-sm font-bold text-gray-500 mt-0.5">
+    <div className={`rounded-3xl border-2 ${p.border} ${p.bg} p-5 md:p-6 flex flex-col gap-4 shadow-md transition-shadow`}>
+      {/* Header: order# + timer */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-2xl md:text-3xl font-black text-gray-900 truncate">{order.orderNo || order.id?.slice(0, 10)}</p>
+          <p className="text-sm font-bold text-gray-500 mt-1">{order.customerName || "—"}</p>
+          <p className="text-xs font-bold text-gray-400 mt-0.5">
             {order.orderType === "pickup" ? "Pickup" : "Delivery"} · {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
           </p>
         </div>
         {/* Large elapsed timer */}
-        <div className={`flex flex-col items-end ${p.text}`}>
-          <span className={`flex items-center gap-1.5 text-3xl md:text-4xl font-black tabular-nums leading-none ${p.blink ? "animate-pulse" : ""}`}>
+        <div className={`flex flex-col items-end flex-shrink-0 ${p.text}`}>
+          <span className={`flex items-center gap-2 text-3xl md:text-4xl font-black tabular-nums leading-none transition-colors duration-700 ${p.blink ? "animate-pulse" : ""}`}>
             <Clock size={28} className="flex-shrink-0 mt-1" />
             {mm}:{String(ss).padStart(2, "0")}
           </span>
           <span className="text-[10px] font-bold uppercase tracking-wider mt-1 opacity-70">elapsed</span>
+          {countdown != null && (
+            <span className="text-xs font-black text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full mt-1 border border-amber-100">
+              ~{countdown}m left
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Customer */}
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xl md:text-2xl font-black text-gray-800 truncate">{order.customerName || "—"}</p>
-        {countdown != null && (
-          <span className="text-sm font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-full flex-shrink-0">
-            ~{countdown} min left
-          </span>
-        )}
-      </div>
-
       {/* Items list */}
-      <div className="bg-white/70 rounded-2xl p-4 space-y-3 flex-1">
+      <div className="bg-white/80 rounded-2xl p-4 space-y-3 flex-1 shadow-inner">
         {(order.items || []).map((item, i) => {
           const opts = [optionLabel(item.top_chicken), optionLabel(item.spicy), optionLabel(item.sauce), optionLabel(item.powder)].filter(Boolean).join(" · ");
           return (
-            <div key={i}>
-              <p className="text-lg md:text-xl font-black text-gray-900">{item.qty || 1}× {item.name}</p>
-              {opts && <p className="text-sm font-bold text-gray-500 mt-0.5">{opts}</p>}
-              {item.note && <p className="text-sm font-black text-primary mt-0.5">⚠ Note: {item.note}</p>}
+            <div key={i} className="flex items-start gap-3">
+              {item.imageUrl && (
+                <img src={item.imageUrl} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-lg md:text-xl font-black text-gray-900">{item.qty || 1}× {item.name}</p>
+                {opts && <p className="text-sm font-bold text-gray-500 mt-0.5">{opts}</p>}
+                {item.note && <p className="text-sm font-black text-primary mt-0.5">⚠ {item.note}</p>}
+              </div>
             </div>
           );
         })}
@@ -509,12 +525,12 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance 
       {actionLabel ? (
         <button
           onClick={() => onAdvance(order.id, actionTo)}
-          className="w-full py-6 rounded-2xl bg-gray-900 text-white text-xl md:text-2xl font-black hover:bg-gray-700 active:scale-[0.98] transition-all"
+          className={`w-full py-6 md:py-7 rounded-2xl text-2xl md:text-3xl font-black active:scale-[0.98] transition-all shadow-sm ${actionBtnCls}`}
         >
           {actionLabel} →
         </button>
       ) : (
-        <div className="w-full py-6 rounded-2xl bg-white/70 text-gray-400 text-lg font-black text-center">
+        <div className="w-full py-6 rounded-2xl bg-white/70 text-gray-400 text-lg font-black text-center border border-gray-200">
           Waiting for Rider
         </div>
       )}
@@ -541,7 +557,7 @@ export function KitchenView({ orders, onAdvance }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
+    <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))" }}>
       {cards.map((order) => (
         <KitchenCard key={order.id} order={order} status={order._status} onAdvance={onAdvance} />
       ))}

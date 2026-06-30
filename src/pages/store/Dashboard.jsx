@@ -47,20 +47,20 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, accent, pulse, 
   return (
     <button
       onClick={onClick}
-      className={`bg-white rounded-2xl p-5 border text-left transition-all hover:shadow-md active:scale-[0.98] w-full
-        ${accent ? "border-red-200 bg-red-50/30" : "border-gray-100"} relative overflow-hidden`}
+      className={`bg-white rounded-2xl p-4 border text-left transition-all hover:shadow-md active:scale-[0.98] w-full
+        ${accent ? "border-red-200 bg-red-50/40 shadow-sm" : "border-gray-100"} relative overflow-hidden`}
     >
       {pulse && (
-        <span className="absolute top-3.5 right-3.5 flex h-3 w-3">
+        <span className="absolute top-3 right-3 flex h-2.5 w-2.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
         </span>
       )}
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${iconBg}`}>
-        <Icon size={22} className={iconColor} />
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
+        <Icon size={20} className={iconColor} />
       </div>
-      <p className="text-3xl font-black text-gray-900 mt-4 tabular-nums leading-none">{value}</p>
-      <p className="text-xs font-bold text-gray-400 mt-1.5 uppercase tracking-wide leading-tight">{label}</p>
+      <p className="text-2xl md:text-3xl font-black text-gray-900 mt-3 tabular-nums leading-none">{value}</p>
+      <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-wide leading-tight">{label}</p>
     </button>
   );
 }
@@ -115,16 +115,18 @@ function ActivityItem({ item }) {
   const style  = ACTIVITY_ICON[status] || ACTIVITY_ICON.cancelled;
   const Icon   = style.icon;
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${style.bg}`}>
-        <Icon size={16} className={style.color} />
+    <div className="flex items-center gap-2.5 py-2.5 border-b border-gray-50 last:border-0">
+      <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${style.bg}`}>
+        <Icon size={14} className={style.color} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-bold text-gray-800 truncate">{item.order.orderNo || item.order.id?.slice(0, 10)}</p>
-        <p className="text-xs text-gray-400 font-medium mt-0.5">{STATUS_LABEL[status] || status}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-black text-gray-800 truncate">{item.order.orderNo || item.order.id?.slice(0, 10)}</p>
+          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${style.bg} ${style.color}`}>{STATUS_LABEL[status] || status}</span>
+        </div>
         <p className="text-[10px] text-gray-300 mt-0.5">{item.time.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
       </div>
-      <p className="text-xs font-bold text-gray-500 whitespace-nowrap">฿{fmtMoney(item.order.grandTotal ?? item.order.subtotal)}</p>
+      <p className="text-xs font-bold text-gray-500 whitespace-nowrap flex-shrink-0">฿{fmtMoney(item.order.grandTotal ?? item.order.subtotal)}</p>
     </div>
   );
 }
@@ -210,7 +212,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="p-4 md:p-5 lg:p-6 space-y-5 max-w-[1600px] mx-auto">
+    <div className="p-3 md:p-4 lg:p-5 space-y-4 max-w-[1600px] mx-auto">
 
       {/* ── Page header ── */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -246,21 +248,30 @@ export function Dashboard() {
       </div>
 
       {/* ── Revenue hero ── */}
-      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 md:p-6 text-white shadow-lg">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm font-bold text-white/70 uppercase tracking-wide">Today's Revenue</p>
-            <p className="text-4xl md:text-5xl font-black mt-2 tabular-nums">฿{fmtMoney(stats.revenue)}</p>
-            <p className="text-sm text-white/60 mt-2 font-medium">{stats.completed} completed · {todayOrders.length} total today</p>
+      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-4 md:p-5 text-white shadow-lg">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-white/70 uppercase tracking-wider">Today's Revenue</p>
+            <p className="text-3xl md:text-4xl font-black mt-1 tabular-nums">฿{fmtMoney(stats.revenue)}</p>
+            <p className="text-xs text-white/50 mt-1 font-medium">{stats.completed} completed · {todayOrders.length} total</p>
           </div>
-          <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
-            <TrendingUp size={26} className="text-white" />
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <div className="text-center">
+              <p className="text-2xl font-black tabular-nums">{stats.pending}</p>
+              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">New</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-black tabular-nums">{stats.preparing}</p>
+              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">Prep</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-black tabular-nums">{stats.delivering}</p>
+              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">Ride</p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
+              <TrendingUp size={22} className="text-white" />
+            </div>
           </div>
-        </div>
-        <div className="mt-5 pt-4 border-t border-white/20 grid grid-cols-3 gap-4">
-          <div><p className="text-2xl font-black tabular-nums">{stats.pending}</p><p className="text-xs text-white/60 font-bold uppercase tracking-wide mt-0.5">New</p></div>
-          <div><p className="text-2xl font-black tabular-nums">{stats.preparing}</p><p className="text-xs text-white/60 font-bold uppercase tracking-wide mt-0.5">Preparing</p></div>
-          <div><p className="text-2xl font-black tabular-nums">{stats.delivering}</p><p className="text-xs text-white/60 font-bold uppercase tracking-wide mt-0.5">Delivering</p></div>
         </div>
       </div>
 
