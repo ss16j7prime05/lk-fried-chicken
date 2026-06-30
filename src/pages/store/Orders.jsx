@@ -456,84 +456,156 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance 
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
   const mins = elapsedMinutes(order.createdAt, now);
   const p = getPriority(mins);
   const totalSec = Math.floor(mins * 60);
   const mm = Math.floor(totalSec / 60);
   const ss = totalSec % 60;
 
+  /* ── remaining / late calculation ── */
+  let remaining = null;
+  let isLate = false;
+  let remainingLabel = null;
+  if (order.estimatedMinutes) {
+    const startAt = toDate(order.acceptedAt) || toDate(order.createdAt);
+    if (startAt) {
+      const finishMs = startAt.getTime() + Number(order.estimatedMinutes) * 60000;
+      const diffMin  = Math.ceil((finishMs - now) / 60000);
+      remaining      = diffMin;
+      isLate         = diffMin < 0;
+      remainingLabel = isLate ? `${Math.abs(diffMin)}m LATE` : `${diffMin}m left`;
+    }
+  }
+  const isOverdue = isLate || mins >= 15;
+
+  /* ── action ── */
   let actionLabel = null, actionTo = null;
-  if (status === "accepted") { actionLabel = "Preparing"; actionTo = "cooking"; }
-  else if (status === "cooking") { actionLabel = "Ready"; actionTo = "ready_for_delivery"; }
-  else if (status === "ready_for_delivery" && order.orderType === "pickup") { actionLabel = "Completed"; actionTo = "completed"; }
+  if (status === "accepted")           { actionLabel = "Start Cooking";  actionTo = "cooking";            }
+  else if (status === "cooking")       { actionLabel = "Mark Ready";     actionTo = "ready_for_delivery"; }
+  else if (status === "ready_for_delivery" && order.orderType === "pickup") {
+    actionLabel = "Complete Order";  actionTo = "completed";
+  }
 
-  const countdown = status === "cooking" && order.estimatedFinishTime
-    ? Math.max(0, Math.round((toDate(order.estimatedFinishTime).getTime() - now) / 60000))
-    : null;
+  const actionBtnCls =
+    actionTo === "cooking"            ? "bg-orange-500 hover:bg-orange-600" :
+    actionTo === "ready_for_delivery" ? "bg-blue-600   hover:bg-blue-700"   :
+                                        "bg-green-600  hover:bg-green-700";
 
-  const actionBtnCls = actionTo === "cooking"
-    ? "bg-orange-500 hover:bg-orange-600 text-white"
-    : actionTo === "ready_for_delivery"
-    ? "bg-blue-600 hover:bg-blue-700 text-white"
-    : "bg-green-600 hover:bg-green-700 text-white";
+  /* ── status strip config ── */
+  const STRIP = {
+    accepted:           { bg: "bg-yellow-400",  label: "Waiting to Cook" },
+    cooking:            { bg: "bg-orange-500",  label: "Cooking Now"     },
+    ready_for_delivery: { bg: "bg-blue-500",    label: "Ready for Pickup / Delivery" },
+  };
+  const strip = STRIP[status] || { bg: "bg-gray-400", label: status };
 
   return (
-    <div className={`rounded-3xl border-2 ${p.border} ${p.bg} p-5 md:p-6 flex flex-col gap-4 shadow-md transition-shadow`}>
-      {/* Header: order# + timer */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-2xl md:text-3xl font-black text-gray-900 truncate">{order.orderNo || order.id?.slice(0, 10)}</p>
-          <p className="text-sm font-bold text-gray-500 mt-1">{order.customerName || "—"}</p>
-          <p className="text-xs font-bold text-gray-400 mt-0.5">
-            {order.orderType === "pickup" ? "Pickup" : "Delivery"} · {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
-          </p>
-        </div>
-        {/* Large elapsed timer */}
-        <div className={`flex flex-col items-end flex-shrink-0 ${p.text}`}>
-          <span className={`flex items-center gap-2 text-3xl md:text-4xl font-black tabular-nums leading-none transition-colors duration-700 ${p.blink ? "animate-pulse" : ""}`}>
-            <Clock size={28} className="flex-shrink-0 mt-1" />
-            {mm}:{String(ss).padStart(2, "0")}
+    <div className={`rounded-3xl border-2 flex flex-col overflow-hidden shadow-lg transition-all
+      ${isOverdue ? "border-red-500 shadow-red-300/40 shadow-xl" : `${p.border} shadow-md`}
+      ${isOverdue ? "animate-pulse" : ""}`}
+    >
+      {/* Status colour strip */}
+      <div className={`${strip.bg} px-5 py-2.5 flex items-center justify-between`}>
+        <span className="text-white font-black text-sm uppercase tracking-wider">{strip.label}</span>
+        {isLate && (
+          <span className="flex items-center gap-1 bg-white/25 text-white text-xs font-black px-2.5 py-0.5 rounded-full animate-pulse">
+            <AlertTriangle size={11} /> LATE
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-wider mt-1 opacity-70">elapsed</span>
-          {countdown != null && (
-            <span className="text-xs font-black text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full mt-1 border border-amber-100">
-              ~{countdown}m left
+        )}
+      </div>
+
+      {/* Card body */}
+      <div className={`${p.bg} p-5 md:p-6 flex flex-col gap-4 flex-1`}>
+
+        {/* Header: order# + customer + big timer */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-2xl md:text-3xl font-black text-gray-900 truncate leading-tight">
+              {order.orderNo || order.id?.slice(0, 10)}
+            </p>
+            <p className="text-xl md:text-2xl font-black text-gray-700 mt-1 truncate">{order.customerName || "—"}</p>
+            <p className="text-xs font-bold text-gray-400 mt-1">
+              {order.orderType === "pickup" ? "Pickup" : "Delivery"} · {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
+            </p>
+          </div>
+          {/* Large elapsed clock */}
+          <div className={`flex flex-col items-end flex-shrink-0 transition-colors duration-700 ${p.text}`}>
+            <span className={`flex items-center gap-2 font-black tabular-nums leading-none text-4xl md:text-5xl ${p.blink || isOverdue ? "animate-pulse" : ""}`}>
+              <Clock size={32} className="flex-shrink-0 mt-1.5" />
+              {mm}:{String(ss).padStart(2, "0")}
             </span>
-          )}
+            <span className="text-[10px] font-bold uppercase tracking-widest mt-1.5 opacity-60">elapsed</span>
+          </div>
         </div>
-      </div>
 
-      {/* Items list */}
-      <div className="bg-white/80 rounded-2xl p-4 space-y-3 flex-1 shadow-inner">
-        {(order.items || []).map((item, i) => {
-          const opts = [optionLabel(item.top_chicken), optionLabel(item.spicy), optionLabel(item.sauce), optionLabel(item.powder)].filter(Boolean).join(" · ");
-          return (
-            <div key={i} className="flex items-start gap-3">
-              {item.imageUrl && (
-                <img src={item.imageUrl} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-lg md:text-xl font-black text-gray-900">{item.qty || 1}× {item.name}</p>
-                {opts && <p className="text-sm font-bold text-gray-500 mt-0.5">{opts}</p>}
-                {item.note && <p className="text-sm font-black text-primary mt-0.5">⚠ {item.note}</p>}
-              </div>
+        {/* Estimated cook time row */}
+        {order.estimatedMinutes && (
+          <div className={`flex items-center justify-between rounded-2xl px-4 py-3 border
+            ${isLate
+              ? "bg-red-50 border-red-200"
+              : remaining != null && remaining <= 2
+              ? "bg-orange-50 border-orange-200"
+              : "bg-white/70 border-white/80"}`}
+          >
+            <div className="flex items-center gap-2">
+              <Clock size={14} className={isLate ? "text-red-500" : "text-gray-400"} />
+              <span className="text-xs font-bold text-gray-600">Est. cook time</span>
+              <span className="text-sm font-black text-gray-800">{order.estimatedMinutes} min</span>
             </div>
-          );
-        })}
-      </div>
+            {remainingLabel && (
+              <span className={`text-sm font-black px-3 py-1 rounded-full ${
+                isLate
+                  ? "bg-red-500 text-white animate-pulse"
+                  : remaining != null && remaining <= 2
+                  ? "bg-orange-500 text-white"
+                  : "bg-green-100 text-green-700"
+              }`}>
+                {remainingLabel}
+              </span>
+            )}
+          </div>
+        )}
 
-      {actionLabel ? (
-        <button
-          onClick={() => onAdvance(order.id, actionTo)}
-          className={`w-full py-6 md:py-7 rounded-2xl text-2xl md:text-3xl font-black active:scale-[0.98] transition-all shadow-sm ${actionBtnCls}`}
-        >
-          {actionLabel} →
-        </button>
-      ) : (
-        <div className="w-full py-6 rounded-2xl bg-white/70 text-gray-400 text-lg font-black text-center border border-gray-200">
-          Waiting for Rider
+        {/* Items */}
+        <div className="bg-white/80 rounded-2xl p-4 space-y-3 flex-1">
+          {(order.items || []).map((item, i) => {
+            const opts = [optionLabel(item.top_chicken), optionLabel(item.spicy), optionLabel(item.sauce), optionLabel(item.powder)].filter(Boolean).join(" · ");
+            return (
+              <div key={i} className="flex items-start gap-3">
+                {item.imageUrl && (
+                  <img src={item.imageUrl} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-lg md:text-xl font-black text-gray-900">
+                    <span className="text-primary font-black">{item.qty || 1}×</span> {item.name}
+                  </p>
+                  {opts && <p className="text-sm font-bold text-gray-500 mt-0.5">{opts}</p>}
+                  {item.note && (
+                    <p className="text-sm font-black text-red-600 mt-0.5 flex items-center gap-1.5">
+                      <AlertTriangle size={13} /> {item.note}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+
+        {/* Action button */}
+        {actionLabel ? (
+          <button
+            onClick={() => onAdvance(order.id, actionTo)}
+            className={`w-full py-6 md:py-8 rounded-2xl text-2xl md:text-3xl font-black text-white active:scale-[0.98] transition-all shadow-sm ${actionBtnCls}`}
+          >
+            {actionLabel} →
+          </button>
+        ) : (
+          <div className="w-full py-5 rounded-2xl bg-white/60 text-gray-400 text-lg font-black text-center border-2 border-dashed border-gray-200">
+            Waiting for Rider
+          </div>
+        )}
+      </div>
     </div>
   );
 });
