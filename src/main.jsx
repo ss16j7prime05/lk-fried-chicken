@@ -35,6 +35,12 @@ const RiderOrdersDashboard = lazy(() => import('./rider/RiderOrdersDashboard.jsx
 const AdminDashboard = lazy(() => import('./AdminDashboard.jsx'))
 const AdminControlCenter = lazy(() => import('./admin/AdminControlCenter.jsx'))
 
+// New Store UI (production dashboard)
+const StoreLayout = lazy(() => import('./layouts/StoreLayout.jsx').then((m) => ({ default: m.StoreLayout })))
+const StoreDashboardNew = lazy(() => import('./pages/store/Dashboard.jsx').then((m) => ({ default: m.Dashboard })))
+const StoreOrdersNew = lazy(() => import('./pages/store/Orders.jsx').then((m) => ({ default: m.Orders })))
+const StoreKitchenNew = lazy(() => import('./pages/store/Kitchen.jsx').then((m) => ({ default: m.Kitchen })))
+
 // New customer UI (Tailwind redesign) — not yet connected to Firestore
 const CustomerLayout = lazy(() => import('./layouts/CustomerLayout.jsx').then((m) => ({ default: m.CustomerLayout })))
 const CustomerHome = lazy(() => import('./pages/customer/Home.jsx').then((m) => ({ default: m.Home })))
@@ -178,6 +184,19 @@ createRoot(document.getElementById('root')).render(
               </ProtectedRoute>
             }
           />
+
+          {/* New Store UI — production dashboard under /store/v2/* */}
+          <Route
+            element={
+              <ProtectedRoute role="store" loginPath="/login">
+                <StoreLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/store/v2/dashboard" element={<StoreDashboardNew />} />
+            <Route path="/store/v2/orders" element={<StoreOrdersNew />} />
+            <Route path="/store/v2/kitchen" element={<StoreKitchenNew />} />
+          </Route>
 
           <Route
             path="/history"
