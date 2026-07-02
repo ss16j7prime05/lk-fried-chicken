@@ -211,14 +211,15 @@ createRoot(document.getElementById('root')).render(
             }
           />
 
-          {/* New customer UI (Tailwind redesign) — mock data only, not yet wired to Firestore */}
+          {/* New customer UI (Tailwind redesign)
+              TEMPORARY (development only): ProtectedRoute removed so these routes are
+              public / unauthenticated. Re-add <ProtectedRoute role="customer" loginPath="/login">
+              around this layout route before shipping — see CLAUDE.md / commit message. */}
           <Route
             element={
-              <ProtectedRoute role="customer" loginPath="/login">
-                <CartProvider>
-                  <CustomerLayout />
-                </CartProvider>
-              </ProtectedRoute>
+              <CartProvider>
+                <CustomerLayout />
+              </CartProvider>
             }
           >
             <Route path="/shop" element={<CustomerHome />} />
