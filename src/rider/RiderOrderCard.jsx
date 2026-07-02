@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { Phone, MapPin, User, Package, Bike } from "lucide-react";
 import { db } from "../firebase";
 import Chat from "../Chat.jsx";
 import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import { getRoute, haversineKm } from "../location/locationUtils";
+import { Card } from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import {
+  DELIVERED_STATUS,
   DELIVERING_STATUS,
   PICKED_UP_STATUS,
   READY_STATUS,
@@ -13,6 +18,13 @@ import {
 } from "./riderStatus";
 
 const GPS_UPDATE_INTERVAL_MS = 5000;
+
+const STATUS_BADGE_COLOR = {
+  [READY_STATUS]: "blue",
+  [PICKED_UP_STATUS]: "orange",
+  [DELIVERING_STATUS]: "blue",
+  [DELIVERED_STATUS]: "green",
+};
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -24,24 +36,6 @@ const formatDate = (createdAt) => {
   if (!createdAt) return "-";
   const d = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
   return d.toLocaleString("th-TH");
-};
-
-const actionBtn = {
-  flex: 1,
-  minWidth: "130px",
-  padding: "10px",
-  borderRadius: "10px",
-  border: "none",
-  color: "#fff",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const linkBtn = {
-  ...actionBtn,
-  display: "block",
-  textAlign: "center",
-  textDecoration: "none",
 };
 
 // การ์ดออเดอร์เดียวสำหรับ Rider Dashboard: ข้อมูลลูกค้า + แผนที่/ระยะทาง/เวลา + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
@@ -124,150 +118,107 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
   };
 
   return (
-    <div
-      style={{
-        background: "#1e1e1e",
-        borderRadius: "16px",
-        padding: "16px",
-        boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "8px",
-          gap: "8px",
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: "17px" }}>
-          🧾 {order.orderNo || order.id}
-        </h3>
-        <span
-          style={{
-            fontSize: "12px",
-            padding: "4px 10px",
-            borderRadius: "12px",
-            background: "#333",
-            color: "#4fc3f7",
-            whiteSpace: "nowrap",
-          }}
-        >
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <p className="font-black text-gray-900">{order.orderNo || order.id}</p>
+          <p className="text-xs font-medium text-gray-400 mt-0.5">{formatDate(order.createdAt)}</p>
+        </div>
+        <Badge color={STATUS_BADGE_COLOR[effectiveStatus] ?? "blue"}>
           {STATUS_LABEL[effectiveStatus] || effectiveStatus}
-        </span>
+        </Badge>
       </div>
 
-      <div style={{ fontSize: "12px", color: "#999", marginBottom: "8px" }}>
-        🕒 {formatDate(order.createdAt)}
+      <div className="space-y-1.5 text-sm mb-3">
+        <p className="flex items-center gap-1.5 text-gray-700 font-medium">
+          <User size={14} className="text-gray-400" />
+          {order.customerName || "-"}
+        </p>
+        <p className="flex items-center gap-1.5 text-gray-700 font-medium">
+          <Phone size={14} className="text-gray-400" />
+          {order.phone || "-"}
+        </p>
+        <p className="flex items-start gap-1.5 text-gray-500">
+          <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
+          {order.deliveryAddress || order.address || "-"}
+        </p>
+        <p className="text-gray-500">
+          <span className="font-bold text-gray-700">Payment:</span> {order.paymentMethod || "-"}
+        </p>
       </div>
 
-      <p style={{ margin: "4px 0" }}>👤 {order.customerName || "-"}</p>
-      <p style={{ margin: "4px 0" }}>📞 {order.phone || "-"}</p>
-      <p style={{ margin: "4px 0" }}>
-        🏠 {order.deliveryAddress || order.address || "-"}
-      </p>
-      <p style={{ margin: "4px 0" }}>
-        💳 ชำระเงิน: {order.paymentMethod || "-"}
-      </p>
-
-      <div style={{ marginTop: "10px" }}>
+      <div className="space-y-1 mb-3">
         {(order.items || []).map((item, index) => (
-          <div
-            key={index}
-            style={{
-              borderTop: "1px dashed #444",
-              paddingTop: "8px",
-              marginTop: "8px",
-              fontSize: "13px",
-            }}
-          >
-            🍗 {item.name} ×{item.qty || 1}
-            {optionLabel(item.top_chicken)
-              ? ` (${optionLabel(item.top_chicken)})`
-              : ""}
-          </div>
+          <p key={index} className="text-xs text-gray-500 border-t border-gray-50 pt-2 mt-2">
+            {item.name} ×{item.qty || 1}
+            {optionLabel(item.top_chicken) ? ` (${optionLabel(item.top_chicken)})` : ""}
+          </p>
         ))}
       </div>
 
-      <h3 style={{ color: "#ff9800", marginTop: "14px", marginBottom: "12px" }}>
-        💰 รวมทั้งหมด {order.grandTotal ?? order.subtotal ?? 0} บาท
-      </h3>
+      <p className="font-black text-lg text-primary mb-3">
+        ฿{order.grandTotal ?? order.subtotal ?? 0}
+      </p>
 
-      {/* ระยะทาง / เวลาเดินทางจากร้าน */}
       {route && (
-        <div style={{ fontSize: "13px", color: "#999", marginBottom: "8px" }}>
-          📏 ระยะทางจากร้าน: {route.distanceKm.toFixed(1)} กม.
-          {route.durationMin != null && <> · ⏱️ ประมาณ {route.durationMin} นาที</>}
-        </div>
+        <p className="text-xs text-gray-400 font-medium mb-3">
+          {route.distanceKm.toFixed(1)} km from store
+          {route.durationMin != null && <> · ~{route.durationMin} min</>}
+        </p>
       )}
 
-      {/* ปุ่ม Google Maps Navigation / โทร / ดูแผนที่ */}
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+      <div className="flex flex-wrap gap-2 mb-2">
         <MapButton lat={dLat} lng={dLng} mode="navigate" style={{ flex: 1, minWidth: "130px" }} />
-        <a href={`tel:${order.phone}`} style={{ ...linkBtn, background: "#22c55e" }}>
-          📞 โทรลูกค้า
-        </a>
-      </div>
-      {dLat != null && dLng != null && (
-        <button
-          onClick={() => setShowMap((v) => !v)}
-          style={{
-            width: "100%",
-            padding: "8px",
-            marginBottom: "8px",
-            borderRadius: "10px",
-            border: "none",
-            background: "#2a2a2a",
-            color: "#fff",
-            fontSize: "13px",
-            cursor: "pointer",
+        <Button
+          className="flex-1"
+          onClick={() => {
+            window.location.href = `tel:${order.phone}`;
           }}
         >
-          {showMap ? "ซ่อนแผนที่" : "🗺️ ดูแผนที่ลูกค้า"}
-        </button>
+          <Phone size={16} />
+          Call Customer
+        </Button>
+      </div>
+
+      {dLat != null && dLng != null && (
+        <Button variant="outline" className="w-full !py-2 text-sm mb-2" onClick={() => setShowMap((v) => !v)}>
+          <MapPin size={16} />
+          {showMap ? "Hide Map" : "View Customer Map"}
+        </Button>
       )}
       {showMap && (
-        <div style={{ marginBottom: "10px" }}>
+        <div className="mb-3">
           <DeliveryMap lat={dLat} lng={dLng} address={dAddress} storeLocation={storeLocation} height="180px" />
         </div>
       )}
 
-      {/* ปุ่มเปลี่ยนสถานะ */}
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+      <div className="flex flex-wrap gap-2">
         {effectiveStatus === READY_STATUS && (
-          <button
-            onClick={() => onAccept(order.id)}
-            style={{ ...actionBtn, background: "#22c55e" }}
-          >
-            ✅ รับงานจัดส่ง (Accept Delivery)
-          </button>
+          <Button className="flex-1" onClick={() => onAccept(order.id)}>
+            <Package size={16} />
+            Accept Delivery
+          </Button>
         )}
         {effectiveStatus === PICKED_UP_STATUS && (
-          <button
-            onClick={() => onStartDelivering(order.id)}
-            style={{ ...actionBtn, background: "#ff9800" }}
-          >
-            🛵 ออกเดินทางส่ง (Picked Up)
-          </button>
+          <Button className="flex-1" onClick={() => onStartDelivering(order.id)}>
+            <Bike size={16} />
+            Start Delivering
+          </Button>
         )}
         {effectiveStatus === DELIVERING_STATUS && (
           <>
-            <button onClick={markNear} style={{ ...actionBtn, background: "#4fc3f7", color: "#000" }}>
-              📍 ใกล้ถึงแล้ว (I'm Near)
-            </button>
-            <button
-              onClick={() => onDelivered(order.id)}
-              style={{ ...actionBtn, background: "#22c55e" }}
-            >
-              🎉 ส่งสำเร็จ (Delivered)
-            </button>
+            <Button variant="outline" className="flex-1" onClick={markNear}>
+              <MapPin size={16} />
+              I'm Near
+            </Button>
+            <Button className="flex-1" onClick={() => onDelivered(order.id)}>
+              Delivered
+            </Button>
           </>
         )}
       </div>
 
-      {/* แชทกับลูกค้า เฉพาะงานที่รับแล้ว */}
       {effectiveStatus !== READY_STATUS && <Chat orderId={order.id} sender="rider" />}
-    </div>
+    </Card>
   );
 }
