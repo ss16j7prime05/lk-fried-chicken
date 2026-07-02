@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { Search } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { PROMPTPAY_ACCOUNT_NAME } from "../../config";
@@ -8,8 +9,9 @@ import { normalizeStatus } from "../../store/orderStatus";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { Loading } from "../../components/ui/Loading";
+import PaymentStatusBadge from "../../payment/PaymentStatusBadge.jsx";
 
 // Status enum is the one defined in src/store/orderStatus.js (single source of truth,
 // shared with Store/Rider/Admin dashboards) — values here must match exactly.
@@ -40,6 +42,28 @@ const PAYMENT_LABELS = {
   promptpay: "PromptPay",
 };
 
+// Filter tabs (requirement's fixed 6-bucket set). "Delivering" intentionally
+// covers all three post-kitchen statuses (ready_for_delivery/picked_up/delivering)
+// since from the customer's point of view all three just mean "on the way" —
+// same collapsing the status badge above already does with its own wording.
+const STATUS_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "accepted", label: "Accepted" },
+  { key: "cooking", label: "Cooking" },
+  { key: "delivering", label: "Delivering" },
+  { key: "completed", label: "Completed" },
+  { key: "cancelled", label: "Cancelled" },
+];
+
+const matchesStatusFilter = (normalizedStatus, filterKey) => {
+  if (filterKey === "all") return true;
+  if (filterKey === "delivering") {
+    return ["ready_for_delivery", "picked_up", "delivering"].includes(normalizedStatus);
+  }
+  return normalizedStatus === filterKey;
+};
+
 // normalizeStatus maps legacy Thai statuses (written by the old customer/store
 // checkout) onto the canonical English enum, so orders placed before Module 1
 // still show a proper label instead of the raw Thai string.
@@ -67,40 +91,73 @@ const OrderCard = ({ order, onViewDetails, onReorder }) => {
   );
 
   return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <p className="font-black text-gray-900">{order.orderNo}</p>
-          <p className="text-xs font-medium text-gray-400 mt-0.5">
-            {formatDateTime(order.createdAt)}
+    <div onClick={() => onViewDetails?.(order)} className="cursor-pointer">
+      <Card className="p-5 hover:shadow-premium transition-shadow">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <p className="font-black text-gray-900">{order.orderNo}</p>
+            <p className="text-xs font-medium text-gray-400 mt-0.5">
+              {formatDateTime(order.createdAt)}
+            </p>
+          </div>
+          <Badge color={STATUS_BADGE_COLOR[statusLabel] ?? "blue"}>{statusLabel}</Badge>
+        </div>
+
+        <p className="text-sm font-bold text-gray-700">{PROMPTPAY_ACCOUNT_NAME}</p>
+        <div className="flex items-center gap-2 flex-wrap mt-1">
+          <p className="text-xs text-gray-400 font-medium">
+            {itemCount} item{itemCount !== 1 ? "s" : ""} • {formatPayment(order.paymentMethod)}
           </p>
+          <PaymentStatusBadge status={order.payment?.status} />
         </div>
-        <Badge color={STATUS_BADGE_COLOR[statusLabel] ?? "blue"}>{statusLabel}</Badge>
-      </div>
 
-      <p className="text-sm font-bold text-gray-700">{PROMPTPAY_ACCOUNT_NAME}</p>
-      <p className="text-xs text-gray-400 font-medium mt-1">
-        {itemCount} item{itemCount !== 1 ? "s" : ""} • {formatPayment(order.paymentMethod)}
-      </p>
-
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
-        <span className="font-black text-lg text-primary">฿{order.grandTotal}</span>
-        <div className="flex gap-2">
-          <Button variant="outline" className="!px-4 !py-2 text-xs" onClick={() => onViewDetails?.(order)}>
-            View Details
-          </Button>
-          <Button
-            className="!px-4 !py-2 text-xs opacity-50 cursor-not-allowed"
-            disabled
-            onClick={() => onReorder?.(order)}
-          >
-            Reorder
-          </Button>
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
+          <span className="font-black text-lg text-primary">฿{order.grandTotal}</span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="!px-4 !py-2 text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewDetails?.(order);
+              }}
+            >
+              View Details
+            </Button>
+            <Button
+              className="!px-4 !py-2 text-xs opacity-50 cursor-not-allowed"
+              disabled
+              onClick={(e) => {
+                e.stopPropagation();
+                onReorder?.(order);
+              }}
+            >
+              Reorder
+            </Button>
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 };
+
+const OrderCardSkeleton = () => (
+  <Card className="p-5 animate-pulse">
+    <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="space-y-2">
+        <div className="h-4 w-28 bg-gray-100 rounded" />
+        <div className="h-3 w-32 bg-gray-100 rounded" />
+      </div>
+      <div className="h-5 w-16 bg-gray-100 rounded-full" />
+    </div>
+    <div className="h-3 w-24 bg-gray-100 rounded mb-1" />
+    <div className="h-3 w-40 bg-gray-100 rounded" />
+    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
+      <div className="h-6 w-16 bg-gray-100 rounded" />
+      <div className="h-8 w-24 bg-gray-100 rounded-2xl" />
+    </div>
+  </Card>
+);
 
 export const Orders = () => {
   const { profile } = useAuth();
@@ -109,6 +166,9 @@ export const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [retryToken, setRetryToken] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     // Orders are keyed by phone (legacy schema, matches firestore.rules' myPhone()
@@ -118,6 +178,9 @@ export const Orders = () => {
       setLoading(false);
       return;
     }
+
+    setLoading(true);
+    setError(null);
 
     // No orderBy() here on purpose: where("phone","==") + orderBy("createdAt") needs
     // a composite Firestore index that doesn't exist for this project, which made
@@ -149,27 +212,81 @@ export const Orders = () => {
     );
 
     return () => unsubscribe();
-  }, [profile?.phone]);
+  }, [profile?.phone, retryToken]);
 
-  if (loading) {
-    return <Loading text="Loading your orders..." />;
-  }
+  const filteredOrders = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return orders.filter((order) => {
+      if (!matchesStatusFilter(normalizeStatus(order.status), statusFilter)) return false;
+      if (q && !order.orderNo?.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [orders, statusFilter, searchQuery]);
+
+  const handleRetry = () => setRetryToken((t) => t + 1);
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
       <h1 className="text-2xl font-black text-gray-900">My Orders</h1>
 
-      {error ? (
-        <EmptyState icon="⚠️" title="Something went wrong" description={error} />
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+        <Input
+          placeholder="Search by Order ID..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="!pl-11"
+        />
+      </div>
+
+      {/* Status filter tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {STATUS_FILTERS.map((filter) => (
+          <button
+            key={filter.key}
+            onClick={() => setStatusFilter(filter.key)}
+            className={`px-4 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
+              statusFilter === filter.key
+                ? "bg-primary text-white border-primary"
+                : "bg-white text-gray-500 border-gray-100 hover:border-primary"
+            }`}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="space-y-4">
+          <OrderCardSkeleton />
+          <OrderCardSkeleton />
+          <OrderCardSkeleton />
+        </div>
+      ) : error ? (
+        <div className="space-y-6">
+          <EmptyState icon="⚠️" title="Something went wrong" description={error} />
+          <div className="flex justify-center">
+            <Button variant="outline" onClick={handleRetry}>
+              Retry
+            </Button>
+          </div>
+        </div>
       ) : orders.length === 0 ? (
         <EmptyState
           icon="🧾"
           title="No orders yet"
           description="Your past and current orders will show up here once you place one."
         />
+      ) : filteredOrders.length === 0 ? (
+        <EmptyState
+          icon="🔍"
+          title="No matching orders"
+          description="Try a different search term or status filter."
+        />
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <OrderCard
               key={order.id}
               order={order}
