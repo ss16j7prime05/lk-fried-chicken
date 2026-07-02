@@ -1,15 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { Phone, MapPin, Navigation, RotateCcw, Check } from "lucide-react";
 import { db } from "../../firebase";
-import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { STORE_ID, STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
+import { normalizeStatus } from "../../store/orderStatus";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
+import TrackingPanel from "../../tracking/TrackingPanel.jsx";
+
+// Fallback store coordinates, used only until stores/{STORE_ID} loads (matches the
+// same fallback in src/App.jsx / src/TrackOrder.jsx).
+const FALLBACK_STORE_LAT = 13.8294079;
+const FALLBACK_STORE_LNG = 100.0529543;
+
+// Statuses (canonical, post-normalizeStatus) where a rider may be actively en
+// route — mirrors the legacy TrackOrder.jsx isDelivering() status set.
+const TRACKABLE_STATUSES = ["ready_for_delivery", "picked_up", "delivering"];
 
 // Status enum + timeline mirror src/store/orderStatus.js (single source of truth,
 // shared with Store/Rider/Admin dashboards) — DO NOT invent new status values here.
@@ -134,6 +145,19 @@ export const OrderDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [storeLocation, setStoreLocation] = useState(null);
+  const trackingRef = useRef(null);
+
+  useEffect(() => {
+    getDoc(doc(db, "stores", STORE_ID)).then((snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.lat != null && data.lng != null) {
+          setStoreLocation({ lat: data.lat, lng: data.lng, name: data.storeName || "Store" });
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!orderId) return;
@@ -179,9 +203,28 @@ export const OrderDetail = () => {
     );
   }
 
-  const statusLabel = STATUS_LABELS[order.status] ?? order.status ?? "Pending";
-  const isCancelled = order.status === "cancelled";
-  const currentStepIndex = TIMELINE_STEPS.findIndex((step) => step.status === order.status);
+  // normalizeStatus maps legacy Thai statuses (written by the old customer/store
+  // checkout) onto the canonical English enum, so orders placed before Module 1
+  // still show the correct label and timeline progress instead of falling back to
+  // the raw Thai string / an all-blank timeline.
+  const normalizedStatus = normalizeStatus(order.status);
+  const statusLabel = STATUS_LABELS[normalizedStatus] ?? order.status ?? "Pending";
+  const isCancelled = normalizedStatus === "cancelled";
+  const currentStepIndex = TIMELINE_STEPS.findIndex((step) => step.status === normalizedStatus);
+  const isTrackable = TRACKABLE_STATUSES.includes(normalizedStatus);
+
+  const customerLocation = {
+    lat: order.deliveryLocation?.lat ?? order.lat ?? order.latitude,
+    lng: order.deliveryLocation?.lng ?? order.lng ?? order.longitude,
+    address: order.deliveryAddress || order.address,
+  };
+  const riderLocation = order.riderLocation
+    ? { lat: order.riderLocation.lat, lng: order.riderLocation.lng }
+    : order.riderLat != null && order.riderLng != null
+    ? { lat: order.riderLat, lng: order.riderLng }
+    : null;
+  const resolvedStoreLocation =
+    storeLocation ?? { lat: FALLBACK_STORE_LAT, lng: FALLBACK_STORE_LNG, name: "Store" };
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6 pb-32">
@@ -317,6 +360,28 @@ export const OrderDetail = () => {
         )}
       </Card>
 
+      {/* Live Tracking — real-time rider location, shown once the order is out for delivery */}
+      {isTrackable && (
+        <div ref={trackingRef}>
+          <Card className="p-6">
+            <SectionTitle>Live Tracking</SectionTitle>
+            {riderLocation ? (
+              <TrackingPanel
+                storeLocation={resolvedStoreLocation}
+                customerLocation={customerLocation}
+                riderLocation={riderLocation}
+                estimatedArrival={order.riderLocation?.estimatedArrival}
+                remainingDistance={order.riderLocation?.remainingDistance}
+              />
+            ) : (
+              <p className="text-sm text-gray-400 font-medium">
+                Waiting for the rider's location to become available…
+              </p>
+            )}
+          </Card>
+        </div>
+      )}
+
       {/* Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 sm:p-6 z-30">
         <div className="max-w-3xl mx-auto flex gap-3">
@@ -327,7 +392,8 @@ export const OrderDetail = () => {
           <Button
             variant="outline"
             className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={order.status !== "delivering"}
+            disabled={!isTrackable}
+            onClick={() => trackingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
           >
             <Navigation size={18} />
             Track Rider

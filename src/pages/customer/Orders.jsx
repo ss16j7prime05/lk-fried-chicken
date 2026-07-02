@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { normalizeStatus } from "../../store/orderStatus";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -39,8 +40,11 @@ const PAYMENT_LABELS = {
   promptpay: "PromptPay",
 };
 
+// normalizeStatus maps legacy Thai statuses (written by the old customer/store
+// checkout) onto the canonical English enum, so orders placed before Module 1
+// still show a proper label instead of the raw Thai string.
 const formatStatus = (status) =>
-  STATUS_LABELS[status] ?? status ?? "Pending";
+  STATUS_LABELS[normalizeStatus(status)] ?? status ?? "Pending";
 
 const formatPayment = (method) => PAYMENT_LABELS[method] ?? method ?? "-";
 
@@ -110,19 +114,30 @@ export const Orders = () => {
     // Orders are keyed by phone (legacy schema, matches firestore.rules' myPhone()
     // check) — there is no customerId field on order documents.
     if (!profile?.phone) {
+      setOrders([]);
+      setLoading(false);
       return;
     }
 
+    // No orderBy() here on purpose: where("phone","==") + orderBy("createdAt") needs
+    // a composite Firestore index that doesn't exist for this project, which made
+    // this query fail outright. Sort client-side instead (same approach the legacy
+    // CustomerOrderHistory.jsx page already uses for this exact query shape).
     const ordersQuery = query(
       collection(db, "orders"),
-      where("phone", "==", profile.phone),
-      orderBy("createdAt", "desc")
+      where("phone", "==", profile.phone)
     );
 
     const unsubscribe = onSnapshot(
       ordersQuery,
       (snapshot) => {
-        setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => {
+          const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+          const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+          return tb - ta;
+        });
+        setOrders(data);
         setError(null);
         setLoading(false);
       },
