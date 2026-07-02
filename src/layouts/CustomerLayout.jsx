@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingBag, User, Bell, CreditCard } from 'lucide-react';
+import { Home, ShoppingBag, User, Bell, CreditCard, Star } from 'lucide-react';
 
 export const CustomerLayout = () => {
   const { pathname } = useLocation();
@@ -8,6 +8,7 @@ export const CustomerLayout = () => {
     { icon: ShoppingBag, label: 'Orders', path: '/shop/orders' },
     { icon: CreditCard, label: 'Checkout', path: '/shop/checkout' },
     { icon: Bell, label: 'Notifications', path: '/shop/notifications' },
+    { icon: Star, label: 'Reviews', path: '/shop/reviews' },
     { icon: User, label: 'Profile', path: '/shop/profile' },
   ];
 
