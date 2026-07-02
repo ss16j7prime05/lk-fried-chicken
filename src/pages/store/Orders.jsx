@@ -522,7 +522,7 @@ function CardSkeleton() {
   );
 }
 
-/* ═══════════════════════ Kitchen view (shared, rendered at /store/v2/kitchen) ═══════════════════════ */
+/* ═══════════════════════ Kitchen view (shared, rendered at /store/kitchen) ═══════════════════════ */
 export const KITCHEN_STATUSES = ["accepted", "cooking", "ready_for_delivery"];
 
 /* Tracks whether a kitchen ticket was printed this session (per order id) */
@@ -1927,7 +1927,7 @@ export function Orders() {
             <Bell size={17} />
             {notifHistory.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{notifHistory.length > 9 ? "9+" : notifHistory.length}</span>}
           </button>
-          <Link to="/store/v2/kitchen" className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700">
+          <Link to="/store/kitchen" className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700">
             <ChefHat size={16} /> Kitchen
           </Link>
         </div>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot } from "firebase/firestore";
-import { Link } from "react-router-dom";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
@@ -140,9 +139,6 @@ export default function AdminControlCenter() {
       >
         <h1 style={{ margin: 0, fontSize: "22px" }}>🛠️ Admin Control Center</h1>
         <div style={{ display: "flex", gap: "8px" }}>
-          <Link to="/admin/dashboard">
-            <button style={navBtn}>📈 Dashboard เดิม</button>
-          </Link>
           <button style={{ ...navBtn, background: "#e53935" }} onClick={logout}>
             ออกจากระบบ
           </button>

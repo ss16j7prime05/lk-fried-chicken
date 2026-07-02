@@ -13,11 +13,11 @@ import { getAlarmAudioCtx, playSound, getEffectiveVolume } from "../store/alarmS
 
 /* ─── constants ─── */
 const NAV = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/store/v2/dashboard" },
-  { icon: ClipboardList,   label: "Orders",    path: "/store/v2/orders"   },
-  { icon: ChefHat,         label: "Kitchen",   path: "/store/v2/kitchen"  },
-  { icon: UtensilsCrossed, label: "Menu",      path: "/store/v2/menu"     },
-  { icon: Settings,        label: "Settings",  path: "/store/v2/settings" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/store" },
+  { icon: ClipboardList,   label: "Orders",    path: "/store/orders"   },
+  { icon: ChefHat,         label: "Kitchen",   path: "/store/kitchen"  },
+  { icon: UtensilsCrossed, label: "Menu",      path: "/store/menu"     },
+  { icon: Settings,        label: "Settings",  path: "/store/settings" },
 ];
 
 const DEFAULT_NOTIF = {
@@ -364,6 +364,7 @@ export function StoreLayout() {
             <NavLink
               key={path}
               to={path}
+              end={path === "/store"}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `relative flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-150 group
@@ -441,7 +442,7 @@ export function StoreLayout() {
 
           {/* Notification bell */}
           <button
-            onClick={() => navigate("/store/v2/orders")}
+            onClick={() => navigate("/store/orders")}
             className="relative p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
             aria-label="Pending orders"
           >

@@ -188,7 +188,7 @@ export function Kitchen() {
         <div className="flex items-center gap-3">
           {!fullscreen && (
             <Link
-              to="/store/v2/orders"
+              to="/store/orders"
               className="p-2.5 rounded-xl bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               aria-label="Back to orders"
             >

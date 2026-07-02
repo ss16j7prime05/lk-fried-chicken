@@ -46,7 +46,7 @@ const button = {
 
 // เส้นทางหลังเข้าสู่ระบบสำเร็จของแต่ละ role
 const ROLE_HOME = {
-  customer: "/customer",
+  customer: "/",
   store: "/store",
   rider: "/rider",
   admin: "/admin",

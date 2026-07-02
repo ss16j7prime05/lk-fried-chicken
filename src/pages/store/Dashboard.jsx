@@ -464,7 +464,7 @@ export function Dashboard() {
               <CheckCheck size={16}/> Accept All ({stats.pending})
             </button>
           )}
-          <button onClick={()=>navigate("/store/v2/orders")} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-sm font-bold text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
+          <button onClick={()=>navigate("/store/orders")} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-sm font-bold text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
             All Orders <ArrowRight size={14}/>
           </button>
         </div>
@@ -507,12 +507,12 @@ export function Dashboard() {
 
       {/* ── KPI live status grid ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        <StatCard icon={ShoppingBag}     iconBg="bg-red-50"    iconColor="text-red-500"    label="New Orders"  value={stats.pending}    accent={stats.pending>0} pulse={stats.pending>0} onClick={()=>navigate("/store/v2/orders")}/>
-        <StatCard icon={UtensilsCrossed} iconBg="bg-orange-50" iconColor="text-orange-500" label="Preparing"   value={stats.preparing}  onClick={()=>navigate("/store/v2/orders")}/>
-        <StatCard icon={Clock}           iconBg="bg-blue-50"   iconColor="text-blue-500"   label="Ready"       value={stats.ready}      onClick={()=>navigate("/store/v2/orders")}/>
-        <StatCard icon={Bike}            iconBg="bg-purple-50" iconColor="text-purple-500" label="Delivering"  value={stats.delivering} onClick={()=>navigate("/store/v2/orders")}/>
-        <StatCard icon={CheckCircle}     iconBg="bg-green-50"  iconColor="text-green-600"  label="Completed"   value={stats.completed}  onClick={()=>navigate("/store/v2/orders")}/>
-        <StatCard icon={Users}           iconBg="bg-indigo-50" iconColor="text-indigo-500" label="In Progress" value={stats.waiting}    onClick={()=>navigate("/store/v2/orders")}/>
+        <StatCard icon={ShoppingBag}     iconBg="bg-red-50"    iconColor="text-red-500"    label="New Orders"  value={stats.pending}    accent={stats.pending>0} pulse={stats.pending>0} onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={UtensilsCrossed} iconBg="bg-orange-50" iconColor="text-orange-500" label="Preparing"   value={stats.preparing}  onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={Clock}           iconBg="bg-blue-50"   iconColor="text-blue-500"   label="Ready"       value={stats.ready}      onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={Bike}            iconBg="bg-purple-50" iconColor="text-purple-500" label="Delivering"  value={stats.delivering} onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={CheckCircle}     iconBg="bg-green-50"  iconColor="text-green-600"  label="Completed"   value={stats.completed}  onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={Users}           iconBg="bg-indigo-50" iconColor="text-indigo-500" label="In Progress" value={stats.waiting}    onClick={()=>navigate("/store/orders")}/>
       </div>
 
       {/* ── Charts + Insights panel ── */}
@@ -561,7 +561,7 @@ export function Dashboard() {
               <h2 className="text-sm font-black text-gray-700 uppercase tracking-wider">Recent Orders</h2>
               {stats.pending>0 && <span className="bg-red-500 text-white text-xs font-black px-2.5 py-0.5 rounded-full">{stats.pending} new</span>}
             </div>
-            <button onClick={()=>navigate("/store/v2/orders")} className="flex items-center gap-1 text-xs font-bold text-primary hover:underline">
+            <button onClick={()=>navigate("/store/orders")} className="flex items-center gap-1 text-xs font-bold text-primary hover:underline">
               View all <ArrowRight size={12}/>
             </button>
           </div>

@@ -88,7 +88,7 @@ export default function RegisterCustomer() {
         email: f.email.trim(),
         createdAt: serverTimestamp(),
       });
-      navigate("/customer", { replace: true });
+      navigate("/", { replace: true });
     } catch (err) {
       console.error(err);
       if (err.code === "auth/email-already-in-use") setError("อีเมลนี้ถูกใช้สมัครแล้ว");

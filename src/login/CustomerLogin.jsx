@@ -110,7 +110,7 @@ export default function CustomerLogin() {
         },
         { merge: true }
       );
-      navigate("/track", { replace: true });
+      navigate("/", { replace: true });
     } catch (err) {
       console.error(err);
       setError("OTP ไม่ถูกต้อง");

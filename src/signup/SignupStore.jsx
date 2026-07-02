@@ -83,7 +83,7 @@ export default function SignupStore() {
         address: f.address.trim(),
         createdAt: serverTimestamp(),
       });
-      navigate("/store/dashboard", { replace: true });
+      navigate("/store", { replace: true });
     } catch (err) {
       console.error(err);
       setError("สมัครไม่สำเร็จ: " + (err.code || ""));

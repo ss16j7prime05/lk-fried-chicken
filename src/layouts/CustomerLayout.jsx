@@ -4,7 +4,7 @@ import { Home, ShoppingBag, User, Bell, CreditCard } from 'lucide-react';
 export const CustomerLayout = () => {
   const { pathname } = useLocation();
   const navItems = [
-    { icon: Home, label: 'Home', path: '/shop' },
+    { icon: Home, label: 'Home', path: '/' },
     { icon: ShoppingBag, label: 'Orders', path: '/shop/orders' },
     { icon: CreditCard, label: 'Checkout', path: '/shop/checkout' },
     { icon: Bell, label: 'Notifications', path: '/shop/notifications' },
@@ -12,7 +12,7 @@ export const CustomerLayout = () => {
   ];
 
   const isActive = (path) =>
-    pathname === path || (path !== '/shop' && pathname.startsWith(`${path}/`));
+    pathname === path || (path !== '/' && pathname.startsWith(`${path}/`));
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 md:pl-64">
