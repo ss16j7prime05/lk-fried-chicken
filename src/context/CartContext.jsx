@@ -9,14 +9,20 @@ let nextId = 1;
 export const CartProvider = ({ children, deliveryFee = DEFAULT_DELIVERY_FEE }) => {
   const [cartItems, setCartItems] = useState([]);
 
+  // unitPrice = menu price + any priced options (set by MenuDetailModal) — always
+  // recomputed here (not trusted from the caller) so totalPrice never drifts from
+  // quantity x unitPrice across add/increase/decrease.
   const addToCart = useCallback((item) => {
+    const quantity = item.quantity ?? 1;
+    const unitPrice = item.unitPrice ?? item.menu?.price ?? 0;
     setCartItems((prev) => [
       ...prev,
       {
-        id: `cart_${nextId++}`,
-        quantity: 1,
-        totalPrice: item.menu?.price ?? 0,
         ...item,
+        id: `cart_${nextId++}`,
+        quantity,
+        unitPrice,
+        totalPrice: unitPrice * quantity,
       },
     ]);
   }, []);
@@ -27,15 +33,15 @@ export const CartProvider = ({ children, deliveryFee = DEFAULT_DELIVERY_FEE }) =
 
   const increaseQuantity = useCallback((id) => {
     setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              quantity: item.quantity + 1,
-              totalPrice: (item.menu?.price ?? 0) * (item.quantity + 1),
-            }
-          : item
-      )
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const quantity = item.quantity + 1;
+        return {
+          ...item,
+          quantity,
+          totalPrice: (item.unitPrice ?? item.menu?.price ?? 0) * quantity,
+        };
+      })
     );
   }, []);
 
@@ -47,7 +53,7 @@ export const CartProvider = ({ children, deliveryFee = DEFAULT_DELIVERY_FEE }) =
         return {
           ...item,
           quantity,
-          totalPrice: (item.menu?.price ?? 0) * quantity,
+          totalPrice: (item.unitPrice ?? item.menu?.price ?? 0) * quantity,
         };
       })
     );

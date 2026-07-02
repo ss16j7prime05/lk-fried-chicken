@@ -29,10 +29,12 @@ const CartLine = ({ item, onIncrease, onDecrease, onRemove }) => (
       </div>
 
       <div className="flex flex-wrap gap-1.5 mt-1.5">
-        {item.chickenPart && <Badge color="green">{item.chickenPart}</Badge>}
-        {item.spiceLevel && <Badge color="orange">{item.spiceLevel}</Badge>}
-        {item.shakePowder && <Badge color="blue">{item.shakePowder}</Badge>}
-        {item.sauce && item.sauce !== "None" && <Badge color="green">{item.sauce}</Badge>}
+        {item.topChicken && <Badge color="green">{item.topChicken}</Badge>}
+        {item.spicy && <Badge color="orange">{item.spicy}</Badge>}
+        {item.sauceMain?.name && <Badge color="green">{item.sauceMain.name}</Badge>}
+        {item.sauceExtra?.name && <Badge color="green">{item.sauceExtra.name}</Badge>}
+        {item.powder?.name && <Badge color="blue">{item.powder.name}</Badge>}
+        {item.tableCheese?.name && <Badge color="blue">{item.tableCheese.name}</Badge>}
       </div>
 
       <div className="flex items-center justify-between mt-3">
@@ -53,7 +55,7 @@ const CartLine = ({ item, onIncrease, onDecrease, onRemove }) => (
         </div>
 
         <div className="text-right">
-          <p className="text-xs text-gray-400 font-medium">฿{item.menu?.price} ea.</p>
+          <p className="text-xs text-gray-400 font-medium">฿{item.unitPrice ?? item.menu?.price} ea.</p>
           <p className="font-black text-primary">฿{item.totalPrice}</p>
         </div>
       </div>

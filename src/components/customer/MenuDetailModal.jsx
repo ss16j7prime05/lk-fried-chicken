@@ -6,70 +6,119 @@ import { Badge } from "../ui/Badge";
 import { Input } from "../ui/Input";
 import { useCart } from "../../context/CartContext";
 
-const CHICKEN_PARTS = ["Breast", "Thigh", "Wing", "Drumstick"];
-const SPICE_LEVELS = ["Not Spicy", "Mild", "Medium", "Hot", "Very Hot"];
-const SHAKE_POWDERS = ["Original", "Cheese", "BBQ", "Paprika", "Mala", "Seaweed"];
-const SAUCES = ["None", "Korean", "Teriyaki", "Garlic", "Spicy Mayo"];
+// Real menu-option rules — mirrors src/App.jsx's legacy checkout (single source of
+// truth): which Firestore `options/{id}` doc applies to which item, and which
+// selections are mandatory, is driven by the item's real category/name, not a
+// fixed list of items.
+const RICE_TOPPED_CATEGORY = "ข้าวหน้าไก่ทอด";
+const SPICY_SALAD_NAME = "ข้าวยำไก่แซ่บ";
+const EXTRA_OPTION_CATEGORIES = ["อาหารทานเล่น", "เซ็ตรวม"];
 
-const OptionGroup = ({ title, options, value, onChange }) => (
-  <div>
-    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-      {title}
-    </h4>
-    <div className="flex flex-wrap gap-2">
-      {options.map((opt) => (
-        <button
-          key={opt}
-          type="button"
-          onClick={() => onChange(opt)}
-          className={`px-4 py-2 rounded-2xl text-sm font-bold border transition-all ${
-            value === opt
-              ? "bg-primary text-white border-primary"
-              : "bg-gray-50 text-gray-600 border-gray-100 hover:border-primary"
-          }`}
-        >
-          {opt}
-        </button>
-      ))}
+const findOption = (options, id) => options.find((item) => item.id === id);
+
+const ChoiceGroup = ({ title, choices, value, onChange }) => {
+  if (!choices || choices.length === 0) return null;
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+        {title}
+      </h4>
+      <div className="flex flex-wrap gap-2">
+        {choices.map((choice) => {
+          const active = value?.name === choice.name;
+          return (
+            <button
+              key={choice.name}
+              type="button"
+              onClick={() => onChange(choice)}
+              className={`px-4 py-2 rounded-2xl text-sm font-bold border transition-all ${
+                active
+                  ? "bg-primary text-white border-primary"
+                  : "bg-gray-50 text-gray-600 border-gray-100 hover:border-primary"
+              }`}
+            >
+              {choice.name}
+              {choice.price > 0 && <span className="ml-1 opacity-70">+฿{choice.price}</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
-export const MenuDetailModal = ({ open, onClose, menu, onAddToCart }) => {
+export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart }) => {
   const { addToCart } = useCart();
-  const [chickenPart, setChickenPart] = useState(CHICKEN_PARTS[0]);
-  const [spiceLevel, setSpiceLevel] = useState(SPICE_LEVELS[0]);
-  const [shakePowder, setShakePowder] = useState(SHAKE_POWDERS[0]);
-  const [sauce, setSauce] = useState(SAUCES[0]);
+
+  const [topChicken, setTopChicken] = useState(null);
+  const [spicy, setSpicy] = useState(null);
+  const [sauceMain, setSauceMain] = useState(null);
+  const [sauceExtra, setSauceExtra] = useState(null);
+  const [powder, setPowder] = useState(null);
+  const [tableCheese, setTableCheese] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
+  const [validationError, setValidationError] = useState("");
 
   useEffect(() => {
     if (open) {
-      setChickenPart(CHICKEN_PARTS[0]);
-      setSpiceLevel(SPICE_LEVELS[0]);
-      setShakePowder(SHAKE_POWDERS[0]);
-      setSauce(SAUCES[0]);
+      setTopChicken(null);
+      setSpicy(null);
+      setSauceMain(null);
+      setSauceExtra(null);
+      setPowder(null);
+      setTableCheese(null);
       setQuantity(1);
       setNote("");
+      setValidationError("");
     }
   }, [open, menu]);
 
+  const needsTopChicken = menu?.category === RICE_TOPPED_CATEGORY;
+  const needsSpicy = menu?.name === SPICY_SALAD_NAME;
+  const showExtraOptions = EXTRA_OPTION_CATEGORIES.includes(menu?.category);
+
+  // Doc IDs match the real production `options` collection (see src/App.jsx).
+  const topChickenOption = useMemo(() => findOption(options, "top_chicken"), [options]);
+  const spicyOption = useMemo(() => findOption(options, "spicy"), [options]);
+  const sauceMainOption = useMemo(() => findOption(options, "Sauce"), [options]);
+  const sauceExtraOption = useMemo(() => findOption(options, "sauce"), [options]);
+  const powderOption = useMemo(() => findOption(options, "poewder"), [options]);
+  const tableCheeseOption = useMemo(() => findOption(options, "table cheese"), [options]);
+
   const basePrice = menu?.price ?? 0;
-  const totalPrice = useMemo(() => basePrice * quantity, [basePrice, quantity]);
+  const optionsTotal =
+    (sauceMain?.price || 0) +
+    (sauceExtra?.price || 0) +
+    (powder?.price || 0) +
+    (tableCheese?.price || 0);
+  const unitPrice = basePrice + optionsTotal;
+  const totalPrice = useMemo(() => unitPrice * quantity, [unitPrice, quantity]);
 
   if (!menu) return null;
 
   const handleAddToCart = () => {
+    if (needsTopChicken && !topChicken) {
+      setValidationError("Please select a chicken topping.");
+      return;
+    }
+    if (needsSpicy && !spicy) {
+      setValidationError("Please select a spice level.");
+      return;
+    }
+    setValidationError("");
+
     const cartItem = {
       menu,
-      chickenPart,
-      spiceLevel,
-      shakePowder,
-      sauce,
-      quantity,
+      topChicken: topChicken?.name || "",
+      spicy: spicy?.name || "",
+      sauceMain: sauceMain || "",
+      sauceExtra: sauceExtra || "",
+      powder: powder || "",
+      tableCheese: tableCheese || "",
       note,
-      totalPrice,
+      quantity,
+      unitPrice,
     };
     addToCart(cartItem);
     onAddToCart?.(cartItem);
@@ -119,30 +168,52 @@ export const MenuDetailModal = ({ open, onClose, menu, onAddToCart }) => {
         </div>
 
         <div className="space-y-6">
-          <OptionGroup
-            title="Chicken Part"
-            options={CHICKEN_PARTS}
-            value={chickenPart}
-            onChange={setChickenPart}
-          />
-          <OptionGroup
-            title="Spice Level"
-            options={SPICE_LEVELS}
-            value={spiceLevel}
-            onChange={setSpiceLevel}
-          />
-          <OptionGroup
-            title="Shake Powder"
-            options={SHAKE_POWDERS}
-            value={shakePowder}
-            onChange={setShakePowder}
-          />
-          <OptionGroup
-            title="Sauce"
-            options={SAUCES}
-            value={sauce}
-            onChange={setSauce}
-          />
+          {needsTopChicken && (
+            <ChoiceGroup
+              title="Chicken Topping"
+              choices={topChickenOption?.choices}
+              value={topChicken}
+              onChange={setTopChicken}
+            />
+          )}
+
+          {needsSpicy && (
+            <ChoiceGroup
+              title="Spice Level"
+              choices={spicyOption?.choices}
+              value={spicy}
+              onChange={setSpicy}
+            />
+          )}
+
+          {showExtraOptions && (
+            <>
+              <ChoiceGroup
+                title="Sauce"
+                choices={sauceMainOption?.choices}
+                value={sauceMain}
+                onChange={setSauceMain}
+              />
+              <ChoiceGroup
+                title="Extra Sauce"
+                choices={sauceExtraOption?.choices}
+                value={sauceExtra}
+                onChange={setSauceExtra}
+              />
+              <ChoiceGroup
+                title="Shake Powder"
+                choices={powderOption?.choices}
+                value={powder}
+                onChange={setPowder}
+              />
+              <ChoiceGroup
+                title="Extra Cheese"
+                choices={tableCheeseOption?.choices}
+                value={tableCheese}
+                onChange={setTableCheese}
+              />
+            </>
+          )}
 
           <div>
             <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
@@ -184,6 +255,10 @@ export const MenuDetailModal = ({ open, onClose, menu, onAddToCart }) => {
             />
           </div>
         </div>
+
+        {validationError && (
+          <p className="text-sm font-bold text-secondary">{validationError}</p>
+        )}
 
         <div className="flex items-center justify-between gap-4 pt-4 border-t border-gray-100">
           <div>

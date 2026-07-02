@@ -91,17 +91,21 @@ export const Checkout = () => {
       const lng = isDelivery ? gpsLocation?.lng ?? null : null;
 
       // Legacy item shape (matches src/App.jsx's addToCart / Store & Rider dashboards):
-      // top_chicken/spicy/sauce/powder as flat option fields, qty (not quantity), price (not unitPrice).
+      // top_chicken/spicy/Sauce/sauce/powder/tableCheese as flat option fields (set by
+      // MenuDetailModal from the real Firestore `options` collection), qty (not
+      // quantity), price (not unitPrice).
       const legacyItems = cartItems.map((item) => ({
         id: item.menu?.id ?? null,
         name: item.menu?.name ?? "",
         price: item.menu?.price ?? 0,
         image: item.menu?.image ?? "",
         category: item.menu?.category ?? "",
-        top_chicken: item.chickenPart || "",
-        spicy: item.spiceLevel || "",
-        sauce: item.sauce && item.sauce !== "None" ? { name: item.sauce, price: 0 } : "",
-        powder: item.shakePowder ? { name: item.shakePowder, price: 0 } : "",
+        top_chicken: item.topChicken || "",
+        spicy: item.spicy || "",
+        Sauce: item.sauceMain || "",
+        sauce: item.sauceExtra || "",
+        powder: item.powder || "",
+        tableCheese: item.tableCheese || "",
         note: item.note || "",
         qty: item.quantity,
       }));

@@ -1,53 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
-import { Search, MapPin, Filter, Bell } from "lucide-react";
+import { Search, MapPin, Filter, Bell, ShoppingCart } from "lucide-react";
 import { db } from "../../firebase";
-import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
-
-const FALLBACK_IMAGE = "https://picsum.photos/seed/lkfc-fallback/600/400";
-
-const FoodCard = ({ item }) => (
-  <Card className="group cursor-pointer">
-    <div className="relative h-44 overflow-hidden">
-      <img
-        src={item.image || FALLBACK_IMAGE}
-        alt={item.name}
-        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-      />
-      {item.rating != null && (
-        <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold">
-          ★ {item.rating}
-        </div>
-      )}
-      {item.promo && (
-        <div className="absolute bottom-3 left-0 bg-secondary text-white px-4 py-1 rounded-r-lg font-bold text-sm">
-          {item.promo}
-        </div>
-      )}
-    </div>
-    <div className="p-4">
-      <h3 className="font-bold text-gray-900">{item.name}</h3>
-      {item.tags && item.tags.length > 0 && (
-        <p className="text-xs text-gray-500 mt-1 mb-3">{item.tags.join(" • ")}</p>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="font-black text-primary">฿{item.price}</span>
-        <span className="text-xs font-bold text-gray-400">{item.time || "15-25 min"}</span>
-      </div>
-    </div>
-  </Card>
-);
+import { FoodCard } from "../../components/customer/FoodCard";
+import { MenuDetailModal } from "../../components/customer/MenuDetailModal";
+import { CartDrawer } from "../../components/customer/CartDrawer";
+import { useCart } from "../../context/CartContext";
 
 export const Home = () => {
+  const navigate = useNavigate();
+  const { itemCount } = useCart();
+
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [menus, setMenus] = useState([]);
+  const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [selectedMenu, setSelectedMenu] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+
+  const openDetail = (menu) => {
+    setSelectedMenu(menu);
+    setDetailOpen(true);
+  };
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -61,6 +44,19 @@ export const Home = () => {
         console.error("Failed to load menus:", err);
         setError("Unable to load the menu right now. Please try again later.");
         setLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "options"),
+      (snapshot) => {
+        setOptions(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        console.error("Failed to load menu options:", err);
       }
     );
     return () => unsubscribe();
@@ -104,10 +100,24 @@ export const Home = () => {
           <MapPin size={18} className="text-primary" />
           <span>Deliver to: 123 Sukhumvit, Bangkok</span>
         </div>
-        <button className="relative p-2 bg-white rounded-full shadow-soft">
-          <Bell size={20} />
-          <span className="absolute top-0 right-0 w-2 h-2 bg-secondary rounded-full border-2 border-white" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="relative p-2 bg-white rounded-full shadow-soft">
+            <Bell size={20} />
+            <span className="absolute top-0 right-0 w-2 h-2 bg-secondary rounded-full border-2 border-white" />
+          </button>
+          <button
+            onClick={() => setCartOpen(true)}
+            className="relative p-2 bg-white rounded-full shadow-soft"
+            aria-label="Open cart"
+          >
+            <ShoppingCart size={20} />
+            {itemCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-primary text-white text-[10px] font-bold rounded-full border-2 border-white">
+                {itemCount}
+              </span>
+            )}
+          </button>
+        </div>
       </header>
 
       {/* Search Bar */}
@@ -177,7 +187,18 @@ export const Home = () => {
               <h2 className="text-xl font-black text-gray-900">Recommended for You</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {recommended.map((item) => (
-                  <FoodCard key={item.id} item={item} />
+                  <FoodCard
+                    key={item.id}
+                    image={item.image}
+                    name={item.name}
+                    description={item.description}
+                    price={item.price}
+                    rating={item.rating}
+                    sold={item.sold}
+                    badge={item.badge}
+                    onView={() => openDetail(item)}
+                    onAdd={() => openDetail(item)}
+                  />
                 ))}
               </div>
             </section>
@@ -195,13 +216,40 @@ export const Home = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {popular.map((item) => (
-                  <FoodCard key={item.id} item={item} />
+                  <FoodCard
+                    key={item.id}
+                    image={item.image}
+                    name={item.name}
+                    description={item.description}
+                    price={item.price}
+                    rating={item.rating}
+                    sold={item.sold}
+                    badge={item.badge}
+                    onView={() => openDetail(item)}
+                    onAdd={() => openDetail(item)}
+                  />
                 ))}
               </div>
             )}
           </section>
         </>
       )}
+
+      <MenuDetailModal
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        menu={selectedMenu}
+        options={options}
+      />
+
+      <CartDrawer
+        open={cartOpen}
+        onClose={() => setCartOpen(false)}
+        onCheckout={() => {
+          setCartOpen(false);
+          navigate("/shop/checkout");
+        }}
+      />
     </div>
   );
 };
