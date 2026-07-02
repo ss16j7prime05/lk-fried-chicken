@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { MapPin, QrCode, Upload } from "lucide-react";
-import { db } from "../../firebase";
+import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { MapPin, Map, Upload } from "lucide-react";
+import { db, storage } from "../../firebase";
 import { useAuth } from "../../AuthContext";
-import { STORE_ID } from "../../config";
+import { STORE_ID, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { generateOrderNo } from "../../orderNoUtils";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
+import PromptPayQR from "../../payment/PromptPayQR.jsx";
+import LocationPicker from "../../location/LocationPicker.jsx";
+import MapButton from "../../location/MapButton.jsx";
+import { calcDeliveryFee, getRoute, haversineKm, reverseGeocode } from "../../location/locationUtils";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
@@ -14,6 +19,27 @@ import { Badge } from "../../components/ui/Badge";
 import { Loading } from "../../components/ui/Loading";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { useCart } from "../../context/CartContext";
+
+// Fallback store coordinates, used only until stores/{STORE_ID} loads (matches the
+// same fallback in src/App.jsx / src/pages/customer/OrderDetail.jsx).
+const FALLBACK_STORE_LAT = 13.8294079;
+const FALLBACK_STORE_LNG = 100.0529543;
+const MAX_RADIUS_KM = 8;
+
+// Mirrors src/App.jsx / MenuDetailModal.jsx's real required-option rules (single
+// source of truth for these Firestore `options` category/name checks) — re-checked
+// here as a defensive guard in case a cart item ever ends up incomplete.
+const RICE_TOPPED_CATEGORY = "ข้าวหน้าไก่ทอด";
+const SPICY_SALAD_NAME = "ข้าวยำไก่แซ่บ";
+
+// Device-local only (localStorage) — not written to Firestore, so this doesn't
+// touch the users/{uid} schema.
+const SAVED_ADDRESS_KEY = "lkfc_saved_address";
+
+const optionLabel = (value) => {
+  if (!value) return "";
+  return typeof value === "object" ? value.name || "" : value;
+};
 
 const SectionTitle = ({ children }) => (
   <h2 className="text-lg font-black text-gray-900 mb-4">{children}</h2>
@@ -33,8 +59,40 @@ const ToggleOption = ({ label, active, onClick }) => (
   </button>
 );
 
+// Reused for both PromptPay and Transfer — file input styled to match Button's
+// "outline" variant, plus an image preview once a slip is selected.
+const SlipUploadField = ({ file, onChange }) => {
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => previewUrl && URL.revokeObjectURL(previewUrl), [previewUrl]);
+
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-bold text-sm border-2 border-gray-100 hover:border-primary text-gray-700 cursor-pointer transition-all">
+        <Upload size={18} />
+        {file ? "Change Payment Slip" : "Upload Payment Slip"}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        />
+      </label>
+      {previewUrl && (
+        <div className="flex items-center gap-3">
+          <img
+            src={previewUrl}
+            alt="Payment slip preview"
+            className="w-20 h-20 rounded-2xl object-cover border border-gray-100"
+          />
+          <p className="text-sm font-bold text-primary">Slip attached — pending verification</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const Checkout = () => {
-  const { cartItems, subtotal, deliveryFee, grandTotal, clearCart } = useCart();
+  const { cartItems, subtotal, clearCart } = useCart();
   const { profile } = useAuth();
   const navigate = useNavigate();
 
@@ -52,34 +110,144 @@ export const Checkout = () => {
   const [address, setAddress] = useState("");
   const [deliveryNote, setDeliveryNote] = useState("");
   const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsLocation, setGpsLocation] = useState(null);
+  const [lat, setLat] = useState(null);
+  const [lng, setLng] = useState(null);
+  const [distanceKm, setDistanceKm] = useState(null);
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [storeLocation, setStoreLocation] = useState({
+    lat: FALLBACK_STORE_LAT,
+    lng: FALLBACK_STORE_LNG,
+    name: "LK Fried Chicken",
+  });
+  const [savedAddress, setSavedAddress] = useState(null);
 
-  const [paymentMethod, setPaymentMethod] = useState("cash"); // 'cash' | 'promptpay'
-  const [slipUploaded, setSlipUploaded] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("cash"); // 'cash' | 'promptpay' | 'transfer'
+  const [slipFile, setSlipFile] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState(null);
   const [submitError, setSubmitError] = useState(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [placedOrder, setPlacedOrder] = useState(null); // { orderId, orderNo } once submitted
 
-  const handleMockGps = () => {
-    setGpsLoading(true);
-    setTimeout(() => {
-      setAddress("123 Sukhumvit Rd, Klongtoey, Bangkok 10110");
-      setGpsLocation({ lat: 13.7367, lng: 100.5232 });
-      setGpsLoading(false);
-    }, 1200);
+  // Real store location, for accurate distance/fee (falls back to the constant
+  // above until this resolves).
+  useEffect(() => {
+    getDoc(doc(db, "stores", STORE_ID)).then((snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.lat != null && data.lng != null) {
+          setStoreLocation({ lat: data.lat, lng: data.lng, name: data.storeName || "LK Fried Chicken" });
+        }
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_ADDRESS_KEY);
+      if (raw) setSavedAddress(JSON.parse(raw));
+    } catch {
+      // ignore malformed/blocked localStorage
+    }
+  }, []);
+
+  const applyLocation = async (latValue, lngValue, knownAddress) => {
+    setLat(latValue);
+    setLng(lngValue);
+    const addr = knownAddress || (await reverseGeocode(latValue, lngValue));
+    setAddress(addr);
+    try {
+      const { distanceKm: km } = await getRoute(storeLocation.lat, storeLocation.lng, latValue, lngValue);
+      setDistanceKm(km);
+      setDeliveryFee(calcDeliveryFee(km));
+    } catch {
+      // Fallback to straight-line distance if road-routing is unavailable.
+      const km = haversineKm(storeLocation.lat, storeLocation.lng, latValue, lngValue);
+      setDistanceKm(km);
+      setDeliveryFee(calcDeliveryFee(km));
+    }
   };
 
-  const handleMockUploadSlip = () => {
-    setSlipUploaded(true);
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setValidationError("Your device doesn't support GPS location.");
+      return;
+    }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        await applyLocation(pos.coords.latitude, pos.coords.longitude);
+        setGpsLoading(false);
+      },
+      () => {
+        setValidationError("Unable to get your location. Please try again or pick it on the map.");
+        setGpsLoading(false);
+      }
+    );
+  };
+
+  const handleConfirmMapLocation = async ({ lat: la, lng: ln, address: addr }) => {
+    await applyLocation(la, ln, addr);
+    setShowMapModal(false);
+  };
+
+  const applySavedAddress = () => {
+    if (!savedAddress) return;
+    if (savedAddress.lat != null && savedAddress.lng != null) {
+      applyLocation(savedAddress.lat, savedAddress.lng, savedAddress.address);
+    } else {
+      setAddress(savedAddress.address || "");
+    }
+  };
+
+  const outOfArea =
+    deliveryMethod === "delivery" && distanceKm != null && distanceKm > MAX_RADIUS_KM;
+
+  const grandTotal = subtotal + (deliveryMethod === "delivery" ? deliveryFee : 0);
+
+  const validate = () => {
+    if (cartItems.length === 0) return "Your cart is empty.";
+
+    for (const item of cartItems) {
+      const needsTopChicken = item.menu?.category === RICE_TOPPED_CATEGORY;
+      if (needsTopChicken && !item.topChicken) {
+        return `"${item.menu?.name}" is missing a required chicken topping.`;
+      }
+      const needsSpicy = item.menu?.name === SPICY_SALAD_NAME;
+      if (needsSpicy && !item.spicy) {
+        return `"${item.menu?.name}" is missing a required spice level.`;
+      }
+    }
+
+    if (!displayName.trim()) return "Please enter your name.";
+    if (!displayPhone.trim()) return "Please enter your phone number.";
+
+    if (deliveryMethod === "delivery") {
+      if (!address.trim()) return "Please enter a delivery address.";
+      if (lat == null || lng == null) {
+        return "Please share your location (GPS or map) so we can calculate delivery.";
+      }
+      if (outOfArea) return `Sorry, this address is outside our ${MAX_RADIUS_KM} km delivery area.`;
+    }
+
+    return null;
   };
 
   const handlePlaceOrder = () => {
-    setSubmitError(null);
+    const err = validate();
+    if (err) {
+      setValidationError(err);
+      return;
+    }
+    setValidationError(null);
     setConfirmOpen(true);
   };
 
   const handleConfirmOrder = async () => {
+    if (submitting) return; // guard against a duplicate submit racing this handler
     setConfirmOpen(false);
     setSubmitting(true);
     setSubmitError(null);
@@ -87,8 +255,17 @@ export const Checkout = () => {
     try {
       const orderNo = await generateOrderNo(db);
       const isDelivery = deliveryMethod === "delivery";
-      const lat = isDelivery ? gpsLocation?.lat ?? null : null;
-      const lng = isDelivery ? gpsLocation?.lng ?? null : null;
+      const orderLat = isDelivery ? lat : null;
+      const orderLng = isDelivery ? lng : null;
+
+      let slipImage = "";
+      let paymentTime = null;
+      if (slipFile && (paymentMethod === "promptpay" || paymentMethod === "transfer")) {
+        const slipRef = ref(storage, `slips/${Date.now()}_${slipFile.name}`);
+        await uploadBytes(slipRef, slipFile);
+        slipImage = await getDownloadURL(slipRef);
+        paymentTime = new Date();
+      }
 
       // Legacy item shape (matches src/App.jsx's addToCart / Store & Rider dashboards):
       // top_chicken/spicy/Sauce/sauce/powder/tableCheese as flat option fields (set by
@@ -111,22 +288,25 @@ export const Checkout = () => {
       }));
 
       // Exact field structure expected by Store Dashboard, Rider Dashboard and Admin
-      // (single source of truth: the order-creation logic in src/App.jsx).
-      await addDoc(collection(db, "orders"), {
+      // (single source of truth: the order-creation logic in src/App.jsx). status
+      // stays "pending" (not a new "new" value) — that's the real initial status
+      // every other surface (Store/Rider/Admin) already filters/normalizes on.
+      const docRef = await addDoc(collection(db, "orders"), {
         orderNo,
         storeId: STORE_ID,
         riderLat: null,
         riderLng: null,
-        slipImage: "",
-        paymentTime: null,
+        slipImage,
+        paymentTime,
         payment: {
           method: paymentMethod,
-          status:
-            paymentMethod === "cash"
-              ? PAYMENT_STATUS.UNPAID
-              : PAYMENT_STATUS.PENDING_VERIFICATION,
-          slipUrl: "",
-          paidAt: null,
+          status: slipImage
+            ? PAYMENT_STATUS.PENDING_VERIFICATION
+            : paymentMethod === "cash"
+            ? PAYMENT_STATUS.UNPAID
+            : PAYMENT_STATUS.PENDING_VERIFICATION,
+          slipUrl: slipImage,
+          paidAt: paymentTime,
           verifiedBy: null,
         },
         customerName: displayName,
@@ -134,27 +314,27 @@ export const Checkout = () => {
         note: deliveryNote,
         address: isDelivery ? address : "",
         deliveryAddress: isDelivery ? address : "",
-        latitude: lat,
-        longitude: lng,
-        lat,
-        lng,
-        gpsLocation: lat != null && lng != null ? `${lat},${lng}` : "",
+        latitude: orderLat,
+        longitude: orderLng,
+        lat: orderLat,
+        lng: orderLng,
+        gpsLocation: orderLat != null && orderLng != null ? `${orderLat},${orderLng}` : "",
         deliveryLocation: {
-          lat,
-          lng,
+          lat: orderLat,
+          lng: orderLng,
           address: isDelivery ? address : "",
         },
-        distanceKm: null,
-        distance: null,
-        deliveryDistance: null,
-        storeLat: null,
-        storeLng: null,
+        distanceKm: isDelivery ? distanceKm : null,
+        distance: isDelivery ? distanceKm : null,
+        deliveryDistance: isDelivery ? distanceKm : null,
+        storeLat: storeLocation.lat,
+        storeLng: storeLocation.lng,
         orderType: deliveryMethod,
         paymentMethod,
         paymentStatus: "pending",
         items: legacyItems,
         subtotal,
-        deliveryFee,
+        deliveryFee: isDelivery ? deliveryFee : 0,
         grandTotal,
         status: "pending",
         riderStatus: "",
@@ -162,11 +342,26 @@ export const Checkout = () => {
         createdAt: serverTimestamp(),
       });
 
+      // Remember this address on this device for next time — localStorage only,
+      // never written to Firestore, so the users/{uid} schema is untouched.
+      if (isDelivery && address.trim()) {
+        try {
+          localStorage.setItem(
+            SAVED_ADDRESS_KEY,
+            JSON.stringify({ address, lat: orderLat, lng: orderLng })
+          );
+        } catch {
+          // ignore blocked/full localStorage
+        }
+      }
+
       clearCart();
-      navigate("/shop/orders");
+      setPlacedOrder({ orderId: docRef.id, orderNo });
     } catch (err) {
       console.error("Failed to place order:", err);
       setSubmitError("Failed to place your order. Please try again.");
+      setErrorDialogOpen(true);
+    } finally {
       setSubmitting(false);
     }
   };
@@ -217,21 +412,67 @@ export const Checkout = () => {
 
         {deliveryMethod === "delivery" && (
           <div className="space-y-4">
+            {savedAddress && (
+              <button
+                type="button"
+                onClick={applySavedAddress}
+                className="w-full text-left p-3 rounded-2xl bg-primary-light border border-primary/20 text-sm font-medium text-gray-700 hover:brightness-95 transition-all"
+              >
+                <span className="font-bold text-primary">Use saved address: </span>
+                {savedAddress.address}
+              </button>
+            )}
+
             <Input
               label="Address"
               placeholder="House no., street, area..."
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleMockGps}
-              disabled={gpsLoading}
-            >
-              <MapPin size={18} />
-              {gpsLoading ? "Locating..." : "Use My Current Location"}
-            </Button>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={useMyLocation}
+                disabled={gpsLoading}
+              >
+                <MapPin size={18} />
+                {gpsLoading ? "Locating..." : "Use My Current Location"}
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowMapModal(true)}>
+                <Map size={18} />
+                Choose on Map
+              </Button>
+            </div>
+
+            {lat != null && lng != null && (
+              <div className="rounded-2xl bg-gray-50 p-4 space-y-2">
+                <div className="flex justify-between text-sm font-medium text-gray-500">
+                  <span>Distance</span>
+                  <span>{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-"}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium text-gray-500">
+                  <span>Delivery Fee</span>
+                  <span>฿{deliveryFee}</span>
+                </div>
+                <MapButton
+                  lat={lat}
+                  lng={lng}
+                  address={address}
+                  mode="view"
+                  label="View on Google Maps"
+                  style={{ width: "100%", textAlign: "center", display: "block", marginTop: "4px" }}
+                />
+              </div>
+            )}
+
+            {outOfArea && (
+              <p className="text-sm font-bold text-secondary">
+                Sorry, this address is outside our {MAX_RADIUS_KM} km delivery area.
+              </p>
+            )}
+
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                 Delivery Note
@@ -262,27 +503,28 @@ export const Checkout = () => {
             active={paymentMethod === "promptpay"}
             onClick={() => setPaymentMethod("promptpay")}
           />
+          <ToggleOption
+            label="Transfer"
+            active={paymentMethod === "transfer"}
+            onClick={() => setPaymentMethod("transfer")}
+          />
         </div>
 
         {paymentMethod === "promptpay" && (
           <div className="space-y-4">
-            <div className="aspect-square max-w-[220px] mx-auto bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center gap-2 text-gray-400">
-              <QrCode size={48} />
-              <span className="text-xs font-bold">QR Code Placeholder</span>
+            <PromptPayQR amount={grandTotal} />
+            <SlipUploadField file={slipFile} onChange={setSlipFile} />
+          </div>
+        )}
+
+        {paymentMethod === "transfer" && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm text-gray-600">
+              Please transfer the total amount to{" "}
+              <span className="font-bold text-gray-900">{PROMPTPAY_ACCOUNT_NAME}</span>, then
+              upload your payment slip below.
             </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleMockUploadSlip}
-            >
-              <Upload size={18} />
-              {slipUploaded ? "Slip Uploaded ✓" : "Upload Payment Slip"}
-            </Button>
-            {slipUploaded && (
-              <p className="text-center text-sm font-bold text-primary">
-                Slip received — pending verification
-              </p>
-            )}
+            <SlipUploadField file={slipFile} onChange={setSlipFile} />
           </div>
         )}
       </Card>
@@ -291,22 +533,43 @@ export const Checkout = () => {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <SectionTitle>Order Summary</SectionTitle>
-          <Badge color={paymentMethod === "cash" ? "green" : "blue"}>
-            {paymentMethod === "cash" ? "Cash" : "PromptPay"}
+          <Badge color={paymentMethod === "cash" ? "green" : paymentMethod === "promptpay" ? "blue" : "orange"}>
+            {paymentMethod === "cash" ? "Cash" : paymentMethod === "promptpay" ? "PromptPay" : "Transfer"}
           </Badge>
         </div>
         <div className="space-y-3">
           {cartItems.length === 0 ? (
             <p className="text-sm text-gray-400 font-medium">Your cart is empty.</p>
           ) : (
-            cartItems.map((item) => (
-              <div key={item.id} className="flex justify-between text-sm">
-                <span className="text-gray-600 font-medium">
-                  {item.quantity}x {item.menu?.name}
-                </span>
-                <span className="font-bold text-gray-900">฿{item.totalPrice}</span>
-              </div>
-            ))
+            cartItems.map((item) => {
+              const options = [
+                item.topChicken,
+                item.spicy,
+                optionLabel(item.sauceMain),
+                optionLabel(item.sauceExtra),
+                optionLabel(item.powder),
+                optionLabel(item.tableCheese),
+              ].filter(Boolean);
+
+              return (
+                <div key={item.id} className="flex justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="text-gray-700 font-medium">
+                      {item.quantity}x {item.menu?.name}
+                    </p>
+                    {options.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-0.5">{options.join(" • ")}</p>
+                    )}
+                    {item.note && (
+                      <p className="text-xs text-gray-400 mt-0.5">Note: {item.note}</p>
+                    )}
+                  </div>
+                  <span className="font-bold text-gray-900 whitespace-nowrap">
+                    ฿{item.totalPrice}
+                  </span>
+                </div>
+              );
+            })
           )}
         </div>
 
@@ -315,10 +578,12 @@ export const Checkout = () => {
             <span>Subtotal</span>
             <span>฿{subtotal}</span>
           </div>
-          <div className="flex justify-between text-sm font-medium text-gray-500">
-            <span>Delivery Fee</span>
-            <span>฿{deliveryFee}</span>
-          </div>
+          {deliveryMethod === "delivery" && (
+            <div className="flex justify-between text-sm font-medium text-gray-500">
+              <span>Delivery Fee</span>
+              <span>฿{deliveryFee}</span>
+            </div>
+          )}
           <div className="flex justify-between text-lg font-black text-gray-900 pt-2 border-t border-gray-100">
             <span>Grand Total</span>
             <span className="text-primary">฿{grandTotal}</span>
@@ -329,9 +594,9 @@ export const Checkout = () => {
       {/* Fixed bottom Place Order button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 sm:p-6 z-30">
         <div className="max-w-2xl mx-auto">
-          {submitError && (
+          {validationError && (
             <p className="text-center text-sm font-bold text-secondary mb-3">
-              {submitError}
+              {validationError}
             </p>
           )}
           <div className="flex items-center justify-between gap-4">
@@ -346,6 +611,14 @@ export const Checkout = () => {
         </div>
       </div>
 
+      <LocationPicker
+        isOpen={showMapModal}
+        storeLocation={storeLocation}
+        initialPosition={lat != null && lng != null ? { lat, lng } : null}
+        onConfirm={handleConfirmMapLocation}
+        onClose={() => setShowMapModal(false)}
+      />
+
       <ConfirmDialog
         open={confirmOpen}
         title="Confirm Order"
@@ -354,6 +627,29 @@ export const Checkout = () => {
         cancelText="Cancel"
         onConfirm={handleConfirmOrder}
         onCancel={() => setConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={!!placedOrder}
+        title="Order Placed! 🎉"
+        message={`Your order ${placedOrder?.orderNo ?? ""} has been received and is being prepared.`}
+        confirmText="View My Orders"
+        cancelText="Continue Shopping"
+        onConfirm={() => navigate(`/shop/orders/${placedOrder.orderId}`)}
+        onCancel={() => navigate("/")}
+      />
+
+      <ConfirmDialog
+        open={errorDialogOpen}
+        title="Something Went Wrong"
+        message={submitError || "Failed to place your order. Please try again."}
+        confirmText="Try Again"
+        cancelText="Close"
+        onConfirm={() => {
+          setErrorDialogOpen(false);
+          setConfirmOpen(true);
+        }}
+        onCancel={() => setErrorDialogOpen(false)}
       />
     </div>
   );
