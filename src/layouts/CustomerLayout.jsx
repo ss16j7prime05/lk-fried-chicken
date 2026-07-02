@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingBag, User, Bell, CreditCard, Star } from 'lucide-react';
+import { Home, ShoppingBag, User, Bell, CreditCard, Star, Settings as SettingsIcon } from 'lucide-react';
 
 export const CustomerLayout = () => {
   const { pathname } = useLocation();
@@ -10,6 +10,7 @@ export const CustomerLayout = () => {
     { icon: Bell, label: 'Notifications', path: '/shop/notifications' },
     { icon: Star, label: 'Reviews', path: '/shop/reviews' },
     { icon: User, label: 'Profile', path: '/shop/profile' },
+    { icon: SettingsIcon, label: 'Settings', path: '/shop/settings' },
   ];
 
   const isActive = (path) =>
