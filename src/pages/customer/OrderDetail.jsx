@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
-import { Phone, MapPin, Navigation, RotateCcw, Check } from "lucide-react";
+import { Phone, MapPin, Navigation, RotateCcw, Check, Bike } from "lucide-react";
 import { db } from "../../firebase";
 import { STORE_ID, STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
@@ -12,6 +12,7 @@ import { Button } from "../../components/ui/Button";
 import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
 import TrackingPanel from "../../tracking/TrackingPanel.jsx";
+import MapButton from "../../location/MapButton.jsx";
 
 // Fallback store coordinates, used only until stores/{STORE_ID} loads (matches the
 // same fallback in src/App.jsx / src/TrackOrder.jsx).
@@ -24,35 +25,37 @@ const TRACKABLE_STATUSES = ["ready_for_delivery", "picked_up", "delivering"];
 
 // Status enum + timeline mirror src/store/orderStatus.js (single source of truth,
 // shared with Store/Rider/Admin dashboards) — DO NOT invent new status values here.
+// Cancelled is handled as a separate terminal state below (isCancelled), not a
+// linear step after Completed — an order can't be both.
 const TIMELINE_STEPS = [
-  { status: "pending", label: "Order Placed" },
+  { status: "pending", label: "Pending" },
   { status: "accepted", label: "Accepted" },
-  { status: "cooking", label: "Preparing" },
-  { status: "ready_for_delivery", label: "Ready for Pickup" },
-  { status: "picked_up", label: "Rider Picked Up" },
-  { status: "delivering", label: "On The Way" },
-  { status: "completed", label: "Delivered" },
+  { status: "cooking", label: "Cooking" },
+  { status: "ready_for_delivery", label: "Ready" },
+  { status: "picked_up", label: "Rider Assigned" },
+  { status: "delivering", label: "Delivering" },
+  { status: "completed", label: "Completed" },
 ];
 
 const STATUS_LABELS = {
   pending: "Pending",
   accepted: "Accepted",
-  cooking: "Preparing",
-  ready_for_delivery: "Ready for Pickup",
-  picked_up: "Rider Picked Up",
-  delivering: "On The Way",
-  completed: "Delivered",
+  cooking: "Cooking",
+  ready_for_delivery: "Ready",
+  picked_up: "Rider Assigned",
+  delivering: "Delivering",
+  completed: "Completed",
   cancelled: "Cancelled",
 };
 
 const STATUS_BADGE_COLOR = {
   Pending: "orange",
   Accepted: "blue",
-  Preparing: "blue",
-  "Ready for Pickup": "blue",
-  "Rider Picked Up": "blue",
-  "On The Way": "blue",
-  Delivered: "green",
+  Cooking: "blue",
+  Ready: "blue",
+  "Rider Assigned": "blue",
+  Delivering: "blue",
+  Completed: "green",
   Cancelled: "orange",
 };
 
@@ -86,6 +89,15 @@ const formatDateTime = (timestamp) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+// order.estimatedFinishTime is a real field already written by the Store dashboard
+// (src/pages/store/Orders.jsx) when it sets a cook-time estimate — same field, just
+// not previously surfaced on the customer side.
+const formatTime = (timestamp) => {
+  const d = timestamp?.toDate ? timestamp.toDate() : timestamp ? new Date(timestamp) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 };
 
 // gpsLocation is stored as a "lat,lng" string (legacy format), not an object.
@@ -226,6 +238,9 @@ export const OrderDetail = () => {
   const resolvedStoreLocation =
     storeLocation ?? { lat: FALLBACK_STORE_LAT, lng: FALLBACK_STORE_LNG, name: "Store" };
 
+  const hasRider = Boolean(order.riderId);
+  const cookingEta = normalizedStatus === "cooking" ? formatTime(order.estimatedFinishTime) : null;
+
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6 pb-32">
       {/* Header */}
@@ -325,6 +340,11 @@ export const OrderDetail = () => {
           <p className="text-sm font-bold text-secondary">This order was cancelled.</p>
         ) : (
           <div className="space-y-0">
+            {cookingEta && (
+              <div className="mb-4 rounded-2xl bg-primary-light px-4 py-3 text-sm font-bold text-primary">
+                Estimated ready by {cookingEta}
+              </div>
+            )}
             {TIMELINE_STEPS.map((step, index) => {
               const isDone = index <= currentStepIndex;
               const isLast = index === TIMELINE_STEPS.length - 1;
@@ -360,6 +380,48 @@ export const OrderDetail = () => {
         )}
       </Card>
 
+      {/* Rider — shown once a rider has accepted this delivery */}
+      {hasRider && (
+        <Card className="p-6">
+          <SectionTitle>Rider</SectionTitle>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-primary-light flex items-center justify-center shrink-0">
+              <Bike size={22} className="text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-gray-900">{order.riderName || "Rider"}</p>
+              <p className="text-sm text-gray-400 font-medium">{order.riderPhone || "-"}</p>
+              <p className="text-xs text-gray-400 font-medium mt-0.5">
+                Vehicle: {order.riderVehicle || "—"}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 mt-4">
+            {order.riderPhone && (
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  window.location.href = `tel:${order.riderPhone}`;
+                }}
+              >
+                <Phone size={18} />
+                Call Rider
+              </Button>
+            )}
+            {riderLocation && (
+              <MapButton
+                lat={riderLocation.lat}
+                lng={riderLocation.lng}
+                mode="view"
+                label="View Rider on Google Maps"
+                style={{ flex: 1, textAlign: "center", display: "block" }}
+              />
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Live Tracking — real-time rider location, shown once the order is out for delivery */}
       {isTrackable && (
         <div ref={trackingRef}>
@@ -385,7 +447,13 @@ export const OrderDetail = () => {
       {/* Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 sm:p-6 z-30">
         <div className="max-w-3xl mx-auto flex gap-3">
-          <Button variant="outline" className="flex-1">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => {
+              window.location.href = `tel:${STORE_PHONE}`;
+            }}
+          >
             <Phone size={18} />
             Contact Store
           </Button>
