@@ -47,6 +47,7 @@ const CustomerProfile = lazy(() => import('./pages/customer/Profile.jsx').then((
 const CustomerNotifications = lazy(() => import('./pages/customer/Notifications.jsx').then((m) => ({ default: m.Notifications })))
 const CustomerReviews = lazy(() => import('./pages/customer/Reviews.jsx').then((m) => ({ default: m.Reviews })))
 const CustomerSettings = lazy(() => import('./pages/customer/Settings.jsx').then((m) => ({ default: m.Settings })))
+const CustomerHelpCenter = lazy(() => import('./pages/customer/HelpCenter.jsx').then((m) => ({ default: m.HelpCenter })))
 
 const PageLoading = () => (
   <div style={{ minHeight: '100vh', background: '#121212', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
@@ -138,6 +139,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/shop/notifications" element={<CustomerNotifications />} />
             <Route path="/shop/reviews" element={<CustomerReviews />} />
             <Route path="/shop/settings" element={<CustomerSettings />} />
+            <Route path="/shop/help" element={<CustomerHelpCenter />} />
           </Route>
         </Routes>
         </Suspense>
