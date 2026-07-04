@@ -10,12 +10,39 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { Camera, MessageCircle, Send, X } from "lucide-react";
 
 const formatTime = (createdAt) => {
   if (!createdAt) return "";
   const d = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
   return d.toLocaleString("th-TH");
 };
+
+const SENDER_LABEL = { rider: "ไรเดอร์", customer: "ลูกค้า" };
+
+// ข้อความแชท 1 ฟอง: ของตัวเองชิดขวาสีส้ม ของอีกฝั่งชิดซ้ายสีเทา
+const MessageBubble = ({ message, mine }) => (
+  <div
+    className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+      mine ? "self-end bg-primary text-white" : "self-start bg-gray-100 text-gray-800"
+    }`}
+  >
+    <p className={`text-[11px] font-bold ${mine ? "text-white/70" : "text-gray-400"}`}>
+      {SENDER_LABEL[message.sender] || message.sender}
+    </p>
+    {message.image && (
+      <img
+        src={message.image}
+        alt="แนบรูป"
+        className="max-w-[180px] rounded-xl mt-1 block"
+      />
+    )}
+    {message.message && <p className="mt-0.5 break-words">{message.message}</p>}
+    <p className={`text-[10px] mt-0.5 ${mine ? "text-white/60" : "text-gray-400"}`}>
+      {formatTime(message.createdAt)}
+    </p>
+  </div>
+);
 
 // แชทแบบ Realtime ระหว่างลูกค้า ↔ ไรเดอร์ ผูกกับ orderId
 function Chat({ orderId, sender }) {
@@ -24,6 +51,7 @@ function Chat({ orderId, sender }) {
   const [preview, setPreview] = useState(null);
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -43,6 +71,9 @@ function Chat({ orderId, sender }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // เคลียร์ object URL ของรูปพรีวิวเมื่อเปลี่ยนรูป/unmount กัน memory leak
+  useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview]);
+
   const handleFile = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -50,9 +81,15 @@ function Chat({ orderId, sender }) {
     setPreview(URL.createObjectURL(f));
   };
 
+  const clearAttachment = () => {
+    setFile(null);
+    setPreview(null);
+  };
+
   const sendMessage = async () => {
     if (!text.trim() && !file) return;
     setSending(true);
+    setSendError(null);
     try {
       let imageUrl = "";
       if (file) {
@@ -71,104 +108,60 @@ function Chat({ orderId, sender }) {
         createdAt: serverTimestamp(),
       });
       setText("");
-      setFile(null);
-      setPreview(null);
+      clearAttachment();
     } catch (err) {
       console.error(err);
-      alert("ส่งข้อความไม่สำเร็จ");
+      setSendError("ส่งข้อความไม่สำเร็จ กรุณาลองใหม่");
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <div
-      style={{
-        background: "#161616",
-        borderRadius: "16px",
-        padding: "12px",
-        marginTop: "12px",
-      }}
-    >
-      <div style={{ fontWeight: "bold", marginBottom: "8px" }}>💬 แชท</div>
+    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-3 mt-3">
+      <p className="flex items-center gap-1.5 text-sm font-black text-gray-800 mb-2">
+        <MessageCircle size={15} className="text-primary" />
+        แชท
+      </p>
 
-      <div
-        style={{
-          maxHeight: "240px",
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-          marginBottom: "10px",
-        }}
-      >
+      {/* message list */}
+      <div className="max-h-60 overflow-y-auto flex flex-col gap-2 mb-2.5">
         {messages.length === 0 && (
-          <div style={{ color: "#777", fontSize: "13px" }}>
-            ยังไม่มีข้อความ
-          </div>
+          <p className="text-xs text-gray-400 font-medium">ยังไม่มีข้อความ</p>
         )}
-        {messages.map((m) => {
-          const mine = m.sender === sender;
-          return (
-            <div
-              key={m.id}
-              style={{
-                alignSelf: mine ? "flex-end" : "flex-start",
-                maxWidth: "80%",
-                background: mine ? "#ff8c00" : "#2a2a2a",
-                color: mine ? "#000" : "#fff",
-                borderRadius: "14px",
-                padding: "8px 12px",
-              }}
-            >
-              <div style={{ fontSize: "11px", opacity: 0.7 }}>{m.sender}</div>
-              {m.image && (
-                <img
-                  src={m.image}
-                  alt="แนบรูป"
-                  style={{
-                    maxWidth: "180px",
-                    borderRadius: "10px",
-                    marginTop: "4px",
-                    display: "block",
-                  }}
-                />
-              )}
-              {m.message && <div>{m.message}</div>}
-              <div style={{ fontSize: "10px", opacity: 0.6, marginTop: "2px" }}>
-                {formatTime(m.createdAt)}
-              </div>
-            </div>
-          );
-        })}
+        {messages.map((m) => (
+          <MessageBubble key={m.id} message={m} mine={m.sender === sender} />
+        ))}
         <div ref={bottomRef} />
       </div>
 
+      {/* attachment preview */}
       {preview && (
-        <div style={{ marginBottom: "8px" }}>
-          <img
-            src={preview}
-            alt="พรีวิว"
-            style={{ maxWidth: "120px", borderRadius: "10px" }}
-          />
+        <div className="relative inline-block mb-2">
+          <img src={preview} alt="พรีวิว" className="max-w-[120px] rounded-xl" />
+          <button
+            type="button"
+            onClick={clearAttachment}
+            aria-label="ลบรูปที่แนบ"
+            className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center bg-gray-800 text-white rounded-full"
+          >
+            <X size={13} />
+          </button>
         </div>
       )}
 
-      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      {sendError && (
+        <p className="text-xs font-bold text-secondary mb-2">{sendError}</p>
+      )}
+
+      {/* composer */}
+      <div className="flex items-center gap-2">
         <label
-          style={{
-            cursor: "pointer",
-            fontSize: "22px",
-            flexShrink: 0,
-          }}
+          className="shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-100 text-gray-500 hover:text-primary hover:border-primary cursor-pointer transition-colors"
+          aria-label="แนบรูป"
         >
-          📷
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFile}
-            style={{ display: "none" }}
-          />
+          <Camera size={18} />
+          <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
         </label>
         <input
           type="text"
@@ -176,29 +169,18 @@ function Chat({ orderId, sender }) {
           placeholder="พิมพ์ข้อความ..."
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          style={{
-            flex: 1,
-            padding: "10px",
-            borderRadius: "20px",
-            border: "none",
-            background: "#2a2a2a",
-            color: "#fff",
-          }}
+          className="flex-1 min-w-0 h-10 px-4 rounded-full bg-white border border-gray-100 text-sm text-gray-800 outline-none focus:border-primary transition-colors"
         />
         <button
+          type="button"
           onClick={sendMessage}
           disabled={sending}
-          style={{
-            padding: "10px 16px",
-            borderRadius: "20px",
-            border: "none",
-            background: "#ff8c00",
-            color: "#fff",
-            fontWeight: "bold",
-            cursor: sending ? "not-allowed" : "pointer",
-          }}
+          aria-label="ส่งข้อความ"
+          className={`shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-primary text-white transition-all ${
+            sending ? "opacity-50 cursor-not-allowed" : "hover:bg-primary-dark"
+          }`}
         >
-          ส่ง
+          <Send size={16} />
         </button>
       </div>
     </div>
