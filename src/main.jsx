@@ -27,6 +27,7 @@ const RiderProfile = lazy(() => import('./RiderProfile.jsx'))
 const RiderOrdersDashboard = lazy(() => import('./rider/RiderOrdersDashboard.jsx'))
 const RiderSettings = lazy(() => import('./rider/RiderSettings.jsx'))
 const RiderOrderHistory = lazy(() => import('./rider/RiderOrderHistory.jsx'))
+const RiderEarnings = lazy(() => import('./rider/RiderEarnings.jsx'))
 
 // Admin — production UI
 const AdminControlCenter = lazy(() => import('./admin/AdminControlCenter.jsx'))
@@ -119,6 +120,14 @@ createRoot(document.getElementById('root')).render(
             element={
               <ProtectedRoute role="rider" loginPath="/login">
                 <RiderOrderHistory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/rider/earnings"
+            element={
+              <ProtectedRoute role="rider" loginPath="/login">
+                <RiderEarnings />
               </ProtectedRoute>
             }
           />
