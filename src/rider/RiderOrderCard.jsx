@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { Phone, MapPin, User, Package, Bike } from "lucide-react";
+import { Bike, CreditCard, MapPin, Package, Phone, User } from "lucide-react";
 import { db } from "../firebase";
 import Chat from "../Chat.jsx";
 import DeliveryMap from "../location/DeliveryMap.jsx";
@@ -26,6 +26,8 @@ const STATUS_BADGE_COLOR = {
   [DELIVERED_STATUS]: "green",
 };
 
+const PAYMENT_LABEL = { cash: "Cash", promptpay: "PromptPay", transfer: "Transfer" };
+
 const optionLabel = (value) => {
   if (!value) return "";
   if (typeof value === "object") return value.name || "";
@@ -38,14 +40,21 @@ const formatDate = (createdAt) => {
   return d.toLocaleString("th-TH");
 };
 
-// การ์ดออเดอร์เดียวสำหรับ Rider Dashboard: ข้อมูลลูกค้า + แผนที่/ระยะทาง/เวลา + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
-export default function RiderOrderCard({ order, effectiveStatus, storeLocation, onAccept, onStartDelivering, onDelivered }) {
-  const [showMap, setShowMap] = useState(false);
-  const [route, setRoute] = useState(null);
+// จุดส่งของออเดอร์ รองรับทั้ง schema ใหม่ (deliveryLocation) และฟิลด์เดิม
+const getDestination = (order) => ({
+  lat: order.deliveryLocation?.lat ?? order.lat ?? order.latitude,
+  lng: order.deliveryLocation?.lng ?? order.lng ?? order.longitude,
+  address: order.deliveryLocation?.address || order.deliveryAddress || order.address,
+});
 
-  const dLat = order.deliveryLocation?.lat ?? order.lat ?? order.latitude;
-  const dLng = order.deliveryLocation?.lng ?? order.lng ?? order.longitude;
-  const dAddress = order.deliveryLocation?.address || order.deliveryAddress || order.address;
+const itemOptions = (item) =>
+  [item.top_chicken, item.spicy, item.Sauce, item.sauce, item.powder, item.tableCheese]
+    .map(optionLabel)
+    .filter(Boolean);
+
+// ระยะทาง + เวลาเดินทางจากร้าน -> จุดส่ง (OSRM, fallback เป็นเส้นตรงถ้า routing ล่ม)
+function useStoreRoute(storeLocation, dLat, dLng) {
+  const [route, setRoute] = useState(null);
 
   useEffect(() => {
     if (dLat == null || dLng == null || !storeLocation) return;
@@ -64,8 +73,12 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
     };
   }, [dLat, dLng, storeLocation]);
 
-  // อัปเดตตำแหน่ง GPS ของไรเดอร์ทุก 5 วินาที เฉพาะตอนสถานะ "delivering" และเป็นไรเดอร์ที่รับงานนี้เท่านั้น
-  // (ความปลอดภัย: Firestore rule อนุญาตแก้ไข order นี้เฉพาะ riderId == auth.uid)
+  return route;
+}
+
+// อัปเดตตำแหน่ง GPS ของไรเดอร์ทุก 5 วินาที เฉพาะตอนสถานะ "delivering" และเป็นไรเดอร์ที่รับงานนี้เท่านั้น
+// (ความปลอดภัย: Firestore rule อนุญาตแก้ไข order นี้เฉพาะ riderId == auth.uid)
+function useRiderGpsBroadcast(effectiveStatus, orderId, dLat, dLng) {
   useEffect(() => {
     if (effectiveStatus !== DELIVERING_STATUS) return;
     if (!navigator.geolocation) return;
@@ -87,7 +100,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
             remainingDistance = haversineKm(latitude, longitude, dLat, dLng);
           }
           if (cancelled) return;
-          await updateDoc(doc(db, "orders", order.id), {
+          await updateDoc(doc(db, "orders", orderId), {
             riderLocation: {
               lat: latitude,
               lng: longitude,
@@ -110,15 +123,102 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
       cancelled = true;
       clearInterval(interval);
     };
-  }, [effectiveStatus, order.id, dLat, dLng]);
+  }, [effectiveStatus, orderId, dLat, dLng]);
+}
+
+/* ── presentational sections ── */
+
+const InfoRow = ({ icon: Icon, children, top = false }) => (
+  <p className={`flex ${top ? "items-start" : "items-center"} gap-1.5 text-sm text-gray-700 font-medium`}>
+    <Icon size={14} className={`text-gray-400 shrink-0 ${top ? "mt-0.5" : ""}`} />
+    <span className="min-w-0">{children}</span>
+  </p>
+);
+
+const CustomerSection = ({ order, address }) => (
+  <div className="space-y-1.5 mb-3">
+    <InfoRow icon={User}>{order.customerName || "-"}</InfoRow>
+    <InfoRow icon={Phone}>{order.phone || "-"}</InfoRow>
+    <InfoRow icon={MapPin} top>
+      <span className="text-gray-500">{address || "-"}</span>
+    </InfoRow>
+    <InfoRow icon={CreditCard}>
+      <span className="text-gray-500">
+        {PAYMENT_LABEL[order.paymentMethod] || order.paymentMethod || "-"}
+      </span>
+    </InfoRow>
+    {order.note && (
+      <p className="text-xs text-gray-500 bg-yellow-50 border border-yellow-100 rounded-xl px-3 py-2">
+        Note: {order.note}
+      </p>
+    )}
+  </div>
+);
+
+const ItemsSection = ({ items }) => (
+  <div className="mb-3 divide-y divide-gray-50">
+    {(items || []).map((item, index) => {
+      const options = itemOptions(item);
+      return (
+        <div key={index} className="flex justify-between gap-2 py-2 text-xs">
+          <div className="min-w-0">
+            <p className="text-gray-700 font-medium">
+              {item.qty || 1}x {item.name}
+            </p>
+            {options.length > 0 && (
+              <p className="text-gray-400 mt-0.5">{options.join(" • ")}</p>
+            )}
+            {item.note && <p className="text-gray-400 mt-0.5">Note: {item.note}</p>}
+          </div>
+          <span className="text-gray-500 whitespace-nowrap">
+            ฿{(item.price || 0) * (item.qty || 1)}
+          </span>
+        </div>
+      );
+    })}
+  </div>
+);
+
+const TotalsSection = ({ order }) => (
+  <div className="rounded-2xl bg-gray-50 p-3 space-y-1 mb-3 text-sm">
+    {order.subtotal != null && (
+      <div className="flex justify-between text-gray-500 font-medium">
+        <span>Subtotal</span>
+        <span>฿{order.subtotal}</span>
+      </div>
+    )}
+    {order.deliveryFee != null && (
+      <div className="flex justify-between text-gray-500 font-medium">
+        <span>Delivery Fee</span>
+        <span>฿{order.deliveryFee}</span>
+      </div>
+    )}
+    <div className="flex justify-between font-black text-gray-900">
+      <span>Total</span>
+      <span className="text-primary text-lg">฿{order.grandTotal ?? order.subtotal ?? 0}</span>
+    </div>
+  </div>
+);
+
+// การ์ดรายละเอียดออเดอร์ของไรเดอร์: ข้อมูลลูกค้า + รายการอาหาร + แผนที่/ระยะทาง + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
+export default function RiderOrderCard({ order, effectiveStatus, storeLocation, onAccept, onStartDelivering, onDelivered }) {
+  const [showMap, setShowMap] = useState(false);
+  // optimistic เฉพาะหลังกดปุ่ม ระหว่างรอ nearPressed จริงจาก snapshot ของออเดอร์
+  const [nearPressedLocally, setNearPressedLocally] = useState(false);
+  const nearNotified = nearPressedLocally || Boolean(order.nearPressed);
+
+  const { lat: dLat, lng: dLng, address: dAddress } = getDestination(order);
+  const route = useStoreRoute(storeLocation, dLat, dLng);
+  useRiderGpsBroadcast(effectiveStatus, order.id, dLat, dLng);
 
   const markNear = async () => {
     await updateDoc(doc(db, "orders", order.id), { nearPressed: true });
-    alert("แจ้งลูกค้าว่าใกล้ถึงแล้ว");
+    setNearPressedLocally(true);
   };
 
   return (
     <Card className="p-5">
+      {/* header: order no. + created time + status */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <p className="font-black text-gray-900">{order.orderNo || order.id}</p>
@@ -129,36 +229,9 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         </Badge>
       </div>
 
-      <div className="space-y-1.5 text-sm mb-3">
-        <p className="flex items-center gap-1.5 text-gray-700 font-medium">
-          <User size={14} className="text-gray-400" />
-          {order.customerName || "-"}
-        </p>
-        <p className="flex items-center gap-1.5 text-gray-700 font-medium">
-          <Phone size={14} className="text-gray-400" />
-          {order.phone || "-"}
-        </p>
-        <p className="flex items-start gap-1.5 text-gray-500">
-          <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
-          {order.deliveryAddress || order.address || "-"}
-        </p>
-        <p className="text-gray-500">
-          <span className="font-bold text-gray-700">Payment:</span> {order.paymentMethod || "-"}
-        </p>
-      </div>
-
-      <div className="space-y-1 mb-3">
-        {(order.items || []).map((item, index) => (
-          <p key={index} className="text-xs text-gray-500 border-t border-gray-50 pt-2 mt-2">
-            {item.name} ×{item.qty || 1}
-            {optionLabel(item.top_chicken) ? ` (${optionLabel(item.top_chicken)})` : ""}
-          </p>
-        ))}
-      </div>
-
-      <p className="font-black text-lg text-primary mb-3">
-        ฿{order.grandTotal ?? order.subtotal ?? 0}
-      </p>
+      <CustomerSection order={order} address={dAddress} />
+      <ItemsSection items={order.items} />
+      <TotalsSection order={order} />
 
       {route && (
         <p className="text-xs text-gray-400 font-medium mb-3">
@@ -167,6 +240,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         </p>
       )}
 
+      {/* navigate + call */}
       <div className="flex flex-wrap gap-2 mb-2">
         <MapButton lat={dLat} lng={dLng} mode="navigate" style={{ flex: 1, minWidth: "130px" }} />
         <Button
@@ -180,6 +254,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         </Button>
       </div>
 
+      {/* inline customer map */}
       {dLat != null && dLng != null && (
         <Button variant="outline" className="w-full !py-2 text-sm mb-2" onClick={() => setShowMap((v) => !v)}>
           <MapPin size={16} />
@@ -192,6 +267,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         </div>
       )}
 
+      {/* status actions: ready -> [Accept] -> picked_up -> [Start Delivering] -> delivering -> [Delivered] */}
       <div className="flex flex-wrap gap-2">
         {effectiveStatus === READY_STATUS && (
           <Button className="flex-1" onClick={() => onAccept(order.id)}>
@@ -207,9 +283,9 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         )}
         {effectiveStatus === DELIVERING_STATUS && (
           <>
-            <Button variant="outline" className="flex-1" onClick={markNear}>
+            <Button variant="outline" className="flex-1" onClick={markNear} disabled={nearNotified}>
               <MapPin size={16} />
-              I'm Near
+              {nearNotified ? "Customer Notified" : "I'm Near"}
             </Button>
             <Button className="flex-1" onClick={() => onDelivered(order.id)}>
               Delivered
