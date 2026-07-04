@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { db, auth } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { Package, LogOut, User, Phone, Bike, CalendarCheck, Star, MessageSquare } from "lucide-react";
+import { Package, LogOut, User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail } from "lucide-react";
 import { useAuth } from "./AuthContext.jsx";
 import { Card } from "./components/ui/Card";
 import { Button } from "./components/ui/Button";
+import { Badge } from "./components/ui/Badge";
+import { Loading } from "./components/ui/Loading";
 
 const toDate = (createdAt) => {
   if (!createdAt) return null;
@@ -46,6 +48,8 @@ function RiderProfile() {
   const { profile, logout } = useAuth();
   const [orders, setOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
+  // ไม่มี uid (ปกติไม่เกิด เพราะผ่าน ProtectedRoute มาแล้ว) = ไม่มีอะไรให้โหลด
+  const [loading, setLoading] = useState(() => Boolean(auth.currentUser?.uid));
 
   useEffect(() => {
     const uid = auth.currentUser?.uid;
@@ -53,6 +57,7 @@ function RiderProfile() {
     const q = query(collection(db, "orders"), where("riderId", "==", uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setLoading(false);
     });
     const rq = query(collection(db, "reviews"), where("riderId", "==", uid));
     const unsubRev = onSnapshot(rq, (snapshot) => {
@@ -73,6 +78,12 @@ function RiderProfile() {
     reviewCount > 0
       ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviewCount).toFixed(1)
       : "-";
+
+  const displayName = profile?.name || profile?.riderName || "-";
+
+  if (loading) {
+    return <Loading text="Loading profile..." />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,12 +110,13 @@ function RiderProfile() {
 
         <Card className="p-6 flex items-center gap-5">
           <div className="w-16 h-16 rounded-full bg-primary-light text-primary flex items-center justify-center text-2xl font-black ring-4 ring-primary-light shrink-0">
-            {(profile?.name || profile?.riderName || "?").charAt(0).toUpperCase()}
+            {displayName.charAt(0).toUpperCase()}
           </div>
-          <div className="min-w-0">
-            <h2 className="text-xl font-black text-gray-900 truncate">
-              {profile?.name || profile?.riderName || "-"}
-            </h2>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl font-black text-gray-900 truncate">{displayName}</h2>
+              {profile?.status === "approved" && <Badge color="green">Approved</Badge>}
+            </div>
             <p className="text-sm text-gray-500 font-medium mt-1">{profile?.phone || "-"}</p>
           </div>
         </Card>
@@ -117,8 +129,9 @@ function RiderProfile() {
         </div>
 
         <Card className="p-6">
-          <InfoRow icon={User} label="Name" value={profile?.name || profile?.riderName || "-"} />
+          <InfoRow icon={User} label="Name" value={displayName} />
           <InfoRow icon={Phone} label="Phone" value={profile?.phone || "-"} />
+          <InfoRow icon={Mail} label="Email" value={profile?.email || "-"} />
           <InfoRow icon={Bike} label="Vehicle" value={vehicleLabel(profile?.vehicleType)} />
         </Card>
       </div>
