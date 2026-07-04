@@ -6,6 +6,7 @@ import {
   Bike,
   ChevronRight,
   Globe,
+  History,
   IdCard,
   Info,
   Landmark,
@@ -175,6 +176,12 @@ export default function RiderSettings() {
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <User size={16} />
                 Profile
+              </Button>
+            </Link>
+            <Link to="/rider/history">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <History size={16} />
+                History
               </Button>
             </Link>
             <Button
