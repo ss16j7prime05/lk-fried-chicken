@@ -191,6 +191,12 @@ export default function RiderSettings() {
                 Earnings
               </Button>
             </Link>
+            <Link to="/rider/notifications">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Bell size={16} />
+                Notifications
+              </Button>
+            </Link>
             <Button
               variant="outline"
               className="!px-4 !py-2 text-sm text-secondary border-secondary/30 hover:border-secondary"

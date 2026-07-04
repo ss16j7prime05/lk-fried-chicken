@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import {
+  Bell,
   Bike,
   CalendarDays,
   CalendarRange,
@@ -165,6 +166,12 @@ export default function RiderEarnings() {
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <History size={16} />
                 History
+              </Button>
+            </Link>
+            <Link to="/rider/notifications">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Bell size={16} />
+                Notifications
               </Button>
             </Link>
             <Button
