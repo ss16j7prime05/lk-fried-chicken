@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { db, auth } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { Package, LogOut, User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail } from "lucide-react";
+import { Package, LogOut, User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail, Settings } from "lucide-react";
 import { useAuth } from "./AuthContext.jsx";
 import { Card } from "./components/ui/Card";
 import { Button } from "./components/ui/Button";
@@ -95,6 +95,12 @@ function RiderProfile() {
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <Package size={16} />
                 Jobs
+              </Button>
+            </Link>
+            <Link to="/rider/settings">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Settings size={16} />
+                Settings
               </Button>
             </Link>
             <Button
