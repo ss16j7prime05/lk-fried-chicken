@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { LogOut, MapPin, Package, User } from "lucide-react";
+import { LogOut, MapPin, Package, Settings, User, Wallet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
 import { normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
@@ -128,6 +128,18 @@ export default function RiderOrderHistory() {
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <Package size={16} />
                 Jobs
+              </Button>
+            </Link>
+            <Link to="/rider/earnings">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Wallet size={16} />
+                Earnings
+              </Button>
+            </Link>
+            <Link to="/rider/settings">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Settings size={16} />
+                Settings
               </Button>
             </Link>
             <Button

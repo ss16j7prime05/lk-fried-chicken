@@ -16,6 +16,7 @@ import {
   Phone,
   Sun,
   User,
+  Wallet,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
@@ -182,6 +183,12 @@ export default function RiderSettings() {
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <History size={16} />
                 History
+              </Button>
+            </Link>
+            <Link to="/rider/earnings">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Wallet size={16} />
+                Earnings
               </Button>
             </Link>
             <Button
