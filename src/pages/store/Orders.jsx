@@ -155,32 +155,6 @@ const googleMapsUrl = (order) => {
 
 const copyText = (text) => { if (text) navigator.clipboard?.writeText(text); };
 
-/* ═══════════════════════ sound + browser notifications ═══════════════════════ */
-const playBeep = () => {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const play = (freq, start, dur) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.35, ctx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-      osc.start(ctx.currentTime + start); osc.stop(ctx.currentTime + start + dur);
-    };
-    play(880, 0, 0.12); play(1100, 0.15, 0.12); play(880, 0.3, 0.12); play(1320, 0.45, 0.25);
-  } catch { /* autoplay blocked — visual cues still work */ }
-};
-
-const notifyBrowser = (order) => {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  try {
-    new Notification("New order received", {
-      body: `${order.orderNo || order.id} · ${order.customerName || "Customer"} · ฿${fmtMoney(order.grandTotal ?? order.subtotal)}`,
-    });
-  } catch { /* ignore */ }
-};
-
 /* ═══════════════════════ print system ═══════════════════════ */
 const PRINT_WIDTHS = { "58mm": "58mm", "80mm": "80mm", a4: "210mm" };
 
@@ -1463,31 +1437,6 @@ function EmptyState({ type }) {
 }
 
 /* ═══════════════════════ Floating new-order notifications (top-right stack) ═══════════════════════ */
-function FloatingNotifications({ queue, onAccept, onView, onDismiss }) {
-  if (!queue.length) return null;
-  return (
-    <div className="fixed top-4 right-4 z-[70] w-80 space-y-2">
-      {queue.map((order, i) => (
-        <div key={order.id} className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 animate-[slideDown_0.25s_ease]" style={{ zIndex: 100 - i }}>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-black text-red-500"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />New Order</span>
-            <BigTimer createdAt={order.createdAt} size="sm" />
-          </div>
-          <p className="text-base font-black text-gray-900 mt-2">{order.orderNo || order.id}</p>
-          <p className="text-sm font-bold text-gray-600">{order.customerName || "Customer"}</p>
-          <p className="text-lg font-black text-primary mt-1">฿{fmtMoney(order.grandTotal ?? order.subtotal)}</p>
-          <div className="flex gap-2 mt-3">
-            <button onClick={() => onDismiss(order.id)} className="px-3 py-2 rounded-xl bg-gray-100 text-gray-500 text-xs font-black hover:bg-gray-200">Dismiss</button>
-            <button onClick={() => onView(order)} className="flex-1 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 text-xs font-black hover:bg-gray-50">View</button>
-            <button onClick={() => onAccept(order.id)} className="flex-1 py-2 rounded-xl bg-primary text-white text-xs font-black hover:bg-primary-dark">Accept</button>
-          </div>
-        </div>
-      ))}
-      <style>{`@keyframes slideDown { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
-    </div>
-  );
-}
-
 /* ═══════════════════════ Sticky summary header ═══════════════════════ */
 function SummaryHeader({ orders }) {
   const stats = useMemo(() => {
@@ -1635,7 +1584,6 @@ export function Orders() {
   const [muted, setMuted] = useState(() => localStorage.getItem("store_notif_muted") === "1");
   const [notifHistory, setNotifHistory] = useState([]);
   const [showNotif, setShowNotif] = useState(false);
-  const [popupQueue, setPopupQueue] = useState([]);
   const knownIds = useRef(new Set());
   const initialized = useRef(false);
   const [now, setNow] = useState(Date.now());
@@ -1651,12 +1599,6 @@ export function Orders() {
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
-  }, []);
-
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
   }, []);
 
   useEffect(() => {
@@ -1679,9 +1621,7 @@ export function Orders() {
           if (knownIds.current.has(order.id)) return;
           knownIds.current.add(order.id);
           if (normalizeStatus(order.status) === "pending") {
-            if (!muted) playBeep();
-            notifyBrowser(order);
-            setPopupQueue((prev) => [order, ...prev]);
+            // เสียง/แจ้งเตือน/ป็อปอัปงานใหม่เป็นของ StoreLayout ที่เดียว — หน้านี้เก็บแค่ประวัติแจ้งเตือน
             setNotifHistory((prev) => [{ key: `${order.id}-${Date.now()}`, status: "pending", time: new Date(), text: `New order ${order.orderNo || order.id}` }, ...prev].slice(0, 50));
           }
         });
@@ -1690,33 +1630,15 @@ export function Orders() {
       () => setErrored(true)
     );
     return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [muted]);
+  }, []);
 
-  // repeat sound every 10s while any pending order is unaccepted
-  useEffect(() => {
-    if (muted) return;
-    const hasPending = orders.some((o) => normalizeStatus(o.status) === "pending");
-    if (!hasPending) return;
-    const id = setInterval(() => playBeep(), 10000);
-    return () => clearInterval(id);
-  }, [orders, muted]);
-
-  // drop popups for orders that are no longer pending
-  useEffect(() => {
-    setPopupQueue((prev) => prev.filter((p) => {
-      const live = orders.find((o) => o.id === p.id);
-      return live && normalizeStatus(live.status) === "pending";
-    }));
-  }, [orders]);
-
-  // auto scroll to order list when new order arrives
+  // auto scroll to order list when new order arrives (ใช้ประวัติแจ้งเตือนเป็นทริกเกอร์)
   useEffect(() => {
     if (autoScroll && listRef.current && initialized.current) {
       listRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popupQueue.length]);
+  }, [notifHistory.length]);
 
   // keyboard shortcuts
   useEffect(() => {
@@ -1867,9 +1789,6 @@ export function Orders() {
   const bulkPrint = () => selectedOrders.forEach((o) => printReceipt(o));
   const bulkExport = () => exportOrdersCsv(selectedOrders.length ? selectedOrders : filtered);
 
-  const dismissPopup = (id) => setPopupQueue((prev) => prev.filter((p) => p.id !== id));
-  const viewFromPopup = (order) => { setActiveOrder(order); dismissPopup(order.id); };
-
   if (errored) return <div className="p-6"><EmptyState type="error" /></div>;
   if (!online) return <div className="p-6"><EmptyState type="offline" /></div>;
 
@@ -1891,8 +1810,6 @@ export function Orders() {
         <AcceptWithETAModal order={etaOrder} onConfirm={handleEtaConfirm} onCancel={() => setEtaOrder(null)} />
       )}
       {showShortcuts && <ShortcutHelpModal onClose={() => setShowShortcuts(false)} />}
-
-      <FloatingNotifications queue={popupQueue} onAccept={(id) => { acceptOrderWithETA(id, 0); dismissPopup(id); }} onView={viewFromPopup} onDismiss={dismissPopup} />
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
