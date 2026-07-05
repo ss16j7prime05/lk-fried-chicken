@@ -234,7 +234,7 @@ export default function RiderOrdersDashboard() {
             <EmptyState
               icon="🌙"
               title="You're offline"
-              description="Go online to see deliveries available for pickup. Deliveries you've already accepted stay in My Deliveries."
+              description="Go online to see deliveries available for pickup. Deliveries you've already accepted stay in your Assigned and Active tabs."
             />
             <div className="flex justify-center">
               <Button className="!px-6" onClick={toggleAvailability}>
