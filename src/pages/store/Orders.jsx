@@ -50,7 +50,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { db } from "../../firebase";
-import { normalizeStatus } from "../../store/orderStatus";
+import { fmtMoney, fmtTime, normalizeStatus, toDate } from "../../store/orderStatus";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 
@@ -111,18 +111,11 @@ const TIMELINE_DOT_COLOR = {
 
 /* ═══════════════════════ helpers ═══════════════════════ */
 export const optionLabel = (v) => (!v ? "" : typeof v === "object" ? v.name || "" : v);
-const fmtMoney = (n) => Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 0 });
 const fmtDateTime = (ts) => {
   if (!ts) return "—";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 };
-const fmtTime = (ts) => {
-  if (!ts) return "—";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-};
-export const toDate = (ts) => (ts ? (ts.toDate ? ts.toDate() : new Date(ts)) : null);
 const isSameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const isToday = (ts) => isSameDay(toDate(ts), new Date());
 const isYesterday = (ts) => {

@@ -26,6 +26,17 @@ const tsMillis = (v) => v?.toMillis?.() ?? v?.getTime?.() ?? 0;
 export const byNewest = (getTime = (o) => o.createdAt) => (a, b) =>
   tsMillis(getTime(b)) - tsMillis(getTime(a));
 
+// แปลง Firestore Timestamp / string / Date -> Date (null ถ้าไม่มีค่า)
+export const toDate = (ts) => (ts ? (ts.toDate ? ts.toDate() : new Date(ts)) : null);
+
+// รูปแบบเงิน (บาท) และเวลา (HH:mm) มาตรฐานของหน้าร้าน
+export const fmtMoney = (n) => Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 0 });
+export const fmtTime = (ts) => {
+  if (!ts) return "—";
+  const d = toDate(ts);
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+};
+
 export const STATUS_LABEL = {
   pending: "รอรับออเดอร์",
   accepted: "รับออเดอร์แล้ว",

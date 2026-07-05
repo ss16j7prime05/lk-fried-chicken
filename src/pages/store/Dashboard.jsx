@@ -7,10 +7,9 @@ import {
   ArrowRight, Package, BarChart2, Star, Zap, Calendar, ChefHat,
 } from "lucide-react";
 import { db } from "../../firebase";
-import { normalizeStatus, STATUS_LABEL } from "../../store/orderStatus";
+import { byNewest, fmtMoney, fmtTime, normalizeStatus, STATUS_LABEL, toDate } from "../../store/orderStatus";
 
 /* ─── helpers ─── */
-const toDate     = (ts) => { if (!ts) return null; return ts.toDate ? ts.toDate() : new Date(ts); };
 const isToday    = (ts) => { const d = toDate(ts); if (!d) return false; const n = new Date(); return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); };
 const isThisWeek = (ts) => {
   const d = toDate(ts); if (!d) return false;
@@ -23,8 +22,6 @@ const isThisMonth = (ts) => {
   const now = new Date();
   return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
 };
-const fmtTime     = (ts) => { if (!ts) return "—"; const d = toDate(ts); return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); };
-const fmtMoney    = (n) => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:0});
 const fmtMoneyK   = (n) => n >= 10000 ? `฿${(n/1000).toFixed(0)}K` : n >= 1000 ? `฿${(n/1000).toFixed(1)}K` : `฿${fmtMoney(n)}`;
 const revenueOf   = (list) => list.filter(o => normalizeStatus(o.status)==="completed").reduce((s,o)=>s+Number(o.grandTotal??o.subtotal??0),0);
 
@@ -381,7 +378,7 @@ export function Dashboard() {
   const deliveryCount = todayOrders.filter(o=>o.orderType!=="pickup").length;
 
   const recentOrders = useMemo(() =>
-    [...orders].sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0)).slice(0,15),
+    [...orders].sort(byNewest()).slice(0,15),
     [orders]
   );
 
