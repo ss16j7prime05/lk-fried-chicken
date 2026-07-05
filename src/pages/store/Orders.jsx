@@ -156,7 +156,6 @@ const googleMapsUrl = (order) => {
 const copyText = (text) => { if (text) navigator.clipboard?.writeText(text); };
 
 /* ═══════════════════════ print system ═══════════════════════ */
-const PRINT_WIDTHS = { "58mm": "58mm", "80mm": "80mm", a4: "210mm" };
 
 /* shared ESC/POS-ready base CSS for thermal printers */
 const thermalCss = (width, fontSize) => `
@@ -1749,7 +1748,6 @@ export function Orders() {
       ...(estimatedMinutes > 0 ? { estimatedMinutes, estimatedFinishTime: finishTime } : {}),
     });
   }, []);
-  const acceptOrder = useCallback((id) => acceptOrderWithETA(id, 0), [acceptOrderWithETA]);
   const rejectOrder = useCallback((id) => updateDoc(doc(db, "orders", id), { status: "cancelled" }), []);
   const advanceOrder = useCallback((id, to) => updateDoc(doc(db, "orders", id), { status: to }), []);
   const updateETA = useCallback((id, mins, finishTime) =>
