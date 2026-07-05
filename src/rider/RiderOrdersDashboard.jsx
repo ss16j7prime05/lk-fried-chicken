@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { Bell, History, LogOut, Power, Settings, User, Wallet } from "lucide-react";
 import { db } from "../firebase";
@@ -25,7 +25,8 @@ const FALLBACK_STORE_LNG = 100.0529543;
 // Rider Dashboard ใหม่: เห็นงานพร้อมส่งทั้งหมด, รับงานได้, อัปเดตสถานะแบบ realtime
 export default function RiderOrdersDashboard() {
   const { user, profile, logout } = useAuth();
-  const [orders, setOrders] = useState([]);
+  const [availablePool, setAvailablePool] = useState([]);
+  const [myJobs, setMyJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("available");
   // ความพร้อมรับงาน อ่านแบบ realtime จาก users/{uid}.riderStatus (ฟิลด์เดียวกับ RiderSettings/Admin)
@@ -37,8 +38,17 @@ export default function RiderOrdersDashboard() {
   });
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
-      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    if (!user?.uid) return;
+    // แทนการ subscribe ทั้ง collection: ดึงเฉพาะพูลงานว่าง (status พร้อมส่ง) + งานของไรเดอร์คนนี้
+    // ใช้ query pattern เดียวกับ History/Earnings/Notifications (where field == value)
+    const availableQ = query(collection(db, "orders"), where("status", "==", READY_STATUS));
+    const mineQ = query(collection(db, "orders"), where("riderId", "==", user.uid));
+    const unsubAvailable = onSnapshot(availableQ, (snapshot) => {
+      setAvailablePool(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    const unsubMine = onSnapshot(mineQ, (snapshot) => {
+      setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
     const unsubStore = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
@@ -52,10 +62,11 @@ export default function RiderOrdersDashboard() {
       }
     });
     return () => {
-      unsubscribe();
+      unsubAvailable();
+      unsubMine();
       unsubStore();
     };
-  }, []);
+  }, [user?.uid]);
 
   // สถานะออนไลน์/ออฟไลน์ของไรเดอร์เอง (realtime) — RiderSettings เขียนฟิลด์เดียวกันนี้
   useEffect(() => {
@@ -67,6 +78,9 @@ export default function RiderOrdersDashboard() {
   }, [user?.uid]);
 
   const isOnline = riderStatus === "online";
+
+  // งานว่าง (riderId=="") กับงานของไรเดอร์ (riderId==uid) เป็นเซตที่ไม่ทับกัน รวมได้ตรง ๆ
+  const orders = availablePool.concat(myJobs);
 
   const availableOrders = orders.filter(
     (o) => !o.riderId && isReadyForDelivery(o.status)
