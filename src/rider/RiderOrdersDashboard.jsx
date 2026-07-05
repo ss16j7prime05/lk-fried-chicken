@@ -16,6 +16,7 @@ import {
   READY_STATUS,
   isReadyForDelivery,
 } from "./riderStatus";
+import { normalizeStatus } from "../store/orderStatus";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
@@ -71,17 +72,16 @@ export default function RiderOrdersDashboard() {
     (o) => !o.riderId && isReadyForDelivery(o.status)
   );
 
-  const myOrders = orders
-    .filter(
-      (o) =>
-        o.riderId === user?.uid &&
-        (o.status === PICKED_UP_STATUS || o.status === DELIVERING_STATUS)
-    )
-    .sort((a, b) => {
-      const ta = a.createdAt?.toMillis?.() ?? 0;
-      const tb = b.createdAt?.toMillis?.() ?? 0;
-      return tb - ta;
-    });
+  // คิวงานของไรเดอร์คนนี้ แยกตามสถานะเดิม: Assigned (picked_up) / Active (delivering) / Completed
+  const byNewest = (a, b) =>
+    (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0);
+
+  const mine = orders.filter((o) => o.riderId === user?.uid);
+  const assignedOrders = mine.filter((o) => o.status === PICKED_UP_STATUS).sort(byNewest);
+  const activeOrders = mine.filter((o) => o.status === DELIVERING_STATUS).sort(byNewest);
+  const completedOrders = mine
+    .filter((o) => normalizeStatus(o.status) === DELIVERED_STATUS)
+    .sort(byNewest);
 
   // สลับความพร้อมรับงาน — เขียน users/{uid}.riderStatus (ฟิลด์เดิม ไม่เพิ่ม schema)
   const toggleAvailability = async () => {
@@ -118,7 +118,39 @@ export default function RiderOrdersDashboard() {
     });
   };
 
-  const list = tab === "available" ? availableOrders : myOrders;
+  // แท็บทั้งหมด: พูลงานว่าง + คิวงานของไรเดอร์ (ใช้ RiderOrderCard ตัวเดิมทุกแท็บ)
+  const TABS = [
+    {
+      key: "available",
+      label: "Available",
+      list: availableOrders,
+      emptyTitle: "No deliveries available",
+      emptyDesc: "New deliveries ready for pickup will show up here.",
+    },
+    {
+      key: "assigned",
+      label: "Assigned",
+      list: assignedOrders,
+      emptyTitle: "No assigned deliveries",
+      emptyDesc: "Deliveries you accept will appear here until you start delivering.",
+    },
+    {
+      key: "active",
+      label: "Active",
+      list: activeOrders,
+      emptyTitle: "No active deliveries",
+      emptyDesc: "Deliveries you're currently delivering will show up here.",
+    },
+    {
+      key: "completed",
+      label: "Completed",
+      list: completedOrders,
+      emptyTitle: "No completed deliveries",
+      emptyDesc: "Deliveries you complete will show up here.",
+    },
+  ];
+  const activeTab = TABS.find((t) => t.key === tab) ?? TABS[0];
+  const list = activeTab.list;
 
   if (loading) {
     return <Loading text="Loading deliveries..." />;
@@ -182,26 +214,19 @@ export default function RiderOrdersDashboard() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => setTab("available")}
-            className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
-              tab === "available"
-                ? "bg-primary text-white border-primary"
-                : "bg-white text-gray-500 border-gray-100 hover:border-primary"
-            }`}
-          >
-            Available Deliveries ({availableOrders.length})
-          </button>
-          <button
-            onClick={() => setTab("mine")}
-            className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
-              tab === "mine"
-                ? "bg-primary text-white border-primary"
-                : "bg-white text-gray-500 border-gray-100 hover:border-primary"
-            }`}
-          >
-            My Deliveries ({myOrders.length})
-          </button>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
+                tab === t.key
+                  ? "bg-primary text-white border-primary"
+                  : "bg-white text-gray-500 border-gray-100 hover:border-primary"
+              }`}
+            >
+              {t.label} ({t.list.length})
+            </button>
+          ))}
         </div>
 
         {tab === "available" && !isOnline ? (
@@ -221,12 +246,8 @@ export default function RiderOrdersDashboard() {
         ) : list.length === 0 ? (
           <EmptyState
             icon="🛵"
-            title={tab === "available" ? "No deliveries available" : "No active deliveries"}
-            description={
-              tab === "available"
-                ? "New deliveries ready for pickup will show up here."
-                : "Deliveries you accept will show up here until they're completed."
-            }
+            title={activeTab.emptyTitle}
+            description={activeTab.emptyDesc}
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
