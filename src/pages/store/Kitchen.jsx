@@ -95,7 +95,8 @@ export function Kitchen() {
 
   /* Firestore listener — fires sound whenever any order ENTERS a kitchen status (added OR modified) */
   useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, "orders"), where("storeId", "==", STORE_ID)), (snap) => {
+    // เฉพาะสถานะครัว (canonical KITCHEN_STATUSES + legacy Thai ที่ normalizeStatus map มาเป็นสถานะครัว)
+    const unsub = onSnapshot(query(collection(db, "orders"), where("storeId", "==", STORE_ID), where("status", "in", [...KITCHEN_STATUSES, "กำลังทำ", "ส่งให้ไรเดอร์", "กำลังจัดส่ง"])), (snap) => {
       const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setOrders(docs);
       setLoading(false);
