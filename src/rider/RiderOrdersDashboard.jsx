@@ -236,6 +236,7 @@ export default function RiderOrdersDashboard() {
                 order={order}
                 effectiveStatus={tab === "available" ? READY_STATUS : order.status}
                 storeLocation={storeLocation}
+                isOnline={isOnline}
                 onAccept={acceptDelivery}
                 onStartDelivering={startDelivering}
                 onDelivered={markDelivered}

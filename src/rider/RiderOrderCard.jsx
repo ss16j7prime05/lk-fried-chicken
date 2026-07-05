@@ -76,10 +76,12 @@ function useStoreRoute(storeLocation, dLat, dLng) {
   return route;
 }
 
-// อัปเดตตำแหน่ง GPS ของไรเดอร์ทุก 5 วินาที เฉพาะตอนสถานะ "delivering" และเป็นไรเดอร์ที่รับงานนี้เท่านั้น
+// อัปเดตตำแหน่ง GPS ของไรเดอร์ทุก 5 วินาที เฉพาะตอนสถานะ "delivering", ไรเดอร์ออนไลน์ และเป็นไรเดอร์ที่รับงานนี้เท่านั้น
 // (ความปลอดภัย: Firestore rule อนุญาตแก้ไข order นี้เฉพาะ riderId == auth.uid)
-function useRiderGpsBroadcast(effectiveStatus, orderId, dLat, dLng) {
+// ออฟไลน์ = cleanup ทำงาน หยุดกระจายตำแหน่งทันที
+function useRiderGpsBroadcast(effectiveStatus, orderId, dLat, dLng, isOnline) {
   useEffect(() => {
+    if (!isOnline) return;
     if (effectiveStatus !== DELIVERING_STATUS) return;
     if (!navigator.geolocation) return;
 
@@ -123,7 +125,7 @@ function useRiderGpsBroadcast(effectiveStatus, orderId, dLat, dLng) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [effectiveStatus, orderId, dLat, dLng]);
+  }, [effectiveStatus, orderId, dLat, dLng, isOnline]);
 }
 
 /* ── presentational sections ── */
@@ -201,7 +203,7 @@ const TotalsSection = ({ order }) => (
 );
 
 // การ์ดรายละเอียดออเดอร์ของไรเดอร์: ข้อมูลลูกค้า + รายการอาหาร + แผนที่/ระยะทาง + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
-export default function RiderOrderCard({ order, effectiveStatus, storeLocation, onAccept, onStartDelivering, onDelivered }) {
+export default function RiderOrderCard({ order, effectiveStatus, storeLocation, isOnline, onAccept, onStartDelivering, onDelivered }) {
   const [showMap, setShowMap] = useState(false);
   // optimistic เฉพาะหลังกดปุ่ม ระหว่างรอ nearPressed จริงจาก snapshot ของออเดอร์
   const [nearPressedLocally, setNearPressedLocally] = useState(false);
@@ -209,7 +211,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
 
   const { lat: dLat, lng: dLng, address: dAddress } = getDestination(order);
   const route = useStoreRoute(storeLocation, dLat, dLng);
-  useRiderGpsBroadcast(effectiveStatus, order.id, dLat, dLng);
+  useRiderGpsBroadcast(effectiveStatus, order.id, dLat, dLng, isOnline);
 
   const markNear = async () => {
     await updateDoc(doc(db, "orders", order.id), { nearPressed: true });
