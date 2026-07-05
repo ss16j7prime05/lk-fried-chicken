@@ -30,7 +30,7 @@ const buildRiderStats = (riderId, orders) => {
   };
 };
 
-// รายชื่อไรเดอร์ + สถานะออนไลน์ (อ่านจาก users.online ถ้ามี) + สถิติการจัดส่ง/รายได้/เวลาเฉลี่ย
+// รายชื่อไรเดอร์ + สถานะออนไลน์ (อ่านจาก users.riderStatus) + สถิติการจัดส่ง/รายได้/เวลาเฉลี่ย
 export default function RidersPanel({ riders, orders }) {
   return (
     <div style={{ overflowX: "auto" }}>
@@ -48,7 +48,7 @@ export default function RidersPanel({ riders, orders }) {
         <tbody>
           {riders.map((r) => {
             const stats = buildRiderStats(r.id, orders);
-            const online = r.online === true;
+            const online = r.riderStatus === "online";
             return (
               <tr key={r.id} style={{ borderBottom: "1px solid #2a2a2a" }}>
                 <td style={td}>{r.name || r.riderName || "-"}</td>
