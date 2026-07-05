@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
-import { normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
+import { byNewest, normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -141,7 +141,7 @@ export default function RiderEarnings() {
       month: bucket(monthList),
       lifetime: bucket(completed),
       recent: [...completed]
-        .sort((a, b) => (b.when?.getTime() ?? 0) - (a.when?.getTime() ?? 0))
+        .sort(byNewest((o) => o.when))
         .slice(0, RECENT_LIMIT),
     };
   }, [orders]);

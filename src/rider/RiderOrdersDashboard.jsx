@@ -16,7 +16,7 @@ import {
   READY_STATUS,
   isReadyForDelivery,
 } from "./riderStatus";
-import { normalizeStatus } from "../store/orderStatus";
+import { byNewest, normalizeStatus } from "../store/orderStatus";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
@@ -87,15 +87,12 @@ export default function RiderOrdersDashboard() {
   );
 
   // คิวงานของไรเดอร์คนนี้ แยกตามสถานะเดิม: Assigned (picked_up) / Active (delivering) / Completed
-  const byNewest = (a, b) =>
-    (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0);
-
   const mine = orders.filter((o) => o.riderId === user?.uid);
-  const assignedOrders = mine.filter((o) => o.status === PICKED_UP_STATUS).sort(byNewest);
-  const activeOrders = mine.filter((o) => o.status === DELIVERING_STATUS).sort(byNewest);
+  const assignedOrders = mine.filter((o) => o.status === PICKED_UP_STATUS).sort(byNewest());
+  const activeOrders = mine.filter((o) => o.status === DELIVERING_STATUS).sort(byNewest());
   const completedOrders = mine
     .filter((o) => normalizeStatus(o.status) === DELIVERED_STATUS)
-    .sort(byNewest);
+    .sort(byNewest());
 
   // สลับความพร้อมรับงาน — เขียน users/{uid}.riderStatus (ฟิลด์เดิม ไม่เพิ่ม schema)
   const toggleAvailability = async () => {

@@ -21,6 +21,11 @@ const LEGACY_STATUS_MAP = {
 
 export const normalizeStatus = (status) => LEGACY_STATUS_MAP[status] || status;
 
+// เรียงออเดอร์ใหม่ -> เก่า ตาม timestamp (รองรับทั้ง Firestore Timestamp และ Date)
+const tsMillis = (v) => v?.toMillis?.() ?? v?.getTime?.() ?? 0;
+export const byNewest = (getTime = (o) => o.createdAt) => (a, b) =>
+  tsMillis(getTime(b)) - tsMillis(getTime(a));
+
 export const STATUS_LABEL = {
   pending: "รอรับออเดอร์",
   accepted: "รับออเดอร์แล้ว",

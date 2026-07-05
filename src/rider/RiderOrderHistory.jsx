@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Bell, LogOut, MapPin, Package, Settings, User, Wallet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
-import { normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
+import { byNewest, normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -87,15 +87,7 @@ export default function RiderOrderHistory() {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  const sorted = useMemo(
-    () =>
-      [...orders].sort((a, b) => {
-        const ta = a.createdAt?.toMillis?.() ?? 0;
-        const tb = b.createdAt?.toMillis?.() ?? 0;
-        return tb - ta;
-      }),
-    [orders]
-  );
+  const sorted = useMemo(() => [...orders].sort(byNewest()), [orders]);
 
   const countFor = (key) =>
     key === "all"
