@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { Bell, History, LogOut, Settings, User, Wallet } from "lucide-react";
+import { Bell, History, LogOut, Power, Settings, User, Wallet } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
@@ -27,6 +27,8 @@ export default function RiderOrdersDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("available");
+  // ความพร้อมรับงาน อ่านแบบ realtime จาก users/{uid}.riderStatus (ฟิลด์เดียวกับ RiderSettings/Admin)
+  const [riderStatus, setRiderStatus] = useState(profile?.riderStatus || "offline");
   const [storeLocation, setStoreLocation] = useState({
     lat: FALLBACK_STORE_LAT,
     lng: FALLBACK_STORE_LNG,
@@ -54,6 +56,17 @@ export default function RiderOrdersDashboard() {
     };
   }, []);
 
+  // สถานะออนไลน์/ออฟไลน์ของไรเดอร์เอง (realtime) — RiderSettings เขียนฟิลด์เดียวกันนี้
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      if (snap.exists()) setRiderStatus(snap.data().riderStatus || "offline");
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  const isOnline = riderStatus === "online";
+
   const availableOrders = orders.filter(
     (o) => !o.riderId && isReadyForDelivery(o.status)
   );
@@ -70,9 +83,18 @@ export default function RiderOrdersDashboard() {
       return tb - ta;
     });
 
-  // รับงาน: บันทึก riderId/riderName + ย้ายสถานะเป็น "picked_up" (ออเดอร์พร้อมส่งอยู่แล้วที่เคาน์เตอร์)
-  const acceptDelivery = async (orderId) => {
+  // สลับความพร้อมรับงาน — เขียน users/{uid}.riderStatus (ฟิลด์เดิม ไม่เพิ่ม schema)
+  const toggleAvailability = async () => {
     if (!user) return;
+    await updateDoc(doc(db, "users", user.uid), {
+      riderStatus: isOnline ? "offline" : "online",
+    });
+  };
+
+  // รับงาน: บันทึก riderId/riderName + ย้ายสถานะเป็น "picked_up" (ออเดอร์พร้อมส่งอยู่แล้วที่เคาน์เตอร์)
+  // ต้องออนไลน์ก่อนถึงรับงานได้ (กันแย่งงานทั้งที่ปิดรับ)
+  const acceptDelivery = async (orderId) => {
+    if (!user || !isOnline) return;
     await updateDoc(doc(db, "orders", orderId), {
       riderId: user.uid,
       riderName: profile?.name || profile?.riderName || user.email || "ไรเดอร์",
@@ -108,6 +130,16 @@ export default function RiderOrdersDashboard() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-2xl font-black text-gray-900">Rider Dashboard</h1>
           <div className="flex gap-2">
+            <Button
+              variant={isOnline ? "primary" : "outline"}
+              className={`!px-4 !py-2 text-sm ${
+                isOnline ? "" : "text-gray-500"
+              }`}
+              onClick={toggleAvailability}
+            >
+              <Power size={16} />
+              {isOnline ? "Online" : "Offline"}
+            </Button>
             <Link to="/rider/profile">
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <User size={16} />
@@ -172,7 +204,21 @@ export default function RiderOrdersDashboard() {
           </button>
         </div>
 
-        {list.length === 0 ? (
+        {tab === "available" && !isOnline ? (
+          <div className="space-y-4">
+            <EmptyState
+              icon="🌙"
+              title="You're offline"
+              description="Go online to see deliveries available for pickup. Deliveries you've already accepted stay in My Deliveries."
+            />
+            <div className="flex justify-center">
+              <Button className="!px-6" onClick={toggleAvailability}>
+                <Power size={16} />
+                Go Online
+              </Button>
+            </div>
+          </div>
+        ) : list.length === 0 ? (
           <EmptyState
             icon="🛵"
             title={tab === "available" ? "No deliveries available" : "No active deliveries"}
