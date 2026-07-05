@@ -57,6 +57,7 @@ const fmtMoney = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFr
 const fmtKm = (n) => `${Number(n || 0).toFixed(1)} km`;
 
 const sumBy = (list, fn) => list.reduce((s, o) => s + fn(o), 0);
+const avgPer = (total, count) => (count > 0 ? total / count : 0);
 
 /* ── UI bits (same look as RiderProfile stat cards) ── */
 const SectionTitle = ({ children }) => (
@@ -183,6 +184,46 @@ export default function RiderEarnings() {
               Logout
             </Button>
           </div>
+        </div>
+
+        {/* Analytics — daily/weekly/monthly/lifetime overview from the same buckets */}
+        <div className="space-y-3">
+          <SectionTitle>Analytics</SectionTitle>
+          <Card className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-400 border-b border-gray-50">
+                  <th className="p-4 font-bold">Period</th>
+                  <th className="p-4 font-bold text-right">Deliveries</th>
+                  <th className="p-4 font-bold text-right">Earnings</th>
+                  <th className="p-4 font-bold text-right">Distance</th>
+                  <th className="p-4 font-bold text-right whitespace-nowrap">Avg / Delivery</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: "Today", data: today },
+                  { label: "This Week", data: week },
+                  { label: "This Month", data: month },
+                  { label: "Lifetime", data: lifetime },
+                ].map((p) => (
+                  <tr key={p.label} className="border-b border-gray-50 last:border-0">
+                    <td className="p-4 font-bold text-gray-900 whitespace-nowrap">{p.label}</td>
+                    <td className="p-4 text-right font-medium text-gray-700">{p.data.orders}</td>
+                    <td className="p-4 text-right font-medium text-gray-700 whitespace-nowrap">
+                      {fmtMoney(p.data.earnings)}
+                    </td>
+                    <td className="p-4 text-right font-medium text-gray-700 whitespace-nowrap">
+                      {fmtKm(p.data.distanceKm)}
+                    </td>
+                    <td className="p-4 text-right font-black text-primary whitespace-nowrap">
+                      {fmtMoney(avgPer(p.data.earnings, p.data.orders))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
         </div>
 
         {/* Today */}
