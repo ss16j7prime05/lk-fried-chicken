@@ -6,11 +6,15 @@ import {
   CheckCheck,
   CheckCircle2,
   ChefHat,
+  History,
   LogOut,
   Package,
   PackageCheck,
+  Settings,
   ShoppingBag,
   Truck,
+  User,
+  Wallet,
   XCircle,
 } from "lucide-react";
 import { db } from "../firebase";
@@ -233,6 +237,30 @@ export default function RiderNotifications() {
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <Package size={16} />
                 Jobs
+              </Button>
+            </Link>
+            <Link to="/rider/profile">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <User size={16} />
+                Profile
+              </Button>
+            </Link>
+            <Link to="/rider/history">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <History size={16} />
+                History
+              </Button>
+            </Link>
+            <Link to="/rider/earnings">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Wallet size={16} />
+                Earnings
+              </Button>
+            </Link>
+            <Link to="/rider/settings">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Settings size={16} />
+                Settings
               </Button>
             </Link>
             <Button

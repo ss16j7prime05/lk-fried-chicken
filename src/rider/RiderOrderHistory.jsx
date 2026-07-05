@@ -122,6 +122,12 @@ export default function RiderOrderHistory() {
                 Jobs
               </Button>
             </Link>
+            <Link to="/rider/profile">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <User size={16} />
+                Profile
+              </Button>
+            </Link>
             <Link to="/rider/earnings">
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <Wallet size={16} />

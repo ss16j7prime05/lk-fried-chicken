@@ -10,7 +10,9 @@ import {
   LogOut,
   Package,
   Route,
+  Settings,
   TrendingUp,
+  User,
   Wallet,
 } from "lucide-react";
 import { db } from "../firebase";
@@ -163,6 +165,12 @@ export default function RiderEarnings() {
                 Jobs
               </Button>
             </Link>
+            <Link to="/rider/profile">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <User size={16} />
+                Profile
+              </Button>
+            </Link>
             <Link to="/rider/history">
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <History size={16} />
@@ -173,6 +181,12 @@ export default function RiderEarnings() {
               <Button variant="outline" className="!px-4 !py-2 text-sm">
                 <Bell size={16} />
                 Notifications
+              </Button>
+            </Link>
+            <Link to="/rider/settings">
+              <Button variant="outline" className="!px-4 !py-2 text-sm">
+                <Settings size={16} />
+                Settings
               </Button>
             </Link>
             <Button
