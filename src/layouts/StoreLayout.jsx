@@ -225,7 +225,8 @@ export function StoreLayout() {
 
   /* ── orders listener — pending orders drive alarm + popup ── */
   useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, "orders"), where("storeId", "==", STORE_ID)), (snap) => {
+    // เฉพาะออเดอร์ที่ normalizeStatus() มองว่า "pending" (canonical + legacy) — กรอง client เดิมยังคงไว้
+    const unsub = onSnapshot(query(collection(db, "orders"), where("storeId", "==", STORE_ID), where("status", "in", ["pending", "ออเดอร์ใหม่"])), (snap) => {
       const all     = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const pending = all.filter((o) => normalizeStatus(o.status) === "pending");
       setPendingOrders(pending);
