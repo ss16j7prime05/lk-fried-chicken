@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collection, doc, onSnapshot, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, where, writeBatch } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp, ShoppingBag, UtensilsCrossed, CheckCircle, Bike,
@@ -7,6 +7,7 @@ import {
   ArrowRight, Package, BarChart2, Star, Zap, Calendar, ChefHat,
 } from "lucide-react";
 import { db } from "../../firebase";
+import { STORE_ID } from "../../config";
 import { byNewest, fmtMoney, fmtTime, normalizeStatus, STATUS_LABEL, toDate } from "../../store/orderStatus";
 
 /* ─── helpers ─── */
@@ -303,7 +304,7 @@ export function Dashboard() {
   },[]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db,"orders"), snap => {
+    const unsub = onSnapshot(query(collection(db,"orders"), where("storeId","==",STORE_ID)), snap => {
       setOrders(snap.docs.map(d=>({id:d.id,...d.data()})));
       setLoading(false);
       snap.docChanges().forEach(ch => {

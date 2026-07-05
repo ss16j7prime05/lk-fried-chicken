@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import {
   LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Bell,
   LogOut, Menu, X, Store, ChevronRight, ChefHat, Phone, MapPin, Users, ShoppingBag,
@@ -225,7 +225,7 @@ export function StoreLayout() {
 
   /* ── orders listener — pending orders drive alarm + popup ── */
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "orders"), (snap) => {
+    const unsub = onSnapshot(query(collection(db, "orders"), where("storeId", "==", STORE_ID)), (snap) => {
       const all     = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const pending = all.filter((o) => normalizeStatus(o.status) === "pending");
       setPendingOrders(pending);

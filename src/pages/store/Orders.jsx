@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, doc, onSnapshot, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, where, writeBatch } from "firebase/firestore";
 import {
   Search,
   X,
@@ -52,7 +52,7 @@ import {
 import { db } from "../../firebase";
 import { fmtMoney, fmtTime, normalizeStatus, toDate } from "../../store/orderStatus";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
-import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
 
 /* ═══════════════════════ constants ═══════════════════════ */
 export const TABS = [
@@ -1599,7 +1599,7 @@ export function Orders() {
 
   useEffect(() => {
     const unsub = onSnapshot(
-      collection(db, "orders"),
+      query(collection(db, "orders"), where("storeId", "==", STORE_ID)),
       (snap) => {
         setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);

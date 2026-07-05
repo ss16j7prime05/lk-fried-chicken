@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, doc, onSnapshot, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, where, writeBatch } from "firebase/firestore";
 import {
   ArrowLeft,
   BellOff,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { db } from "../../firebase";
+import { STORE_ID } from "../../config";
 import { KITCHEN_STATUSES, KitchenView, printKitchenTicket } from "./Orders.jsx";
 import { normalizeStatus } from "../../store/orderStatus";
 import { getAlarmAudioCtx } from "../../store/alarmSounds";
@@ -94,7 +95,7 @@ export function Kitchen() {
 
   /* Firestore listener — fires sound whenever any order ENTERS a kitchen status (added OR modified) */
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "orders"), (snap) => {
+    const unsub = onSnapshot(query(collection(db, "orders"), where("storeId", "==", STORE_ID)), (snap) => {
       const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setOrders(docs);
       setLoading(false);
