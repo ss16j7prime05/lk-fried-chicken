@@ -3,7 +3,8 @@ import { addDoc, collection, onSnapshot, query, serverTimestamp, where } from "f
 import { Star } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
-import { byNewest, normalizeStatus } from "../../store/orderStatus";
+import { normalizeStatus } from "../../store/orderStatus";
+import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -179,46 +180,10 @@ const ReviewableOrderCard = ({ order, review, onWriteReview }) => {
 export const Reviews = () => {
   const { profile } = useAuth();
 
-  const [orders, setOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [retryToken, setRetryToken] = useState(0);
   const [activeOrder, setActiveOrder] = useState(null);
-
-  // Same query shape as src/pages/customer/Orders.jsx — no orderBy() on purpose:
-  // where("phone","==") + orderBy("createdAt") needs a composite Firestore index
-  // that doesn't exist for this project. Sort client-side instead.
-  useEffect(() => {
-    if (!profile?.phone) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const ordersQuery = query(collection(db, "orders"), where("phone", "==", profile.phone));
-
-    const unsubscribe = onSnapshot(
-      ordersQuery,
-      (snapshot) => {
-        const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        data.sort(byNewest());
-        setOrders(data);
-        setError(null);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Failed to load orders:", err);
-        setError("Unable to load your orders right now. Please try again later.");
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [profile?.phone, retryToken]);
+  const { orders, loading, error } = useCustomerOrders(profile?.phone, { retryToken });
 
   const completedOrders = useMemo(
     () => orders.filter((o) => normalizeStatus(o.status) === "completed"),

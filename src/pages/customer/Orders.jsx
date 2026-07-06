@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { Search } from "lucide-react";
-import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { PROMPTPAY_ACCOUNT_NAME } from "../../config";
-import { byNewest, normalizeStatus } from "../../store/orderStatus";
+import { normalizeStatus } from "../../store/orderStatus";
+import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -163,52 +162,10 @@ export const Orders = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
 
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [retryToken, setRetryToken] = useState(0);
+  const { orders, loading, error } = useCustomerOrders(profile?.phone, { retryToken });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-
-  useEffect(() => {
-    // Orders are keyed by phone (legacy schema, matches firestore.rules' myPhone()
-    // check) — there is no customerId field on order documents.
-    if (!profile?.phone) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    // No orderBy() here on purpose: where("phone","==") + orderBy("createdAt") needs
-    // a composite Firestore index that doesn't exist for this project, which made
-    // this query fail outright. Sort client-side instead (same approach the legacy
-    // CustomerOrderHistory.jsx page already uses for this exact query shape).
-    const ordersQuery = query(
-      collection(db, "orders"),
-      where("phone", "==", profile.phone)
-    );
-
-    const unsubscribe = onSnapshot(
-      ordersQuery,
-      (snapshot) => {
-        const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        data.sort(byNewest());
-        setOrders(data);
-        setError(null);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Failed to load orders:", err);
-        setError("Unable to load your orders right now. Please try again later.");
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [profile?.phone, retryToken]);
 
   const filteredOrders = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

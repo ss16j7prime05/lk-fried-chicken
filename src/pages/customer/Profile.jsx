@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { doc, onSnapshot, updateDoc, collection, query, where } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   Home as HomeIcon,
@@ -16,6 +16,7 @@ import {
 import { db, storage } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { normalizeStatus } from "../../store/orderStatus";
+import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
@@ -48,7 +49,6 @@ export const Profile = () => {
   const { user, logout } = useAuth();
 
   const [profile, setProfile] = useState(null);
-  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [fullName, setFullName] = useState("");
@@ -82,20 +82,9 @@ export const Profile = () => {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // Same query shape as src/pages/customer/Orders.jsx — no orderBy() on purpose:
-  // where("phone","==") + orderBy("createdAt") needs a composite Firestore index
-  // that doesn't exist for this project.
-  useEffect(() => {
-    if (!profile?.phone) {
-      setOrders([]);
-      return;
-    }
-    const ordersQuery = query(collection(db, "orders"), where("phone", "==", profile.phone));
-    const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
-      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsubscribe();
-  }, [profile?.phone]);
+  // Shared customer orders subscription. sort:false preserves this page's original
+  // unsorted array (stats are order-independent, so ordering has no visible effect).
+  const { orders } = useCustomerOrders(profile?.phone, { sort: false });
 
   const stats = useMemo(() => {
     const completed = orders.filter((o) => normalizeStatus(o.status) === "completed");

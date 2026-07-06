@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import {
   CheckCircle2,
   ChefHat,
@@ -11,9 +10,9 @@ import {
   XCircle,
   ShoppingBag,
 } from "lucide-react";
-import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
-import { byNewest, normalizeStatus } from "../../store/orderStatus";
+import { normalizeStatus } from "../../store/orderStatus";
+import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -153,48 +152,13 @@ export const Notifications = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
 
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [retryToken, setRetryToken] = useState(0);
+  const { orders, loading, error } = useCustomerOrders(profile?.phone, {
+    retryToken,
+    errorMessage: "Unable to load your notifications right now. Please try again later.",
+  });
   const [activeCategory, setActiveCategory] = useState("All");
   const [readMap, setReadMap] = useState(() => loadReadMap());
-
-  useEffect(() => {
-    // Orders are keyed by phone (legacy schema, matches firestore.rules' myPhone()
-    // check) — there is no customerId field on order documents.
-    if (!profile?.phone) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    // Same query shape as src/pages/customer/Orders.jsx — no orderBy() on purpose:
-    // where("phone","==") + orderBy("createdAt") needs a composite Firestore index
-    // that doesn't exist for this project. Sort client-side instead.
-    const ordersQuery = query(collection(db, "orders"), where("phone", "==", profile.phone));
-
-    const unsubscribe = onSnapshot(
-      ordersQuery,
-      (snapshot) => {
-        const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        data.sort(byNewest());
-        setOrders(data);
-        setError(null);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Failed to load notifications:", err);
-        setError("Unable to load your notifications right now. Please try again later.");
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [profile?.phone, retryToken]);
 
   // One notification per order, reflecting its current real-time status — not a
   // fabricated history. Order documents only store their latest status (plus a
