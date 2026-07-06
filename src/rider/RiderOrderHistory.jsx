@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, LogOut, MapPin, Package, Settings, User, Wallet } from "lucide-react";
-import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
+import { useRiderOrders } from "./useRiderOrders";
 import { byNewest, normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
@@ -70,22 +69,9 @@ const HistoryCard = ({ order }) => {
 // ประวัติงานส่งของไรเดอร์: ทุกออเดอร์ที่ riderId == uid เรียงใหม่->เก่า พร้อมฟิลเตอร์สถานะ
 export default function RiderOrderHistory() {
   const { user, logout } = useAuth();
-  const [orders, setOrders] = useState([]);
+  const { orders, loading } = useRiderOrders(user?.uid);
   const [filter, setFilter] = useState("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [loading, setLoading] = useState(() => Boolean(user?.uid));
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    // ไม่ใส่ orderBy() ตามแนวทางเดิมของโปรเจกต์ (where + orderBy ต้องมี composite index)
-    // เรียงฝั่ง client แทน เหมือน RiderProfile / หน้า customer อื่น ๆ
-    const q = query(collection(db, "orders"), where("riderId", "==", user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user?.uid]);
 
   const sorted = useMemo(() => [...orders].sort(byNewest()), [orders]);
 

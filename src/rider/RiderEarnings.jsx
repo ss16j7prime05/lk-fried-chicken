@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Bell,
@@ -15,8 +14,8 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
+import { useRiderOrders } from "./useRiderOrders";
 import { byNewest, normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
@@ -105,20 +104,7 @@ const RecentDeliveryCard = ({ order }) => {
 // รายได้ไรเดอร์: สรุปวันนี้/สัปดาห์นี้/เดือนนี้/ทั้งหมด จากออเดอร์จริงที่ riderId == uid
 export default function RiderEarnings() {
   const { user, logout } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(() => Boolean(user?.uid));
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    // query เดียวกับ RiderProfile / RiderOrderHistory (ไม่มี orderBy ตามแนวทางโปรเจกต์
-    // เพราะ where + orderBy ต้องมี composite index) เรียง/คำนวณฝั่ง client
-    const q = query(collection(db, "orders"), where("riderId", "==", user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user?.uid]);
+  const { orders, loading } = useRiderOrders(user?.uid);
 
   const { today, week, month, lifetime, recent } = useMemo(() => {
     const now = new Date();

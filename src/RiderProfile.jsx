@@ -4,6 +4,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { Package, LogOut, User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail, Settings, History, Wallet, Bell } from "lucide-react";
 import { useAuth } from "./AuthContext.jsx";
+import { useRiderOrders } from "./rider/useRiderOrders";
 import { Card } from "./components/ui/Card";
 import { Button } from "./components/ui/Button";
 import { Badge } from "./components/ui/Badge";
@@ -46,27 +47,18 @@ const InfoRow = ({ icon: Icon, label, value }) => (
 
 function RiderProfile() {
   const { profile, logout } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [reviews, setReviews] = useState([]);
   // ไม่มี uid (ปกติไม่เกิด เพราะผ่าน ProtectedRoute มาแล้ว) = ไม่มีอะไรให้โหลด
-  const [loading, setLoading] = useState(() => Boolean(auth.currentUser?.uid));
+  const { orders, loading } = useRiderOrders(auth.currentUser?.uid);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
-    const q = query(collection(db, "orders"), where("riderId", "==", uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
     const rq = query(collection(db, "reviews"), where("riderId", "==", uid));
     const unsubRev = onSnapshot(rq, (snapshot) => {
       setReviews(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => {
-      unsubscribe();
-      unsubRev();
-    };
+    return () => unsubRev();
   }, []);
 
   const now = new Date();

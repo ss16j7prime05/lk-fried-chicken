@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Bike,
@@ -17,8 +16,8 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react";
-import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
+import { useRiderOrders } from "./useRiderOrders";
 import { normalizeStatus } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
@@ -162,20 +161,8 @@ const SectionTitle = ({ children }) => (
 // 1 ออเดอร์ = 1 แจ้งเตือนตามสถานะปัจจุบัน เหมือนแนวทางหน้า Notifications ของลูกค้า
 export default function RiderNotifications() {
   const { user, logout } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(() => Boolean(user?.uid));
+  const { orders, loading } = useRiderOrders(user?.uid);
   const [readMap, setReadMap] = useState(() => loadReadMap());
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    // query เดียวกับหน้าไรเดอร์อื่น ๆ (ไม่มี orderBy — ต้องมี composite index) เรียงฝั่ง client
-    const q = query(collection(db, "orders"), where("riderId", "==", user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user?.uid]);
 
   const notifications = useMemo(() => {
     return orders
