@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { Phone, MapPin, Navigation, RotateCcw, Check, Bike } from "lucide-react";
 import { db } from "../../firebase";
-import { STORE_ID, STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { getStore } from "./getStore";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
 import { normalizeStatus } from "../../store/orderStatus";
 import { Card } from "../../components/ui/Card";
@@ -161,13 +162,8 @@ export const OrderDetail = () => {
   const trackingRef = useRef(null);
 
   useEffect(() => {
-    getDoc(doc(db, "stores", STORE_ID)).then((snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.lat != null && data.lng != null) {
-          setStoreLocation({ lat: data.lat, lng: data.lng, name: data.storeName || "Store" });
-        }
-      }
+    getStore().then((s) => {
+      if (s) setStoreLocation({ lat: s.lat, lng: s.lng, name: s.storeName || "Store" });
     });
   }, []);
 

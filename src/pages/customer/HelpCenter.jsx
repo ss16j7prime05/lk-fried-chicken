@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
 import {
   ChevronDown,
   Phone,
@@ -8,8 +7,8 @@ import {
   Info,
   HelpCircle,
 } from "lucide-react";
-import { db } from "../../firebase";
-import { STORE_ID, STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { getStore } from "./getStore";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import MapButton from "../../location/MapButton.jsx";
@@ -80,13 +79,8 @@ export const HelpCenter = () => {
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
 
   useEffect(() => {
-    getDoc(doc(db, "stores", STORE_ID)).then((snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.lat != null && data.lng != null) {
-          setStoreLocation({ lat: data.lat, lng: data.lng });
-        }
-      }
+    getStore().then((s) => {
+      if (s) setStoreLocation({ lat: s.lat, lng: s.lng });
     });
   }, []);
 

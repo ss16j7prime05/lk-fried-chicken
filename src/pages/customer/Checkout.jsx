@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { MapPin, Map, Upload } from "lucide-react";
 import { db, storage } from "../../firebase";
@@ -19,6 +19,7 @@ import { Badge } from "../../components/ui/Badge";
 import { Loading } from "../../components/ui/Loading";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { useCart } from "../../context/CartContext";
+import { getStore } from "./getStore";
 
 // Fallback store coordinates, used only until stores/{STORE_ID} loads (matches the
 // same fallback in src/App.jsx / src/pages/customer/OrderDetail.jsx).
@@ -135,13 +136,8 @@ export const Checkout = () => {
   // Real store location, for accurate distance/fee (falls back to the constant
   // above until this resolves).
   useEffect(() => {
-    getDoc(doc(db, "stores", STORE_ID)).then((snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.lat != null && data.lng != null) {
-          setStoreLocation({ lat: data.lat, lng: data.lng, name: data.storeName || "LK Fried Chicken" });
-        }
-      }
+    getStore().then((s) => {
+      if (s) setStoreLocation({ lat: s.lat, lng: s.lng, name: s.storeName || "LK Fried Chicken" });
     });
   }, []);
 
