@@ -1,8 +1,6 @@
 import { formatDateTime } from "./adminUtils";
 import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
-
-const th = { textAlign: "left", padding: "8px", color: "#999", fontSize: "12px", whiteSpace: "nowrap" };
-const td = { padding: "8px", fontSize: "13px", verticalAlign: "top" };
+import { thA as th, tdA as td } from "./adminStyles";
 
 // ประวัติการชำระเงินทั้งหมด (เฉพาะออเดอร์ที่มีข้อมูล payment) เรียงล่าสุดก่อน
 export default function PaymentsPanel({ orders }) {

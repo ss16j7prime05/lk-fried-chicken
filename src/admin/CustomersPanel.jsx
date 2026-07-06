@@ -2,17 +2,7 @@ import { useState } from "react";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { formatDateTime } from "./adminUtils";
-
-const input = {
-  padding: "10px",
-  borderRadius: "10px",
-  border: "1px solid #444",
-  background: "#2a2a2a",
-  color: "#fff",
-};
-
-const th = { textAlign: "left", padding: "8px", color: "#999", fontSize: "12px" };
-const td = { padding: "8px", fontSize: "13px" };
+import { input, thB as th, tdB as td } from "./adminStyles";
 
 // รายชื่อลูกค้า + ค้นหา + บล็อก/ปลดบล็อก + ดูประวัติคำสั่งซื้อ
 export default function CustomersPanel({ customers, blocked, orders }) {

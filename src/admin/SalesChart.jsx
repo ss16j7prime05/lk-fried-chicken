@@ -1,9 +1,4 @@
-const card = {
-  background: "#1e1e1e",
-  borderRadius: "16px",
-  padding: "16px",
-  boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
-};
+import { card } from "./adminStyles";
 
 // กราฟแท่งยอดขาย 7 วันล่าสุด รับ days = [{label, total}]
 export default function SalesChart({ days }) {

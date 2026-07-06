@@ -5,17 +5,7 @@ import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
 import { adminNormalizeStatus, formatDateTime, toDate } from "./adminUtils";
-
-const input = {
-  padding: "10px",
-  borderRadius: "10px",
-  border: "1px solid #444",
-  background: "#2a2a2a",
-  color: "#fff",
-};
-
-const th = { textAlign: "left", padding: "8px", color: "#999", fontSize: "12px", whiteSpace: "nowrap" };
-const td = { padding: "8px", fontSize: "13px", verticalAlign: "top" };
+import { input, thA as th, tdA as td } from "./adminStyles";
 
 const STATUS_OPTIONS = [
   "",

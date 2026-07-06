@@ -1,7 +1,5 @@
 import { adminNormalizeStatus, toDate } from "./adminUtils";
-
-const th = { textAlign: "left", padding: "8px", color: "#999", fontSize: "12px" };
-const td = { padding: "8px", fontSize: "13px" };
+import { thB as th, tdB as td } from "./adminStyles";
 
 // คำนวณสถิติรายไรเดอร์จาก orders ที่มี riderId ตรงกัน
 const buildRiderStats = (riderId, orders) => {

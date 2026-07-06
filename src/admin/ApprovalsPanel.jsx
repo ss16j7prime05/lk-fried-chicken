@@ -1,13 +1,8 @@
 import { useState } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { card } from "./adminStyles";
 
-const card = {
-  background: "#1e1e1e",
-  borderRadius: "16px",
-  padding: "16px",
-  boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
-};
 const actionBtn = {
   flex: 1,
   padding: "10px",

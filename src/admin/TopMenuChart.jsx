@@ -1,9 +1,4 @@
-const card = {
-  background: "#1e1e1e",
-  borderRadius: "16px",
-  padding: "16px",
-  boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
-};
+import { card } from "./adminStyles";
 
 // Top 10 เมนูขายดี รับ items = [[name, qty], ...] (เรียงมาแล้ว)
 export default function TopMenuChart({ items }) {
