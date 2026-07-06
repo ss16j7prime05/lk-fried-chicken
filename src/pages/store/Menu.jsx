@@ -226,7 +226,7 @@ function DeleteDialog({ item, onConfirm, onCancel }) {
       onClick={onCancel}
     >
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6"
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 mb-4">
