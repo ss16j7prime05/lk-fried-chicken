@@ -1991,6 +1991,9 @@ export function Orders() {
         </>
       )}
 
+      {/* Scroll spacer so the fixed bulk bar never covers the last row */}
+      {selected.size > 0 && <div className="h-24" aria-hidden="true" />}
+
       {/* Floating bulk action bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-2xl px-4 py-3 shadow-2xl max-w-[95vw]">

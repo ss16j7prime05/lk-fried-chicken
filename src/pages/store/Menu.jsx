@@ -1487,6 +1487,8 @@ export function Menu() {
               )}
             </>
           )}
+          {/* Scroll spacer so the fixed bulk bar never covers the last row */}
+          {selected.size > 0 && <div className="h-24" aria-hidden="true" />}
         </div>
       </div>
 
