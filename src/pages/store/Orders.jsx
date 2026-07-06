@@ -1140,7 +1140,7 @@ function AcceptWithETAModal({ order, onConfirm, onCancel }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto overscroll-contain" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100">
           <p className="text-base font-black text-gray-900">Accept Order</p>
           <p className="text-xs text-gray-400 mt-0.5">{order.orderNo || order.id} · {order.customerName || "Customer"}</p>
@@ -1279,7 +1279,7 @@ function ShortcutHelpModal({ onClose }) {
   ];
   return (
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto overscroll-contain" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <span className="flex items-center gap-2 text-base font-black text-gray-900"><Keyboard size={18} /> Keyboard Shortcuts</span>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
