@@ -260,7 +260,7 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
           <p className="text-sm font-bold text-secondary">{validationError}</p>
         )}
 
-        <div className="flex items-center justify-between gap-4 pt-4 border-t border-gray-100">
+        <div className="sticky bottom-0 -mx-6 sm:-mx-8 px-6 sm:px-8 pt-4 pb-1 bg-white/95 backdrop-blur border-t border-gray-100 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold text-gray-400 uppercase">Total</p>
             <p className="text-2xl font-black text-primary">฿{totalPrice}</p>
