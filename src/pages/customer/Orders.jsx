@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { PROMPTPAY_ACCOUNT_NAME } from "../../config";
-import { normalizeStatus } from "../../store/orderStatus";
+import { byNewest, normalizeStatus } from "../../store/orderStatus";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -195,11 +195,7 @@ export const Orders = () => {
       ordersQuery,
       (snapshot) => {
         const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => {
-          const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-          const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-          return tb - ta;
-        });
+        data.sort(byNewest());
         setOrders(data);
         setError(null);
         setLoading(false);
