@@ -336,7 +336,7 @@ export function StoreLayout() {
             <p className="text-sm font-black text-gray-900 truncate">{storeName}</p>
             <p className="text-xs text-gray-400 font-medium">Store Portal</p>
           </div>
-          <button className="md:hidden text-gray-400 hover:text-gray-700 p-1" onClick={() => setSidebarOpen(false)}>
+          <button className="md:hidden min-h-[44px] min-w-[44px] -mr-2 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
             <X size={18} />
           </button>
         </div>
@@ -412,7 +412,7 @@ export function StoreLayout() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
         <header className="flex-shrink-0 h-14 bg-white border-b border-gray-100 flex items-center px-4 gap-3">
-          <button className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100" onClick={() => setSidebarOpen(true)}>
+          <button className="md:hidden min-h-[44px] min-w-[44px] -ml-1 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
             <Menu size={20} />
           </button>
 
@@ -444,7 +444,7 @@ export function StoreLayout() {
           {/* Notification bell */}
           <button
             onClick={() => navigate("/store/orders")}
-            className="relative p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
+            className="relative min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Pending orders"
           >
             <Bell size={20} className={pendingOrders.length > 0 ? "text-red-500" : ""} />
