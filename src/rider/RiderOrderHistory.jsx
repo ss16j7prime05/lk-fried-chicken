@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Bell, LogOut, MapPin, Package, Settings, User, Wallet } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
 import { useRiderOrders } from "./useRiderOrders";
+import { formatDate } from "./riderFormat";
 import { byNewest, normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
@@ -19,12 +20,6 @@ const FILTERS = [
 ];
 
 const STATUS_BADGE_COLOR = { completed: "green", cancelled: "orange" };
-
-const formatDate = (createdAt) => {
-  if (!createdAt) return "-";
-  const d = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
-  return d.toLocaleString("th-TH");
-};
 
 const itemCount = (order) => (order.items || []).reduce((s, i) => s + (i.qty || 1), 0);
 

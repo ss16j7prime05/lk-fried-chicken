@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
 import { useRiderOrders } from "./useRiderOrders";
-import { normalizeStatus } from "../store/orderStatus";
+import { normalizeStatus, toDate } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -60,8 +60,6 @@ const CATEGORY_MESSAGE = {
   Completed: (o) => `Order ${o.orderNo} was delivered successfully.`,
   Cancelled: (o) => `Order ${o.orderNo} was cancelled.`,
 };
-
-const toDate = (ts) => (ts ? (ts.toDate ? ts.toDate() : new Date(ts)) : null);
 
 // เวลาแบบ relative เช่น "5 นาทีที่แล้ว" — สั้น อ่านง่ายบนมือถือ
 const timeAgo = (d) => {

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
 import { useRiderOrders } from "./useRiderOrders";
-import { byNewest, normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
+import { byNewest, normalizeStatus, STATUS_LABEL, toDate } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -26,7 +26,6 @@ import { Loading } from "../components/ui/Loading";
 const RECENT_LIMIT = 10;
 
 /* ── date helpers ── */
-const toDate = (ts) => (ts ? (ts.toDate ? ts.toDate() : new Date(ts)) : null);
 const isSameDay = (d, ref) =>
   d &&
   d.getDate() === ref.getDate() &&

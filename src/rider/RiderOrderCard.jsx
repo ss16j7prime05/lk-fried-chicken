@@ -16,6 +16,7 @@ import {
   READY_STATUS,
   STATUS_LABEL,
 } from "./riderStatus";
+import { formatDate } from "./riderFormat";
 
 const GPS_UPDATE_INTERVAL_MS = 5000;
 
@@ -32,12 +33,6 @@ const optionLabel = (value) => {
   if (!value) return "";
   if (typeof value === "object") return value.name || "";
   return value;
-};
-
-const formatDate = (createdAt) => {
-  if (!createdAt) return "-";
-  const d = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
-  return d.toLocaleString("th-TH");
 };
 
 // จุดส่งของออเดอร์ รองรับทั้ง schema ใหม่ (deliveryLocation) และฟิลด์เดิม
