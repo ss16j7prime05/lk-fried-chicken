@@ -88,7 +88,7 @@ function VolumePicker({ value, onChange }) {
           <button
             key={v}
             onClick={() => onChange(v)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors min-w-0
+            className={`flex-1 py-3 min-h-[44px] rounded-xl text-sm font-bold transition-colors min-w-0
               ${value === v ? "bg-primary text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
           >
             {v}%
