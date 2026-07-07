@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { useAuth } from "../../AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { normalizeStatus } from "../../store/orderStatus";
 import { useCustomerOrders } from "./useCustomerOrders";
@@ -13,47 +14,21 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import PaymentStatusBadge from "../../payment/PaymentStatusBadge.jsx";
 
 // Status enum is the one defined in src/store/orderStatus.js (single source of truth,
-// shared with Store/Rider/Admin dashboards) — values here must match exactly.
+// shared with Store/Rider/Admin dashboards) — keyed by the canonical status value.
 const STATUS_BADGE_COLOR = {
-  Pending: "orange",
-  Accepted: "blue",
-  Preparing: "blue",
-  "Ready for Pickup": "blue",
-  "Rider Picked Up": "blue",
-  "On The Way": "blue",
-  Completed: "green",
-  Cancelled: "orange",
+  pending: "orange",
+  accepted: "blue",
+  cooking: "blue",
+  ready_for_delivery: "blue",
+  picked_up: "blue",
+  delivering: "blue",
+  completed: "green",
+  cancelled: "orange",
 };
 
-const STATUS_LABELS = {
-  pending: "Pending",
-  accepted: "Accepted",
-  cooking: "Preparing",
-  ready_for_delivery: "Ready for Pickup",
-  picked_up: "Rider Picked Up",
-  delivering: "On The Way",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
-const PAYMENT_LABELS = {
-  cash: "Cash",
-  promptpay: "PromptPay",
-};
-
-// Filter tabs (requirement's fixed 6-bucket set). "Delivering" intentionally
-// covers all three post-kitchen statuses (ready_for_delivery/picked_up/delivering)
-// since from the customer's point of view all three just mean "on the way" —
-// same collapsing the status badge above already does with its own wording.
-const STATUS_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "pending", label: "Pending" },
-  { key: "accepted", label: "Accepted" },
-  { key: "cooking", label: "Cooking" },
-  { key: "delivering", label: "Delivering" },
-  { key: "completed", label: "Completed" },
-  { key: "cancelled", label: "Cancelled" },
-];
+// Filter tabs (fixed 6-bucket set). "delivering" intentionally covers all three
+// post-kitchen statuses since to the customer they all just mean "on the way".
+const STATUS_FILTERS = ["all", "pending", "accepted", "cooking", "delivering", "completed", "cancelled"];
 
 const matchesStatusFilter = (normalizedStatus, filterKey) => {
   if (filterKey === "all") return true;
@@ -63,17 +38,9 @@ const matchesStatusFilter = (normalizedStatus, filterKey) => {
   return normalizedStatus === filterKey;
 };
 
-// normalizeStatus maps legacy Thai statuses (written by the old customer/store
-// checkout) onto the canonical English enum, so orders placed before Module 1
-// still show a proper label instead of the raw Thai string.
-const formatStatus = (status) =>
-  STATUS_LABELS[normalizeStatus(status)] ?? status ?? "Pending";
-
-const formatPayment = (method) => PAYMENT_LABELS[method] ?? method ?? "-";
-
-const formatDateTime = (timestamp) => {
+const formatDateTime = (timestamp, locale) => {
   if (!timestamp?.toDate) return "-";
-  return timestamp.toDate().toLocaleString("en-GB", {
+  return timestamp.toDate().toLocaleString(locale === "th" ? "th-TH" : "en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -82,8 +49,9 @@ const formatDateTime = (timestamp) => {
   });
 };
 
-const OrderCard = ({ order, onViewDetails, onReorder }) => {
-  const statusLabel = formatStatus(order.status);
+const OrderCard = ({ order, onViewDetails, onReorder, t, language }) => {
+  const statusKey = normalizeStatus(order.status);
+  const statusLabel = t(`status.${statusKey}`);
   const itemCount = (order.items ?? []).reduce(
     (sum, item) => sum + (item.qty ?? 0),
     0
@@ -96,16 +64,17 @@ const OrderCard = ({ order, onViewDetails, onReorder }) => {
           <div>
             <p className="font-black text-gray-900">{order.orderNo}</p>
             <p className="text-xs font-medium text-gray-400 mt-0.5">
-              {formatDateTime(order.createdAt)}
+              {formatDateTime(order.createdAt, language)}
             </p>
           </div>
-          <Badge color={STATUS_BADGE_COLOR[statusLabel] ?? "blue"}>{statusLabel}</Badge>
+          <Badge color={STATUS_BADGE_COLOR[statusKey] ?? "blue"}>{statusLabel}</Badge>
         </div>
 
         <p className="text-sm font-bold text-gray-700">{PROMPTPAY_ACCOUNT_NAME}</p>
         <div className="flex items-center gap-2 flex-wrap mt-1">
           <p className="text-xs text-gray-400 font-medium">
-            {itemCount} item{itemCount !== 1 ? "s" : ""} • {formatPayment(order.paymentMethod)}
+            {itemCount} {itemCount !== 1 ? t("common.items") : t("common.item")} •{" "}
+            {order.paymentMethod ? t(`payment.${order.paymentMethod}`) : "-"}
           </p>
           <PaymentStatusBadge status={order.payment?.status} />
         </div>
@@ -121,7 +90,7 @@ const OrderCard = ({ order, onViewDetails, onReorder }) => {
                 onViewDetails?.(order);
               }}
             >
-              View Details
+              {t("common.viewDetails")}
             </Button>
             <Button
               className="!px-4 !py-2 text-xs opacity-50 cursor-not-allowed"
@@ -131,7 +100,7 @@ const OrderCard = ({ order, onViewDetails, onReorder }) => {
                 onReorder?.(order);
               }}
             >
-              Reorder
+              {t("orders.reorder")}
             </Button>
           </div>
         </div>
@@ -160,10 +129,14 @@ const OrderCardSkeleton = () => (
 
 export const Orders = () => {
   const { profile } = useAuth();
+  const { t, language } = usePreferences();
   const navigate = useNavigate();
 
   const [retryToken, setRetryToken] = useState(0);
-  const { orders, loading, error } = useCustomerOrders(profile?.phone, { retryToken });
+  const { orders, loading, error } = useCustomerOrders(profile?.phone, {
+    retryToken,
+    errorMessage: t("orders.ordersError"),
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -180,13 +153,13 @@ export const Orders = () => {
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
-      <h1 className="text-2xl font-black text-gray-900">My Orders</h1>
+      <h1 className="text-2xl font-black text-gray-900">{t("orders.title")}</h1>
 
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
         <Input
-          placeholder="Search by Order ID..."
+          placeholder={t("orders.searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="!pl-11"
@@ -195,17 +168,17 @@ export const Orders = () => {
 
       {/* Status filter tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {STATUS_FILTERS.map((filter) => (
+        {STATUS_FILTERS.map((key) => (
           <button
-            key={filter.key}
-            onClick={() => setStatusFilter(filter.key)}
+            key={key}
+            onClick={() => setStatusFilter(key)}
             className={`px-4 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
-              statusFilter === filter.key
+              statusFilter === key
                 ? "bg-primary text-white border-primary"
                 : "bg-white text-gray-500 border-gray-100 hover:border-primary"
             }`}
           >
-            {filter.label}
+            {t(`orders.filter.${key}`)}
           </button>
         ))}
       </div>
@@ -218,24 +191,24 @@ export const Orders = () => {
         </div>
       ) : error ? (
         <div className="space-y-6">
-          <EmptyState icon="⚠️" title="Something went wrong" description={error} />
+          <EmptyState icon="⚠️" title={t("common.somethingWrong")} description={error} />
           <div className="flex justify-center">
             <Button variant="outline" onClick={handleRetry}>
-              Retry
+              {t("common.retry")}
             </Button>
           </div>
         </div>
       ) : orders.length === 0 ? (
         <EmptyState
           icon="🧾"
-          title="No orders yet"
-          description="Your past and current orders will show up here once you place one."
+          title={t("orders.noOrdersTitle")}
+          description={t("orders.noOrdersDesc")}
         />
       ) : filteredOrders.length === 0 ? (
         <EmptyState
           icon="🔍"
-          title="No matching orders"
-          description="Try a different search term or status filter."
+          title={t("orders.noMatchTitle")}
+          description={t("orders.noMatchDesc")}
         />
       ) : (
         <div className="space-y-4">
@@ -243,6 +216,8 @@ export const Orders = () => {
             <OrderCard
               key={order.id}
               order={order}
+              t={t}
+              language={language}
               onViewDetails={(o) => navigate(`/shop/orders/${o.id}`)}
               onReorder={() => {}}
             />

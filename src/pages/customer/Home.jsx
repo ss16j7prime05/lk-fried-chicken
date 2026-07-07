@@ -11,10 +11,12 @@ import { FoodCard } from "../../components/customer/FoodCard";
 import { MenuDetailModal } from "../../components/customer/MenuDetailModal";
 import { CartDrawer } from "../../components/customer/CartDrawer";
 import { useCart } from "../../context/CartContext";
+import { usePreferences } from "../../context/PreferencesContext";
 
 export const Home = () => {
   const navigate = useNavigate();
   const { itemCount } = useCart();
+  const { t } = usePreferences();
 
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -42,7 +44,7 @@ export const Home = () => {
       },
       (err) => {
         console.error("Failed to load menus:", err);
-        setError("Unable to load the menu right now. Please try again later.");
+        setError("home.menuError");
         setLoading(false);
       }
     );
@@ -98,7 +100,7 @@ export const Home = () => {
       <header className="flex justify-between items-center">
         <div className="flex items-center gap-2 text-sm font-bold text-gray-600">
           <MapPin size={18} className="text-primary" />
-          <span>Deliver to: 123 Sukhumvit, Bangkok</span>
+          <span>{t("home.deliverTo")}</span>
         </div>
         <div className="flex items-center gap-2">
           <button className="relative p-2 bg-white rounded-full shadow-soft">
@@ -108,7 +110,7 @@ export const Home = () => {
           <button
             onClick={() => setCartOpen(true)}
             className="relative p-2 bg-white rounded-full shadow-soft"
-            aria-label="Open cart"
+            aria-label={t("home.openCart")}
           >
             <ShoppingCart size={20} />
             {itemCount > 0 && (
@@ -126,7 +128,7 @@ export const Home = () => {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for chicken, sides, drinks..."
+          placeholder={t("home.searchPlaceholder")}
           className="w-full bg-white border-none h-14 pl-12 pr-12 rounded-2xl shadow-soft focus:ring-2 ring-primary/20 transition-all outline-none"
         />
         <button className="absolute right-4 top-1/2 -translate-y-1/2 bg-gray-50 p-2 rounded-xl text-gray-500 hover:text-primary">
@@ -148,7 +150,7 @@ export const Home = () => {
               }`}
             >
               <span className="text-2xl">🍗</span>
-              <span className="text-xs font-bold">{cat}</span>
+              <span className="text-xs font-bold">{cat === "All" ? t("home.all") : cat}</span>
             </button>
           ))}
         </section>
@@ -157,12 +159,10 @@ export const Home = () => {
       {/* Promotion Banner */}
       <section className="relative bg-primary rounded-3xl p-8 text-white overflow-hidden shadow-premium">
         <div className="relative z-10 max-w-xs">
-          <Badge color="orange">Limited Time</Badge>
-          <h2 className="text-2xl font-black mt-3">Free Delivery on Orders Over ฿299</h2>
-          <p className="text-sm text-white/80 mt-2 mb-5">
-            Crispy. Juicy. Delivered hot to your door.
-          </p>
-          <Button variant="secondary">Order Now</Button>
+          <Badge color="orange">{t("home.limitedTime")}</Badge>
+          <h2 className="text-2xl font-black mt-3">{t("home.promoTitle")}</h2>
+          <p className="text-sm text-white/80 mt-2 mb-5">{t("home.promoDesc")}</p>
+          <Button variant="secondary">{t("home.orderNow")}</Button>
         </div>
         <div className="absolute -right-6 -bottom-6 text-[140px] opacity-20 select-none">
           🍗
@@ -170,21 +170,21 @@ export const Home = () => {
       </section>
 
       {loading ? (
-        <Loading text="Finding tasty recommendations..." />
+        <Loading text={t("home.loading")} />
       ) : error ? (
-        <EmptyState icon="⚠️" title="Something went wrong" description={error} />
+        <EmptyState icon="⚠️" title={t("common.somethingWrong")} description={t(error)} />
       ) : availableMenus.length === 0 ? (
         <EmptyState
           icon="🍗"
-          title="No menu items yet"
-          description="The store hasn't added any menu items yet. Please check back soon."
+          title={t("home.noMenuTitle")}
+          description={t("home.noMenuDesc")}
         />
       ) : (
         <>
           {/* Recommended */}
           {recommended.length > 0 && (
             <section className="space-y-4">
-              <h2 className="text-xl font-black text-gray-900">Recommended for You</h2>
+              <h2 className="text-xl font-black text-gray-900">{t("home.recommended")}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {recommended.map((item) => (
                   <FoodCard
@@ -206,12 +206,12 @@ export const Home = () => {
 
           {/* Popular */}
           <section className="space-y-4">
-            <h2 className="text-xl font-black text-gray-900">Popular Now</h2>
+            <h2 className="text-xl font-black text-gray-900">{t("home.popular")}</h2>
             {popular.length === 0 ? (
               <EmptyState
                 icon="🍗"
-                title="No items found"
-                description="Try a different search term or browse our categories above."
+                title={t("home.noItemsTitle")}
+                description={t("home.noItemsDesc")}
               />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -1,17 +1,20 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingBag, User, Bell, CreditCard, Star, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
+import { Home, ShoppingBag, User, Bell, CreditCard, Star, MapPin, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
+import { usePreferences } from '../context/PreferencesContext';
 
 export const CustomerLayout = () => {
   const { pathname } = useLocation();
+  const { t } = usePreferences();
   const navItems = [
-    { icon: Home, label: 'Home', path: '/' },
-    { icon: ShoppingBag, label: 'Orders', path: '/shop/orders' },
-    { icon: CreditCard, label: 'Checkout', path: '/shop/checkout' },
-    { icon: Bell, label: 'Notifications', path: '/shop/notifications' },
-    { icon: Star, label: 'Reviews', path: '/shop/reviews' },
-    { icon: User, label: 'Profile', path: '/shop/profile' },
-    { icon: SettingsIcon, label: 'Settings', path: '/shop/settings' },
-    { icon: HelpCircle, label: 'Help', path: '/shop/help' },
+    { icon: Home, label: t('nav.home'), path: '/' },
+    { icon: ShoppingBag, label: t('nav.orders'), path: '/shop/orders' },
+    { icon: CreditCard, label: t('nav.checkout'), path: '/shop/checkout' },
+    { icon: Bell, label: t('nav.notifications'), path: '/shop/notifications' },
+    { icon: Star, label: t('nav.reviews'), path: '/shop/reviews' },
+    { icon: User, label: t('nav.profile'), path: '/shop/profile' },
+    { icon: MapPin, label: t('nav.addresses'), path: '/shop/addresses' },
+    { icon: SettingsIcon, label: t('nav.settings'), path: '/shop/settings' },
+    { icon: HelpCircle, label: t('nav.help'), path: '/shop/help' },
   ];
 
   const isActive = (path) =>

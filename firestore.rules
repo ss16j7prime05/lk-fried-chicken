@@ -45,6 +45,13 @@ service cloud.firestore {
           request.resource.data.status == resource.data.status);
 
       allow delete: if role() == "admin";
+
+      // ---------- addresses (สมุดที่อยู่จัดส่งของลูกค้า) ----------
+      // เจ้าของอ่าน/เขียน/ลบ ที่อยู่ของตัวเองได้เต็มสิทธิ์ ; admin อ่านได้ (ดูข้อมูลลูกค้า)
+      match /addresses/{addressId} {
+        allow read: if isSignedIn() && (request.auth.uid == uid || role() == "admin");
+        allow write: if isSignedIn() && request.auth.uid == uid;
+      }
     }
 
     // ---------- menus / options ----------

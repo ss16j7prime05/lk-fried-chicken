@@ -7,6 +7,7 @@ import './index.css'
 import { AuthProvider } from './AuthContext.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import { CartProvider } from './context/CartContext.jsx'
+import { PreferencesProvider } from './context/PreferencesContext.jsx'
 
 // code splitting: โหลดทุกหน้าแบบ lazy ตาม route (ลด bundle หลักที่โหลดตอนเปิดเว็บครั้งแรก)
 const Login = lazy(() => import('./login/Login.jsx'))
@@ -48,6 +49,7 @@ const CustomerOrders = lazy(() => import('./pages/customer/Orders.jsx').then((m)
 const CustomerOrderDetail = lazy(() => import('./pages/customer/OrderDetail.jsx').then((m) => ({ default: m.OrderDetail })))
 const CustomerCheckout = lazy(() => import('./pages/customer/Checkout.jsx').then((m) => ({ default: m.Checkout })))
 const CustomerProfile = lazy(() => import('./pages/customer/Profile.jsx').then((m) => ({ default: m.Profile })))
+const CustomerAddresses = lazy(() => import('./pages/customer/Addresses.jsx').then((m) => ({ default: m.Addresses })))
 const CustomerNotifications = lazy(() => import('./pages/customer/Notifications.jsx').then((m) => ({ default: m.Notifications })))
 const CustomerReviews = lazy(() => import('./pages/customer/Reviews.jsx').then((m) => ({ default: m.Reviews })))
 const CustomerSettings = lazy(() => import('./pages/customer/Settings.jsx').then((m) => ({ default: m.Settings })))
@@ -63,6 +65,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        <PreferencesProvider>
         <Suspense fallback={<PageLoading />}>
         <Routes>
           {/* Login pages */}
@@ -172,6 +175,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/shop/orders/:orderId" element={<CustomerOrderDetail />} />
             <Route path="/shop/checkout" element={<CustomerCheckout />} />
             <Route path="/shop/profile" element={<CustomerProfile />} />
+            <Route path="/shop/addresses" element={<CustomerAddresses />} />
             <Route path="/shop/notifications" element={<CustomerNotifications />} />
             <Route path="/shop/reviews" element={<CustomerReviews />} />
             <Route path="/shop/settings" element={<CustomerSettings />} />
@@ -179,6 +183,7 @@ createRoot(document.getElementById('root')).render(
           </Route>
         </Routes>
         </Suspense>
+        </PreferencesProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

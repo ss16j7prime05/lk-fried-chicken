@@ -11,6 +11,7 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { normalizeStatus } from "../../store/orderStatus";
 import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
@@ -65,20 +66,23 @@ const CATEGORY_ICON = {
   Promotion: PartyPopper,
 };
 
-const CATEGORY_MESSAGE = {
-  "New Order": (o) => `Order ${o.orderNo} has been placed and is awaiting confirmation.`,
-  Accepted: (o) => `Your order ${o.orderNo} has been accepted and will be prepared soon.`,
-  Cooking: (o) => `Your order ${o.orderNo} is being freshly prepared.`,
-  "Rider Assigned": (o) => `A rider has been assigned to deliver order ${o.orderNo}.`,
-  Delivering: (o) => `Your order ${o.orderNo} is on its way to you.`,
-  Completed: (o) => `Order ${o.orderNo} has been delivered. Enjoy your meal!`,
-  Cancelled: (o) => `Order ${o.orderNo} was cancelled.`,
+// Category display string -> i18n subkey (for both label and message lookups).
+const CATEGORY_TKEY = {
+  All: "all",
+  "New Order": "newOrder",
+  Accepted: "accepted",
+  Cooking: "cooking",
+  "Rider Assigned": "riderAssigned",
+  Delivering: "delivering",
+  Completed: "completed",
+  Cancelled: "cancelled",
+  Promotion: "promotion",
 };
 
-const formatDateTime = (timestamp) => {
+const formatDateTime = (timestamp, locale) => {
   const d = timestamp?.toDate ? timestamp.toDate() : timestamp ? new Date(timestamp) : null;
   if (!d || Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString("en-GB", {
+  return d.toLocaleString(locale === "th" ? "th-TH" : "en-GB", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -115,6 +119,7 @@ const NotificationCardSkeleton = () => (
 );
 
 const NotificationCard = ({ notification, onOpen }) => {
+  const { t, language } = usePreferences();
   const Icon = CATEGORY_ICON[notification.category] ?? PartyPopper;
 
   return (
@@ -133,14 +138,16 @@ const NotificationCard = ({ notification, onOpen }) => {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="font-bold text-gray-900">{notification.category}</h3>
+            <h3 className="font-bold text-gray-900">
+              {t(`notif.cat.${CATEGORY_TKEY[notification.category] ?? "newOrder"}`)}
+            </h3>
             <Badge color={notification.read ? "blue" : "green"}>
-              {notification.read ? "Read" : "Unread"}
+              {notification.read ? t("notif.read") : t("notif.unread")}
             </Badge>
           </div>
           <p className="text-sm text-gray-500 mt-1">{notification.message}</p>
           <p className="text-xs text-gray-400 font-bold mt-2">
-            {formatDateTime(notification.createdAt)}
+            {formatDateTime(notification.createdAt, language)}
           </p>
         </div>
       </Card>
@@ -150,12 +157,13 @@ const NotificationCard = ({ notification, onOpen }) => {
 
 export const Notifications = () => {
   const { profile } = useAuth();
+  const { t } = usePreferences();
   const navigate = useNavigate();
 
   const [retryToken, setRetryToken] = useState(0);
   const { orders, loading, error } = useCustomerOrders(profile?.phone, {
     retryToken,
-    errorMessage: "Unable to load your notifications right now. Please try again later.",
+    errorMessage: t("notif.error"),
   });
   const [activeCategory, setActiveCategory] = useState("All");
   const [readMap, setReadMap] = useState(() => loadReadMap());
@@ -170,16 +178,17 @@ export const Notifications = () => {
       const normalized = normalizeStatus(order.status);
       const category = STATUS_CATEGORY[normalized] ?? "New Order";
       const key = `${order.id}__${normalized}`;
+      const msgKey = CATEGORY_TKEY[category] ?? "updated";
       return {
         id: key,
         orderId: order.id,
         category,
-        message: CATEGORY_MESSAGE[category]?.(order) ?? `Order ${order.orderNo} was updated.`,
+        message: t(`notif.msg.${msgKey}`, { orderNo: order.orderNo }),
         createdAt: order.createdAt,
         read: Boolean(readMap[key]),
       };
     });
-  }, [orders, readMap]);
+  }, [orders, readMap, t]);
 
   const filteredNotifications = useMemo(() => {
     if (activeCategory === "All") return notifications;
@@ -224,11 +233,11 @@ export const Notifications = () => {
     <div className="max-w-2xl mx-auto p-4 sm:p-8 space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-black text-gray-900">Notifications</h1>
-          {unreadCount > 0 && <Badge color="green">{unreadCount} New</Badge>}
+          <h1 className="text-2xl font-black text-gray-900">{t("notif.title")}</h1>
+          {unreadCount > 0 && <Badge color="green">{t("notif.new", { n: unreadCount })}</Badge>}
         </div>
         <Button variant="outline" className="!px-4 !py-2 text-xs" onClick={markAllRead}>
-          Mark All Read
+          {t("notif.markAllRead")}
         </Button>
       </div>
 
@@ -243,7 +252,7 @@ export const Notifications = () => {
                 : "bg-white text-gray-500 border-gray-100 hover:border-primary"
             }`}
           >
-            {category}
+            {t(`notif.cat.${CATEGORY_TKEY[category] ?? "all"}`)}
           </button>
         ))}
       </div>
@@ -256,24 +265,24 @@ export const Notifications = () => {
         </div>
       ) : error ? (
         <div className="space-y-6">
-          <EmptyState icon="⚠️" title="Something went wrong" description={error} />
+          <EmptyState icon="⚠️" title={t("common.somethingWrong")} description={error} />
           <div className="flex justify-center">
             <Button variant="outline" onClick={handleRetry}>
-              Retry
+              {t("common.retry")}
             </Button>
           </div>
         </div>
       ) : notifications.length === 0 ? (
         <EmptyState
           icon="🔔"
-          title="No notifications yet"
-          description="Updates about your orders will show up here once you place one."
+          title={t("notif.emptyTitle")}
+          description={t("notif.emptyDesc")}
         />
       ) : filteredNotifications.length === 0 ? (
         <EmptyState
           icon="🔍"
-          title="No matching notifications"
-          description="Try a different category."
+          title={t("notif.noMatchTitle")}
+          description={t("notif.noMatchDesc")}
         />
       ) : (
         <div className="space-y-3">

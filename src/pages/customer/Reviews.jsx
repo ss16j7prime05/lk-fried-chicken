@@ -3,6 +3,7 @@ import { addDoc, collection, onSnapshot, query, serverTimestamp, where } from "f
 import { Star } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { normalizeStatus } from "../../store/orderStatus";
 import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
@@ -11,9 +12,9 @@ import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import { EmptyState } from "../../components/ui/EmptyState";
 
-const formatDateTime = (timestamp) => {
+const formatDateTime = (timestamp, locale) => {
   if (!timestamp?.toDate) return "-";
-  return timestamp.toDate().toLocaleString("en-GB", {
+  return timestamp.toDate().toLocaleString(locale === "th" ? "th-TH" : "en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -57,6 +58,7 @@ const StarPicker = ({ value, onChange, readOnly = false, size = 28 }) => (
 );
 
 const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
+  const { t } = usePreferences();
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -74,7 +76,7 @@ const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
 
   const handleSubmit = async () => {
     if (rating < 1) {
-      setError("Please select a star rating.");
+      setError(t("reviews.selectStar"));
       return;
     }
     setSubmitting(true);
@@ -95,7 +97,7 @@ const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
       onClose();
     } catch (err) {
       console.error("Failed to submit review:", err);
-      setError("Failed to submit your review. Please try again.");
+      setError(t("reviews.submitFail"));
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +107,7 @@ const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
     <Modal open={open} onClose={onClose} className="max-w-md">
       <div className="p-6 sm:p-8 space-y-6">
         <div>
-          <h2 className="text-xl font-black text-gray-900">Rate Your Order</h2>
+          <h2 className="text-xl font-black text-gray-900">{t("reviews.rateOrder")}</h2>
           <p className="text-sm text-gray-400 font-medium mt-1">{order.orderNo}</p>
         </div>
 
@@ -115,12 +117,12 @@ const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
 
         <div>
           <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-            Comment (optional)
+            {t("reviews.commentOptional")}
           </label>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="How was your order?"
+            placeholder={t("reviews.commentPlaceholder")}
             rows={4}
             className="w-full mt-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
           />
@@ -130,10 +132,10 @@ const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
 
         <div className="flex gap-3">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("addr.cancel")}
           </Button>
           <Button className="flex-1" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Submitting..." : "Submit Review"}
+            {submitting ? t("reviews.submitting") : t("reviews.submit")}
           </Button>
         </div>
       </div>
@@ -142,6 +144,7 @@ const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
 };
 
 const ReviewableOrderCard = ({ order, review, onWriteReview }) => {
+  const { t, language } = usePreferences();
   const itemCount = (order.items ?? []).reduce((sum, item) => sum + (item.qty ?? 0), 0);
 
   return (
@@ -150,14 +153,14 @@ const ReviewableOrderCard = ({ order, review, onWriteReview }) => {
         <div>
           <p className="font-black text-gray-900">{order.orderNo}</p>
           <p className="text-xs font-medium text-gray-400 mt-0.5">
-            {formatDateTime(order.createdAt)}
+            {formatDateTime(order.createdAt, language)}
           </p>
         </div>
-        <Badge color={review ? "blue" : "green"}>{review ? "Reviewed" : "Completed"}</Badge>
+        <Badge color={review ? "blue" : "green"}>{review ? t("reviews.reviewed") : t("reviews.completed")}</Badge>
       </div>
 
       <p className="text-xs text-gray-400 font-medium mb-3">
-        {itemCount} item{itemCount !== 1 ? "s" : ""} • ฿{order.grandTotal}
+        {itemCount} {itemCount !== 1 ? t("common.items") : t("common.item")} • ฿{order.grandTotal}
       </p>
 
       {review ? (
@@ -169,7 +172,7 @@ const ReviewableOrderCard = ({ order, review, onWriteReview }) => {
         <div className="pt-3 border-t border-gray-50">
           <Button variant="outline" className="w-full !py-2 text-sm" onClick={() => onWriteReview(order)}>
             <Star size={16} />
-            Write a Review
+            {t("reviews.writeReview")}
           </Button>
         </div>
       )}
@@ -179,11 +182,15 @@ const ReviewableOrderCard = ({ order, review, onWriteReview }) => {
 
 export const Reviews = () => {
   const { profile } = useAuth();
+  const { t } = usePreferences();
 
   const [reviews, setReviews] = useState([]);
   const [retryToken, setRetryToken] = useState(0);
   const [activeOrder, setActiveOrder] = useState(null);
-  const { orders, loading, error } = useCustomerOrders(profile?.phone, { retryToken });
+  const { orders, loading, error } = useCustomerOrders(profile?.phone, {
+    retryToken,
+    errorMessage: t("orders.ordersError"),
+  });
 
   const completedOrders = useMemo(
     () => orders.filter((o) => normalizeStatus(o.status) === "completed"),
@@ -224,7 +231,7 @@ export const Reviews = () => {
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
-      <h1 className="text-2xl font-black text-gray-900">Reviews</h1>
+      <h1 className="text-2xl font-black text-gray-900">{t("reviews.title")}</h1>
 
       {loading ? (
         <div className="space-y-4">
@@ -233,18 +240,18 @@ export const Reviews = () => {
         </div>
       ) : error ? (
         <div className="space-y-6">
-          <EmptyState icon="⚠️" title="Something went wrong" description={error} />
+          <EmptyState icon="⚠️" title={t("common.somethingWrong")} description={error} />
           <div className="flex justify-center">
             <Button variant="outline" onClick={handleRetry}>
-              Retry
+              {t("common.retry")}
             </Button>
           </div>
         </div>
       ) : completedOrders.length === 0 ? (
         <EmptyState
           icon="⭐"
-          title="No orders to review yet"
-          description="Once an order is completed, you'll be able to rate it here."
+          title={t("reviews.emptyTitle")}
+          description={t("reviews.emptyDesc")}
         />
       ) : (
         <div className="space-y-4">

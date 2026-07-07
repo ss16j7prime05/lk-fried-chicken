@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
@@ -91,6 +92,9 @@ const DEFAULT_SETTINGS = {
 
 export const Settings = () => {
   const { user } = useAuth();
+  // Theme/language come from PreferencesContext (applies app-wide instantly and
+  // persists to localStorage + users/{uid}); this page only renders the controls.
+  const { theme, setTheme, language, setLanguage, t } = usePreferences();
 
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -134,15 +138,15 @@ export const Settings = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-8 space-y-6">
-      <h1 className="text-2xl font-black text-gray-900">Settings</h1>
+      <h1 className="text-2xl font-black text-gray-900">{t("settings.title")}</h1>
 
       {/* Notification Preferences */}
       <Card className="p-6">
-        <SectionTitle>Notification Preferences</SectionTitle>
+        <SectionTitle>{t("settings.notifications")}</SectionTitle>
         <SettingRow
           icon={Bell}
-          label="Order Updates"
-          description="Status changes for your orders"
+          label={t("settings.orderUpdates")}
+          description={t("settings.orderUpdatesDesc")}
           control={
             <Toggle
               checked={settings.notifyOrderUpdates}
@@ -152,8 +156,8 @@ export const Settings = () => {
         />
         <SettingRow
           icon={Bell}
-          label="Promotions"
-          description="Deals and special offers"
+          label={t("settings.promotions")}
+          description={t("settings.promotionsDesc")}
           control={
             <Toggle
               checked={settings.notifyPromotions}
@@ -165,25 +169,23 @@ export const Settings = () => {
 
       {/* Appearance */}
       <Card className="p-6">
-        <SectionTitle>Appearance</SectionTitle>
+        <SectionTitle>{t("settings.appearance")}</SectionTitle>
         <SettingRow
-          icon={settings.theme === "dark" ? Moon : Sun}
-          label="Theme"
-          description="Saved to your account"
+          icon={theme === "dark" ? Moon : Sun}
+          label={t("settings.theme")}
+          description={t("settings.themeDesc")}
           control={
             <div className="flex gap-1 bg-gray-50 rounded-2xl p-1">
               {["light", "dark"].map((option) => (
                 <button
                   key={option}
                   type="button"
-                  onClick={() => saveSetting({ theme: option })}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
-                    settings.theme === option
-                      ? "bg-primary text-white"
-                      : "text-gray-500"
+                  onClick={() => setTheme(option)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    theme === option ? "bg-primary text-white" : "text-gray-500"
                   }`}
                 >
-                  {option}
+                  {t(`settings.${option}`)}
                 </button>
               ))}
             </div>
@@ -191,8 +193,8 @@ export const Settings = () => {
         />
         <SettingRow
           icon={Globe}
-          label="Language"
-          description="Saved to your account"
+          label={t("settings.language")}
+          description={t("settings.languageDesc")}
           control={
             <div className="flex gap-1 bg-gray-50 rounded-2xl p-1">
               {[
@@ -202,11 +204,9 @@ export const Settings = () => {
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => saveSetting({ language: option.value })}
+                  onClick={() => setLanguage(option.value)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    settings.language === option.value
-                      ? "bg-primary text-white"
-                      : "text-gray-500"
+                    language === option.value ? "bg-primary text-white" : "text-gray-500"
                   }`}
                 >
                   {option.label}
@@ -219,69 +219,47 @@ export const Settings = () => {
 
       {/* Support & Legal */}
       <Card className="p-6">
-        <SectionTitle>Support & Legal</SectionTitle>
-        <LinkRow icon={Phone} label="Contact Store" onClick={handleContactStore} />
-        <LinkRow icon={Info} label="About" onClick={() => setActiveModal("about")} />
-        <LinkRow icon={Shield} label="Privacy Policy" onClick={() => setActiveModal("privacy")} />
-        <LinkRow icon={FileText} label="Terms of Service" onClick={() => setActiveModal("terms")} />
+        <SectionTitle>{t("settings.support")}</SectionTitle>
+        <LinkRow icon={Phone} label={t("settings.contactStore")} onClick={handleContactStore} />
+        <LinkRow icon={Info} label={t("settings.about")} onClick={() => setActiveModal("about")} />
+        <LinkRow icon={Shield} label={t("settings.privacy")} onClick={() => setActiveModal("privacy")} />
+        <LinkRow icon={FileText} label={t("settings.terms")} onClick={() => setActiveModal("terms")} />
       </Card>
 
       <InfoModal
         open={activeModal === "about"}
         onClose={() => setActiveModal(null)}
-        title="About"
+        title={t("settings.about")}
       >
+        <p>{t("settings.aboutBody", { name: PROMPTPAY_ACCOUNT_NAME })}</p>
+        <p>{t("settings.version")}</p>
         <p>
-          <span className="font-bold text-gray-900">{PROMPTPAY_ACCOUNT_NAME}</span> — online
-          ordering, delivery, and pickup.
-        </p>
-        <p>Version 1.0.0</p>
-        <p>
-          Questions or feedback? Call the store at{" "}
+          {t("settings.aboutContact")}{" "}
           <a href={`tel:${STORE_PHONE}`} className="text-primary font-bold">
             {STORE_PHONE}
           </a>
-          .
         </p>
       </InfoModal>
 
       <InfoModal
         open={activeModal === "privacy"}
         onClose={() => setActiveModal(null)}
-        title="Privacy Policy"
+        title={t("settings.privacy")}
       >
-        <p>
-          We collect the information you provide when you order — your name, phone number,
-          delivery address, and location — solely to prepare, deliver, and track your order.
-        </p>
-        <p>
-          If you pay by PromptPay or bank transfer, the payment slip image you upload is used
-          only to verify your payment.
-        </p>
-        <p>
-          Your order history is only visible to your own account, matched by your phone
-          number. We do not sell your personal information to third parties.
-        </p>
-        <p>Contact the store directly with any privacy questions or requests.</p>
+        <p>{t("settings.privacy1")}</p>
+        <p>{t("settings.privacy2")}</p>
+        <p>{t("settings.privacy3")}</p>
+        <p>{t("settings.privacy4")}</p>
       </InfoModal>
 
       <InfoModal
         open={activeModal === "terms"}
         onClose={() => setActiveModal(null)}
-        title="Terms of Service"
+        title={t("settings.terms")}
       >
-        <p>
-          By placing an order, you confirm the delivery details and items in your cart are
-          correct. Prices, delivery fees, and availability are set by the store and may change
-          without notice.
-        </p>
-        <p>
-          Orders may be cancelled by the store if items are unavailable or delivery isn't
-          possible. Refunds for cancelled paid orders are handled by the store directly.
-        </p>
-        <p>
-          Please contact the store for any order issues or disputes.
-        </p>
+        <p>{t("settings.terms1")}</p>
+        <p>{t("settings.terms2")}</p>
+        <p>{t("settings.terms3")}</p>
       </InfoModal>
     </div>
   );

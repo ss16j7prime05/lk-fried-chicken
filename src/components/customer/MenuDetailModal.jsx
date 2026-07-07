@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
 import { Input } from "../ui/Input";
 import { useCart } from "../../context/CartContext";
+import { usePreferences } from "../../context/PreferencesContext";
 
 // Real menu-option rules — mirrors src/App.jsx's legacy checkout (single source of
 // truth): which Firestore `options/{id}` doc applies to which item, and which
@@ -49,6 +50,7 @@ const ChoiceGroup = ({ title, choices, value, onChange }) => {
 
 export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart }) => {
   const { addToCart } = useCart();
+  const { t } = usePreferences();
 
   const [topChicken, setTopChicken] = useState(null);
   const [spicy, setSpicy] = useState(null);
@@ -99,11 +101,11 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
 
   const handleAddToCart = () => {
     if (needsTopChicken && !topChicken) {
-      setValidationError("Please select a chicken topping.");
+      setValidationError(t("menu.selectTopping"));
       return;
     }
     if (needsSpicy && !spicy) {
-      setValidationError("Please select a spice level.");
+      setValidationError(t("menu.selectSpice"));
       return;
     }
     setValidationError("");
@@ -161,7 +163,7 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
             {menu.sold != null && (
               <span className="flex items-center gap-1">
                 <Flame size={14} className="text-secondary" />
-                {menu.sold}+ sold
+                {t("food.sold", { n: menu.sold })}
               </span>
             )}
           </div>
@@ -170,7 +172,7 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
         <div className="space-y-6">
           {needsTopChicken && (
             <ChoiceGroup
-              title="Chicken Topping"
+              title={t("menu.chickenTopping")}
               choices={topChickenOption?.choices}
               value={topChicken}
               onChange={setTopChicken}
@@ -179,7 +181,7 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
 
           {needsSpicy && (
             <ChoiceGroup
-              title="Spice Level"
+              title={t("menu.spiceLevel")}
               choices={spicyOption?.choices}
               value={spicy}
               onChange={setSpicy}
@@ -189,25 +191,25 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
           {showExtraOptions && (
             <>
               <ChoiceGroup
-                title="Sauce"
+                title={t("menu.sauce")}
                 choices={sauceMainOption?.choices}
                 value={sauceMain}
                 onChange={setSauceMain}
               />
               <ChoiceGroup
-                title="Extra Sauce"
+                title={t("menu.extraSauce")}
                 choices={sauceExtraOption?.choices}
                 value={sauceExtra}
                 onChange={setSauceExtra}
               />
               <ChoiceGroup
-                title="Shake Powder"
+                title={t("menu.shakePowder")}
                 choices={powderOption?.choices}
                 value={powder}
                 onChange={setPowder}
               />
               <ChoiceGroup
-                title="Extra Cheese"
+                title={t("menu.extraCheese")}
                 choices={tableCheeseOption?.choices}
                 value={tableCheese}
                 onChange={setTableCheese}
@@ -217,7 +219,7 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
 
           <div>
             <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-              Quantity
+              {t("menu.quantity")}
             </h4>
             <div className="flex items-center gap-4">
               <button
@@ -244,12 +246,12 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
 
           <div>
             <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-              Special Note
+              {t("menu.specialNote")}
             </h4>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="E.g. less oil, no cilantro..."
+              placeholder={t("menu.notePlaceholder")}
               rows={3}
               className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
             />
@@ -262,11 +264,11 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
 
         <div className="sticky bottom-0 -mx-6 sm:-mx-8 px-6 sm:px-8 pt-4 pb-1 bg-white/95 backdrop-blur border-t border-gray-100 flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold text-gray-400 uppercase">Total</p>
+            <p className="text-xs font-bold text-gray-400 uppercase">{t("menu.total")}</p>
             <p className="text-2xl font-black text-primary">฿{totalPrice}</p>
           </div>
           <Button className="flex-1" onClick={handleAddToCart}>
-            Add To Cart
+            {t("menu.addToCart")}
           </Button>
         </div>
       </div>

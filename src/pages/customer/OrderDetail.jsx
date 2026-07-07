@@ -7,6 +7,7 @@ import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { getStore } from "./getStore";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
 import { normalizeStatus } from "../../store/orderStatus";
+import { usePreferences } from "../../context/PreferencesContext";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -38,40 +39,23 @@ const TIMELINE_STEPS = [
   { status: "completed", label: "Completed" },
 ];
 
-const STATUS_LABELS = {
-  pending: "Pending",
-  accepted: "Accepted",
-  cooking: "Cooking",
-  ready_for_delivery: "Ready",
-  picked_up: "Rider Assigned",
-  delivering: "Delivering",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
 const STATUS_BADGE_COLOR = {
-  Pending: "orange",
-  Accepted: "blue",
-  Cooking: "blue",
-  Ready: "blue",
-  "Rider Assigned": "blue",
-  Delivering: "blue",
-  Completed: "green",
-  Cancelled: "orange",
+  pending: "orange",
+  accepted: "blue",
+  cooking: "blue",
+  ready_for_delivery: "blue",
+  picked_up: "blue",
+  delivering: "blue",
+  completed: "green",
+  cancelled: "orange",
 };
 
-const PAYMENT_METHOD_LABELS = {
-  cash: "Cash",
-  promptpay: "PromptPay",
-};
-
-// Mirrors src/payment/paymentUtils.js PAYMENT_STATUS — order.payment.status is the
-// authoritative field (nested object), not the flat order.paymentStatus.
-const PAYMENT_STATUS_LABELS = {
-  [PAYMENT_STATUS.UNPAID]: "Unpaid (Cash on Delivery)",
-  [PAYMENT_STATUS.PENDING_VERIFICATION]: "Pending Verification",
-  [PAYMENT_STATUS.APPROVED]: "Paid",
-  [PAYMENT_STATUS.REJECTED]: "Rejected — Please Re-pay",
+// order.payment.status (enum) -> od.payStatus.* i18n subkey.
+const PAY_STATUS_KEY = {
+  [PAYMENT_STATUS.UNPAID]: "unpaid",
+  [PAYMENT_STATUS.PENDING_VERIFICATION]: "pending",
+  [PAYMENT_STATUS.APPROVED]: "approved",
+  [PAYMENT_STATUS.REJECTED]: "rejected",
 };
 
 const PAYMENT_STATUS_COLOR = {
@@ -81,9 +65,9 @@ const PAYMENT_STATUS_COLOR = {
   [PAYMENT_STATUS.REJECTED]: "orange",
 };
 
-const formatDateTime = (timestamp) => {
+const formatDateTime = (timestamp, locale) => {
   if (!timestamp?.toDate) return "-";
-  return timestamp.toDate().toLocaleString("en-GB", {
+  return timestamp.toDate().toLocaleString(locale === "th" ? "th-TH" : "en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -101,11 +85,6 @@ const formatTime = (timestamp) => {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 };
 
-// gpsLocation is stored as a "lat,lng" string (legacy format), not an object.
-const formatGps = (gpsLocation) => {
-  if (!gpsLocation) return "Not provided";
-  return gpsLocation;
-};
 
 // Legacy option fields (top_chicken/spicy/sauce/powder) can be a plain string or an
 // { name, price } object, depending on how the item was added to cart.
@@ -119,7 +98,7 @@ const SectionTitle = ({ children }) => (
   <h2 className="text-base font-black text-gray-900 mb-4">{children}</h2>
 );
 
-const ItemRow = ({ item }) => {
+const ItemRow = ({ item, t }) => {
   const qty = item.qty || 1;
   const options = [
     optionLabel(item.top_chicken),
@@ -139,7 +118,7 @@ const ItemRow = ({ item }) => {
           <p className="text-xs text-gray-400 font-medium mt-1">{options.join(" • ")}</p>
         )}
         {item.note && (
-          <p className="text-xs text-gray-400 font-medium mt-1">Note: {item.note}</p>
+          <p className="text-xs text-gray-400 font-medium mt-1">{t("addr.noteLabel")}: {item.note}</p>
         )}
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs font-bold text-gray-400">
@@ -154,6 +133,7 @@ const ItemRow = ({ item }) => {
 
 export const OrderDetail = () => {
   const { orderId } = useParams();
+  const { t, language } = usePreferences();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -185,7 +165,7 @@ export const OrderDetail = () => {
       },
       (err) => {
         console.error("Failed to load order:", err);
-        setError("Unable to load this order right now. Please try again later.");
+        setError(t("od.error"));
         setLoading(false);
       }
     );
@@ -194,19 +174,19 @@ export const OrderDetail = () => {
   }, [orderId]);
 
   if (loading) {
-    return <Loading text="Loading order details..." />;
+    return <Loading text={t("od.loading")} />;
   }
 
   if (error) {
-    return <EmptyState icon="⚠️" title="Something went wrong" description={error} />;
+    return <EmptyState icon="⚠️" title={t("common.somethingWrong")} description={error} />;
   }
 
   if (notFound || !order) {
     return (
       <EmptyState
         icon="🔍"
-        title="Order not found"
-        description="We couldn't find an order with this ID."
+        title={t("od.orderNotFound")}
+        description={t("od.notFoundDesc")}
       />
     );
   }
@@ -216,7 +196,7 @@ export const OrderDetail = () => {
   // still show the correct label and timeline progress instead of falling back to
   // the raw Thai string / an all-blank timeline.
   const normalizedStatus = normalizeStatus(order.status);
-  const statusLabel = STATUS_LABELS[normalizedStatus] ?? order.status ?? "Pending";
+  const statusLabel = t(`status.${normalizedStatus}`) || order.status || t("status.pending");
   const isCancelled = normalizedStatus === "cancelled";
   const currentStepIndex = TIMELINE_STEPS.findIndex((step) => step.status === normalizedStatus);
   const isTrackable = TRACKABLE_STATUSES.includes(normalizedStatus);
@@ -243,16 +223,16 @@ export const OrderDetail = () => {
       <div>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-black text-gray-900">{order.orderNo}</h1>
-          <Badge color={STATUS_BADGE_COLOR[statusLabel] ?? "blue"}>{statusLabel}</Badge>
+          <Badge color={STATUS_BADGE_COLOR[normalizedStatus] ?? "blue"}>{statusLabel}</Badge>
         </div>
         <p className="text-sm text-gray-400 font-medium mt-1">
-          {formatDateTime(order.createdAt)}
+          {formatDateTime(order.createdAt, language)}
         </p>
       </div>
 
       {/* Store Information */}
       <Card className="p-6">
-        <SectionTitle>Store Information</SectionTitle>
+        <SectionTitle>{t("od.storeInfo")}</SectionTitle>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-bold text-gray-900">{PROMPTPAY_ACCOUNT_NAME}</p>
@@ -263,7 +243,7 @@ export const OrderDetail = () => {
 
       {/* Customer Information */}
       <Card className="p-6">
-        <SectionTitle>Customer Information</SectionTitle>
+        <SectionTitle>{t("od.customerInfo")}</SectionTitle>
         <div className="space-y-1.5 text-sm">
           <p className="font-bold text-gray-900">{order.customerName}</p>
           <p className="text-gray-500 font-medium">{order.phone}</p>
@@ -274,56 +254,59 @@ export const OrderDetail = () => {
             </p>
           )}
           <p className="text-xs text-gray-400 font-medium mt-2">
-            GPS: {formatGps(order.gpsLocation)}
+            {t("od.gps")}: {order.gpsLocation || t("od.notProvided")}
           </p>
           {order.note && (
-            <p className="text-xs text-gray-400 font-medium mt-1">Note: {order.note}</p>
+            <p className="text-xs text-gray-400 font-medium mt-1">{t("addr.noteLabel")}: {order.note}</p>
           )}
         </div>
       </Card>
 
       {/* Ordered Items */}
       <Card className="p-6">
-        <SectionTitle>Ordered Items</SectionTitle>
+        <SectionTitle>{t("od.orderedItems")}</SectionTitle>
         <div>
           {(order.items ?? []).map((item, index) => (
-            <ItemRow key={`${item.id ?? index}-${index}`} item={item} />
+            <ItemRow key={`${item.id ?? index}-${index}`} item={item} t={t} />
           ))}
         </div>
       </Card>
 
       {/* Payment */}
       <Card className="p-6">
-        <SectionTitle>Payment</SectionTitle>
+        <SectionTitle>{t("od.payment")}</SectionTitle>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-500">Payment Method</span>
+          <span className="text-sm font-medium text-gray-500">{t("od.paymentMethod")}</span>
           <span className="font-bold text-gray-900">
-            {PAYMENT_METHOD_LABELS[order.payment?.method ?? order.paymentMethod] ??
-              order.paymentMethod}
+            {(order.payment?.method ?? order.paymentMethod)
+              ? t(`payment.${order.payment?.method ?? order.paymentMethod}`)
+              : "-"}
           </span>
         </div>
         <div className="flex items-center justify-between mt-2">
-          <span className="text-sm font-medium text-gray-500">Payment Status</span>
+          <span className="text-sm font-medium text-gray-500">{t("od.paymentStatus")}</span>
           <Badge color={PAYMENT_STATUS_COLOR[order.payment?.status] ?? "orange"}>
-            {PAYMENT_STATUS_LABELS[order.payment?.status] ?? order.payment?.status ?? "-"}
+            {PAY_STATUS_KEY[order.payment?.status]
+              ? t(`od.payStatus.${PAY_STATUS_KEY[order.payment?.status]}`)
+              : order.payment?.status ?? "-"}
           </Badge>
         </div>
       </Card>
 
       {/* Price Summary */}
       <Card className="p-6">
-        <SectionTitle>Price Summary</SectionTitle>
+        <SectionTitle>{t("od.priceSummary")}</SectionTitle>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between text-gray-500 font-medium">
-            <span>Subtotal</span>
+            <span>{t("od.subtotal")}</span>
             <span>฿{order.subtotal}</span>
           </div>
           <div className="flex justify-between text-gray-500 font-medium">
-            <span>Delivery Fee</span>
+            <span>{t("od.deliveryFee")}</span>
             <span>฿{order.deliveryFee}</span>
           </div>
           <div className="flex justify-between text-lg font-black text-gray-900 pt-3 border-t border-gray-100">
-            <span>Grand Total</span>
+            <span>{t("od.grandTotal")}</span>
             <span className="text-primary">฿{order.grandTotal}</span>
           </div>
         </div>
@@ -331,14 +314,14 @@ export const OrderDetail = () => {
 
       {/* Delivery Timeline */}
       <Card className="p-6">
-        <SectionTitle>Delivery Timeline</SectionTitle>
+        <SectionTitle>{t("od.deliveryTimeline")}</SectionTitle>
         {isCancelled ? (
-          <p className="text-sm font-bold text-secondary">This order was cancelled.</p>
+          <p className="text-sm font-bold text-secondary">{t("od.cancelled")}</p>
         ) : (
           <div className="space-y-0">
             {cookingEta && (
               <div className="mb-4 rounded-2xl bg-primary-light px-4 py-3 text-sm font-bold text-primary">
-                Estimated ready by {cookingEta}
+                {t("od.estReadyBy", { time: cookingEta })}
               </div>
             )}
             {TIMELINE_STEPS.map((step, index) => {
@@ -367,7 +350,7 @@ export const OrderDetail = () => {
                       isDone ? "text-gray-900" : "text-gray-300"
                     }`}
                   >
-                    {step.label}
+                    {t(`status.${step.status}`)}
                   </p>
                 </div>
               );
@@ -379,16 +362,16 @@ export const OrderDetail = () => {
       {/* Rider — shown once a rider has accepted this delivery */}
       {hasRider && (
         <Card className="p-6">
-          <SectionTitle>Rider</SectionTitle>
+          <SectionTitle>{t("od.rider")}</SectionTitle>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-primary-light flex items-center justify-center shrink-0">
               <Bike size={22} className="text-primary" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-bold text-gray-900">{order.riderName || "Rider"}</p>
+              <p className="font-bold text-gray-900">{order.riderName || t("od.rider")}</p>
               <p className="text-sm text-gray-400 font-medium">{order.riderPhone || "-"}</p>
               <p className="text-xs text-gray-400 font-medium mt-0.5">
-                Vehicle: {order.riderVehicle || "—"}
+                {t("od.vehicle")}: {order.riderVehicle || "—"}
               </p>
             </div>
           </div>
@@ -402,7 +385,7 @@ export const OrderDetail = () => {
                 }}
               >
                 <Phone size={18} />
-                Call Rider
+                {t("od.callRider")}
               </Button>
             )}
             {riderLocation && (
@@ -410,7 +393,7 @@ export const OrderDetail = () => {
                 lat={riderLocation.lat}
                 lng={riderLocation.lng}
                 mode="view"
-                label="View Rider on Google Maps"
+                label={t("od.viewRiderMaps")}
                 style={{ flex: 1, textAlign: "center", display: "block" }}
               />
             )}
@@ -422,7 +405,7 @@ export const OrderDetail = () => {
       {isTrackable && (
         <div ref={trackingRef}>
           <Card className="p-6">
-            <SectionTitle>Live Tracking</SectionTitle>
+            <SectionTitle>{t("od.liveTracking")}</SectionTitle>
             {riderLocation ? (
               <TrackingPanel
                 storeLocation={resolvedStoreLocation}
@@ -433,7 +416,7 @@ export const OrderDetail = () => {
               />
             ) : (
               <p className="text-sm text-gray-400 font-medium">
-                Waiting for the rider's location to become available…
+                {t("od.waitingRiderLoc")}
               </p>
             )}
           </Card>
@@ -451,7 +434,7 @@ export const OrderDetail = () => {
             }}
           >
             <Phone size={18} />
-            Contact Store
+            {t("od.contactStore")}
           </Button>
           <Button
             variant="outline"
@@ -460,11 +443,11 @@ export const OrderDetail = () => {
             onClick={() => trackingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
           >
             <Navigation size={18} />
-            Track Rider
+            {t("od.trackRider")}
           </Button>
           <Button className="flex-1 opacity-50 cursor-not-allowed" disabled>
             <RotateCcw size={18} />
-            Reorder
+            {t("od.reorder")}
           </Button>
         </div>
       </div>

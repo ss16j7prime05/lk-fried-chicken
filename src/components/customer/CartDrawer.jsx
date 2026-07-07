@@ -5,8 +5,9 @@ import { Badge } from "../ui/Badge";
 import { Card } from "../ui/Card";
 import { EmptyState } from "../ui/EmptyState";
 import { useCart } from "../../context/CartContext";
+import { usePreferences } from "../../context/PreferencesContext";
 
-const CartLine = ({ item, onIncrease, onDecrease, onRemove }) => (
+const CartLine = ({ item, onIncrease, onDecrease, onRemove, t }) => (
   <Card className="flex gap-4 p-4">
     <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 bg-gray-50">
       <img
@@ -22,7 +23,7 @@ const CartLine = ({ item, onIncrease, onDecrease, onRemove }) => (
         <button
           onClick={() => onRemove?.(item.id)}
           className="text-gray-300 hover:text-secondary transition-colors shrink-0"
-          aria-label="Remove item"
+          aria-label={t("cart.removeItem")}
         >
           <Trash2 size={16} />
         </button>
@@ -73,15 +74,16 @@ export const CartDrawer = ({ open, onClose, onCheckout }) => {
     deliveryFee,
     grandTotal,
   } = useCart();
+  const { t } = usePreferences();
 
   return (
     <Modal open={open} onClose={onClose} className="max-w-md ml-auto mr-0 h-full max-h-screen rounded-none sm:rounded-l-3xl flex flex-col">
       <div className="flex items-center justify-between p-6 border-b border-gray-100">
-        <h2 className="text-xl font-black text-gray-900">Your Cart</h2>
+        <h2 className="text-xl font-black text-gray-900">{t("cart.title")}</h2>
         <button
           onClick={onClose}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
-          aria-label="Close cart"
+          aria-label={t("cart.close")}
         >
           <X size={18} />
         </button>
@@ -91,14 +93,15 @@ export const CartDrawer = ({ open, onClose, onCheckout }) => {
         {cartItems.length === 0 ? (
           <EmptyState
             icon="🛒"
-            title="Your cart is empty"
-            description="Add some crispy fried chicken to get started."
+            title={t("cart.emptyTitle")}
+            description={t("cart.emptyDesc")}
           />
         ) : (
           cartItems.map((item) => (
             <CartLine
               key={item.id}
               item={item}
+              t={t}
               onIncrease={increaseQuantity}
               onDecrease={decreaseQuantity}
               onRemove={removeFromCart}
@@ -110,20 +113,20 @@ export const CartDrawer = ({ open, onClose, onCheckout }) => {
       {cartItems.length > 0 && (
         <div className="p-6 border-t border-gray-100 space-y-3 bg-white">
           <div className="flex justify-between text-sm font-medium text-gray-500">
-            <span>Subtotal</span>
+            <span>{t("cart.subtotal")}</span>
             <span>฿{subtotal}</span>
           </div>
           <div className="flex justify-between text-sm font-medium text-gray-500">
-            <span>Delivery Fee</span>
+            <span>{t("cart.deliveryFee")}</span>
             <span>฿{deliveryFee}</span>
           </div>
           <div className="flex justify-between text-lg font-black text-gray-900 pt-2 border-t border-gray-100">
-            <span>Grand Total</span>
+            <span>{t("cart.grandTotal")}</span>
             <span className="text-primary">฿{grandTotal}</span>
           </div>
 
           <Button className="w-full mt-2" onClick={onCheckout}>
-            Checkout
+            {t("cart.checkout")}
           </Button>
         </div>
       )}

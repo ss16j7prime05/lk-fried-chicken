@@ -2,6 +2,7 @@ import { Star, Plus, Flame } from "lucide-react";
 import { Card } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
+import { usePreferences } from "../../context/PreferencesContext";
 
 export const FoodCard = ({
   image,
@@ -14,6 +15,7 @@ export const FoodCard = ({
   onView,
   onAdd,
 }) => {
+  const { t } = usePreferences();
   return (
     <Card className="group flex flex-col h-full">
       <div className="relative h-44 sm:h-48 overflow-hidden cursor-pointer" onClick={onView}>
@@ -51,7 +53,7 @@ export const FoodCard = ({
           {sold != null && (
             <span className="flex items-center gap-1">
               <Flame size={14} className="text-secondary" />
-              {sold}+ sold
+              {t("food.sold", { n: sold })}
             </span>
           )}
         </div>
@@ -61,11 +63,11 @@ export const FoodCard = ({
 
           <div className="flex items-center gap-2">
             <Button variant="outline" className="!px-4 !py-2 text-xs" onClick={onView}>
-              View Details
+              {t("common.viewDetails")}
             </Button>
             <button
               onClick={onAdd}
-              aria-label="Add to cart"
+              aria-label={t("food.addToCart")}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-primary text-white hover:bg-primary-dark transition-colors shrink-0"
             >
               <Plus size={18} />

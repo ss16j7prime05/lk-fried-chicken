@@ -15,3 +15,31 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-gray-200 rounded-full;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Dark theme override layer (.dark set on <html> by PreferencesContext).
+   The app's components use light design tokens (bg-white / gray-*) directly, so
+   dark mode is implemented as a single token-remap layer here instead of adding
+   dark: variants to every component. One place to tune the whole palette.
+   ──────────────────────────────────────────────────────────────────────────── */
+.dark body { background-color: #0f1115; color: #f3f4f6; }
+
+.dark .bg-white { background-color: #171a21 !important; }
+.dark .bg-surface { background-color: #0f1115 !important; }
+.dark .bg-gray-50 { background-color: #1e222b !important; }
+.dark .bg-gray-100 { background-color: #252a35 !important; }
+.dark .bg-gray-200 { background-color: #2e3442 !important; }
+
+.dark .text-gray-900, .dark .text-dark { color: #f3f4f6 !important; }
+.dark .text-gray-800 { color: #e5e7eb !important; }
+.dark .text-gray-700 { color: #d1d5db !important; }
+.dark .text-gray-600 { color: #b3b9c4 !important; }
+.dark .text-gray-500 { color: #9ca3af !important; }
+.dark .text-gray-400 { color: #7b8290 !important; }
+.dark .text-gray-300 { color: #565d6b !important; }
+
+.dark .border-gray-50, .dark .border-gray-100, .dark .border-gray-200 { border-color: #2a2f3a !important; }
+.dark .bg-primary-light { background-color: rgba(0, 177, 79, 0.16) !important; }
+.dark .bg-white\/80 { background-color: rgba(23, 26, 33, 0.85) !important; }
+
+.dark ::-webkit-scrollbar-thumb { background-color: #2e3442; }

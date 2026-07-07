@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
-  Home as HomeIcon,
   Banknote,
   QrCode,
   LogOut,
@@ -10,11 +10,12 @@ import {
   Wallet,
   Heart,
   Camera,
-  Plus,
-  Trash2,
+  MapPin,
+  ChevronRight,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
 import { useAuth } from "../../AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { normalizeStatus } from "../../store/orderStatus";
 import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
@@ -39,14 +40,15 @@ const StatCard = ({ icon: Icon, label, value }) => (
   </Card>
 );
 
-const formatMemberSince = (timestamp) => {
+const formatMemberSince = (timestamp, locale) => {
   const d = timestamp?.toDate ? timestamp.toDate() : timestamp ? new Date(timestamp) : null;
   if (!d || Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+  return d.toLocaleDateString(locale === "th" ? "th-TH" : "en-GB", { month: "short", year: "numeric" });
 };
 
 export const Profile = () => {
   const { user, logout } = useAuth();
+  const { t, language } = usePreferences();
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -58,10 +60,6 @@ export const Profile = () => {
 
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState(null);
-
-  const [newAddressLabel, setNewAddressLabel] = useState("");
-  const [newAddressDetail, setNewAddressDetail] = useState("");
-  const [addingAddress, setAddingAddress] = useState(false);
 
   const [logoutOpen, setLogoutOpen] = useState(false);
 
@@ -103,8 +101,6 @@ export const Profile = () => {
     return { totalOrders: orders.length, totalSpent, favoriteMenu };
   }, [orders]);
 
-  const addresses = profile?.addresses ?? [];
-
   const handleSaveProfile = async () => {
     if (!user?.uid) return;
     setSaving(true);
@@ -114,10 +110,10 @@ export const Profile = () => {
         name: fullName.trim(),
         phone: phone.trim(),
       });
-      setSaveMessage("Saved!");
+      setSaveMessage(t("profile.saved"));
     } catch (err) {
       console.error("Failed to save profile:", err);
-      setSaveMessage("Failed to save. Please try again.");
+      setSaveMessage(t("profile.saveFail"));
     } finally {
       setSaving(false);
     }
@@ -140,42 +136,17 @@ export const Profile = () => {
       await updateDoc(doc(db, "users", user.uid), { avatarUrl: url });
     } catch (err) {
       console.error("Failed to upload avatar:", err);
-      setAvatarError("Failed to upload photo. Please try again.");
+      setAvatarError(t("profile.avatarFail"));
     } finally {
       setAvatarUploading(false);
     }
   };
 
-  const handleAddAddress = async () => {
-    if (!user?.uid || !newAddressLabel.trim() || !newAddressDetail.trim()) return;
-    setAddingAddress(true);
-    try {
-      const next = [...addresses, { label: newAddressLabel.trim(), detail: newAddressDetail.trim() }];
-      await updateDoc(doc(db, "users", user.uid), { addresses: next });
-      setNewAddressLabel("");
-      setNewAddressDetail("");
-    } catch (err) {
-      console.error("Failed to add address:", err);
-    } finally {
-      setAddingAddress(false);
-    }
-  };
-
-  const handleRemoveAddress = async (index) => {
-    if (!user?.uid) return;
-    const next = addresses.filter((_, i) => i !== index);
-    try {
-      await updateDoc(doc(db, "users", user.uid), { addresses: next });
-    } catch (err) {
-      console.error("Failed to remove address:", err);
-    }
-  };
-
   if (loading) {
-    return <Loading text="Loading your profile..." />;
+    return <Loading text={t("profile.loading")} />;
   }
 
-  const displayName = profile?.name || user?.email || "Customer";
+  const displayName = profile?.name || user?.email || t("profile.customer");
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
@@ -202,10 +173,10 @@ export const Profile = () => {
           <h1 className="text-xl font-black text-gray-900">{displayName}</h1>
           <p className="text-sm text-gray-500 font-medium mt-1">{profile?.phone || "-"}</p>
           <p className="text-xs text-gray-400 font-medium mt-1">
-            Member since {formatMemberSince(profile?.createdAt)}
+            {t("profile.memberSince", { date: formatMemberSince(profile?.createdAt, language) })}
           </p>
           {avatarUploading && (
-            <p className="text-xs text-primary font-bold mt-1">Uploading photo...</p>
+            <p className="text-xs text-primary font-bold mt-1">{t("profile.uploadingPhoto")}</p>
           )}
           {avatarError && <p className="text-xs text-secondary font-bold mt-1">{avatarError}</p>}
         </div>
@@ -213,21 +184,21 @@ export const Profile = () => {
 
       {/* Statistics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard icon={ShoppingBag} label="Total Orders" value={stats.totalOrders} />
-        <StatCard icon={Wallet} label="Total Spent" value={`฿${stats.totalSpent.toLocaleString()}`} />
-        <StatCard icon={Heart} label="Favorite Menu" value={stats.favoriteMenu} />
+        <StatCard icon={ShoppingBag} label={t("profile.totalOrders")} value={stats.totalOrders} />
+        <StatCard icon={Wallet} label={t("profile.totalSpent")} value={`฿${stats.totalSpent.toLocaleString()}`} />
+        <StatCard icon={Heart} label={t("profile.favoriteMenu")} value={stats.favoriteMenu} />
       </div>
 
       {/* Personal Information */}
       <Card className="p-6">
-        <SectionTitle>Personal Information</SectionTitle>
+        <SectionTitle>{t("profile.personalInfo")}</SectionTitle>
         <div className="space-y-4">
-          <Input label="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-          <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          <Input label="Email" value={profile?.email || user?.email || "-"} readOnly disabled />
+          <Input label={t("profile.fullName")} value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          <Input label={t("profile.phone")} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input label={t("profile.email")} value={profile?.email || user?.email || "-"} readOnly disabled />
           <div className="flex items-center gap-3">
             <Button className="w-full sm:w-auto" onClick={handleSaveProfile} disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
+              {saving ? t("profile.saving") : t("profile.save")}
             </Button>
             {saveMessage && (
               <span className="text-sm font-bold text-gray-500">{saveMessage}</span>
@@ -238,93 +209,58 @@ export const Profile = () => {
 
       {/* Delivery Addresses */}
       <Card className="p-6">
-        <SectionTitle>Delivery Addresses</SectionTitle>
-        <div className="space-y-3">
-          {addresses.length === 0 && (
-            <p className="text-sm text-gray-400 font-medium">No saved addresses yet.</p>
-          )}
-          {addresses.map((addr, index) => (
-            <div
-              key={`${addr.label}-${index}`}
-              className="flex items-start gap-3 p-4 rounded-2xl bg-gray-50"
-            >
-              <div className="p-2 rounded-xl bg-white text-primary shrink-0">
-                <HomeIcon size={18} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm text-gray-900">{addr.label}</p>
-                <p className="text-xs text-gray-500 font-medium mt-0.5">{addr.detail}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleRemoveAddress(index)}
-                className="text-gray-300 hover:text-secondary transition-colors shrink-0"
-                aria-label={`Remove ${addr.label}`}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <Input
-              placeholder="Label (e.g. Home)"
-              value={newAddressLabel}
-              onChange={(e) => setNewAddressLabel(e.target.value)}
-              className="sm:w-40"
-            />
-            <Input
-              placeholder="Address detail"
-              value={newAddressDetail}
-              onChange={(e) => setNewAddressDetail(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              variant="outline"
-              onClick={handleAddAddress}
-              disabled={addingAddress || !newAddressLabel.trim() || !newAddressDetail.trim()}
-            >
-              <Plus size={18} />
-              Add
-            </Button>
+        <SectionTitle>{t("profile.deliveryAddresses")}</SectionTitle>
+        <Link
+          to="/shop/addresses"
+          className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 hover:bg-primary-light/50 transition-colors"
+        >
+          <div className="p-3 rounded-2xl bg-white text-primary shrink-0">
+            <MapPin size={20} />
           </div>
-        </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm text-gray-900">{t("profile.manageAddresses")}</p>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">
+              {t("profile.manageAddressesDesc")}
+            </p>
+          </div>
+          <ChevronRight size={20} className="text-gray-300 shrink-0" />
+        </Link>
       </Card>
 
       {/* Payment Methods */}
       <Card className="p-6">
-        <SectionTitle>Payment Methods</SectionTitle>
+        <SectionTitle>{t("profile.paymentMethods")}</SectionTitle>
         <div className="grid grid-cols-2 gap-3">
           <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-50">
             <Banknote size={20} className="text-primary" />
-            <span className="font-bold text-sm text-gray-700">Cash</span>
+            <span className="font-bold text-sm text-gray-700">{t("payment.cash")}</span>
           </div>
           <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-50">
             <QrCode size={20} className="text-primary" />
-            <span className="font-bold text-sm text-gray-700">PromptPay</span>
+            <span className="font-bold text-sm text-gray-700">{t("payment.promptpay")}</span>
           </div>
         </div>
       </Card>
 
       {/* Danger Zone */}
       <Card className="p-6">
-        <SectionTitle>Danger Zone</SectionTitle>
+        <SectionTitle>{t("profile.dangerZone")}</SectionTitle>
         <Button
           variant="outline"
           className="w-full text-secondary border-secondary/30 hover:border-secondary"
           onClick={() => setLogoutOpen(true)}
         >
           <LogOut size={18} />
-          Logout
+          {t("profile.logout")}
         </Button>
       </Card>
 
       <ConfirmDialog
         open={logoutOpen}
-        title="Logout"
-        message="Are you sure you want to logout?"
-        confirmText="Logout"
-        cancelText="Cancel"
+        title={t("profile.logout")}
+        message={t("profile.logoutConfirm")}
+        confirmText={t("profile.logout")}
+        cancelText={t("addr.cancel")}
         onConfirm={() => {
           setLogoutOpen(false);
           logout();
