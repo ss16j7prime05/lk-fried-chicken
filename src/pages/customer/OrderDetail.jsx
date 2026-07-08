@@ -171,6 +171,8 @@ export const OrderDetail = () => {
     );
 
     return () => unsubscribe();
+    // t เป็นฟังก์ชันแปลภาษา ไม่ต้อง re-subscribe เมื่อเปลี่ยน
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
   if (loading) {

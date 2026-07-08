@@ -66,6 +66,8 @@ const ReviewModal = ({ order, open, onClose, onSubmitted }) => {
 
   useEffect(() => {
     if (open) {
+      // reset ฟอร์มรีวิวทุกครั้งที่เปิด modal — setState ที่ตั้งใจใน effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRating(5);
       setComment("");
       setError(null);
@@ -206,6 +208,7 @@ export const Reviews = () => {
   // completed-order history.
   useEffect(() => {
     if (completedOrderIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setReviews([]);
       return;
     }

@@ -24,6 +24,8 @@ export function useAddresses(uid) {
 
   useEffect(() => {
     if (!uid) {
+      // reset ก่อนเลิก subscribe เมื่อไม่มี uid — setState ที่ตั้งใจใน effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAddresses([]);
       setLoading(false);
       return;

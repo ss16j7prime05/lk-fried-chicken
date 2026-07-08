@@ -67,6 +67,7 @@ export const Profile = () => {
   // reflect immediately, without needing to touch AuthContext.
   useEffect(() => {
     if (!user?.uid) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }

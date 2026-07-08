@@ -96,7 +96,7 @@ const SlipUploadField = ({ file, onChange, t }) => {
 };
 
 export const Checkout = () => {
-  const { cartItems, subtotal, clearCart } = useCart();
+  const { cartItems, subtotal, clearCart, deliveryFee, setDeliveryFee } = useCart();
   const { profile, user } = useAuth();
   const { t } = usePreferences();
   const navigate = useNavigate();
@@ -124,7 +124,6 @@ export const Checkout = () => {
   const [lng, setLng] = useState(null);
   const [distanceKm, setDistanceKm] = useState(null);
   const [travelMin, setTravelMin] = useState(null); // road travel time (OSRM), null = unknown
-  const [deliveryFee, setDeliveryFee] = useState(0);
   const [showMapModal, setShowMapModal] = useState(false);
   const [storeLocation, setStoreLocation] = useState({
     lat: FALLBACK_STORE_LAT,
@@ -154,6 +153,8 @@ export const Checkout = () => {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SAVED_ADDRESS_KEY);
+      // โหลดที่อยู่ที่จำไว้จาก localStorage ครั้งเดียวตอน mount — setState ที่ตั้งใจ
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (raw) setSavedAddress(JSON.parse(raw));
     } catch {
       // ignore malformed/blocked localStorage
@@ -199,6 +200,7 @@ export const Checkout = () => {
   // Auto-apply the default address once it loads, if the customer hasn't picked one.
   useEffect(() => {
     if (defaultAddress && !selectedAddressId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       pickSavedAddress(defaultAddress);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

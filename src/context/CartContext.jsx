@@ -1,13 +1,20 @@
+/* eslint-disable react-refresh/only-export-components -- context module ตั้งใจ export ทั้ง Provider (component) และ useCart (hook) จากไฟล์เดียว */
 import { createContext, useContext, useMemo, useState, useCallback } from "react";
+import { calcDeliveryFee } from "../location/locationUtils";
 
 const CartContext = createContext(undefined);
 
-const DEFAULT_DELIVERY_FEE = 20;
+// ค่าจัดส่งฐาน = สูตรเดียวกับ Checkout (calcDeliveryFee ที่ระยะ 0 กม.) เพื่อให้ Cart
+// กับ Checkout ใช้ source เดียวกัน ไม่คิดค่าส่งคนละสูตร
+const BASE_DELIVERY_FEE = calcDeliveryFee(0);
 
 let nextId = 1;
 
-export const CartProvider = ({ children, deliveryFee = DEFAULT_DELIVERY_FEE }) => {
+export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
+  // ค่าจัดส่งจริงถูกอัปเดตจาก Checkout ผ่าน setDeliveryFee(calcDeliveryFee(km)) เมื่อปักหมุด
+  // ปลายทาง — Cart Drawer และ Checkout จึงอ่านค่าเดียวกันเสมอ
+  const [deliveryFee, setDeliveryFee] = useState(BASE_DELIVERY_FEE);
 
   // unitPrice = menu price + any priced options (set by MenuDetailModal) — always
   // recomputed here (not trusted from the caller) so totalPrice never drifts from
@@ -85,6 +92,7 @@ export const CartProvider = ({ children, deliveryFee = DEFAULT_DELIVERY_FEE }) =
     clearCart,
     subtotal,
     deliveryFee: resolvedDeliveryFee,
+    setDeliveryFee,
     grandTotal,
     itemCount,
   };

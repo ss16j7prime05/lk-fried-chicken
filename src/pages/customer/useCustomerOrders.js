@@ -16,6 +16,8 @@ export function useCustomerOrders(phone, { retryToken = 0, errorMessage = DEFAUL
 
   useEffect(() => {
     if (!phone) {
+      // reset ก่อนเลิก subscribe เมื่อไม่มี phone — setState ที่ตั้งใจใน effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOrders([]);
       setLoading(false);
       return;

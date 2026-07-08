@@ -64,6 +64,8 @@ export const MenuDetailModal = ({ open, onClose, menu, options = [], onAddToCart
 
   useEffect(() => {
     if (open) {
+      // reset ฟอร์มทุกครั้งที่เปิด modal ใหม่ — เป็น setState ที่ตั้งใจใน effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTopChicken(null);
       setSpicy(null);
       setSauceMain(null);
