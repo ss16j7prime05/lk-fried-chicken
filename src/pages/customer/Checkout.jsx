@@ -20,6 +20,8 @@ import { Loading } from "../../components/ui/Loading";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { useCart } from "../../context/CartContext";
 import { usePreferences } from "../../context/PreferencesContext";
+import { useStoreStatus } from "../../store/useStoreStatus";
+import { StoreClosedBanner } from "../../components/customer/StoreClosedBanner";
 import { getStore } from "./getStore";
 import { useAddresses } from "../../hooks/useAddresses";
 import { formatFullAddress, labelMeta, MAX_DELIVERY_RADIUS_KM } from "../../constants/address";
@@ -99,6 +101,8 @@ export const Checkout = () => {
   const { cartItems, subtotal, clearCart, deliveryFee, setDeliveryFee } = useCart();
   const { profile, user } = useAuth();
   const { t } = usePreferences();
+  const { status: storeStatus } = useStoreStatus("delivery");
+  const storeClosed = storeStatus === "closed";
   const navigate = useNavigate();
 
   // Saved delivery addresses (users/{uid}/addresses). The default one is
@@ -244,6 +248,7 @@ export const Checkout = () => {
   const grandTotal = subtotal + (deliveryMethod === "delivery" ? deliveryFee : 0);
 
   const validate = () => {
+    if (storeClosed) return t("store.closedOrder");
     if (cartItems.length === 0) return t("checkout.emptyCart");
 
     for (const item of cartItems) {
@@ -409,6 +414,8 @@ export const Checkout = () => {
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-8 space-y-6 pb-60 md:pb-44">
       <h1 className="text-2xl font-black text-gray-900">{t("checkout.title")}</h1>
+
+      <StoreClosedBanner />
 
       {/* Customer Information */}
       <Card className="p-6">
@@ -742,8 +749,8 @@ export const Checkout = () => {
               <p className="text-xs font-bold text-gray-400 uppercase">{t("checkout.total")}</p>
               <p className="text-xl font-black text-primary">฿{grandTotal}</p>
             </div>
-            <Button className="flex-1 max-w-xs h-14 text-base" onClick={handlePlaceOrder}>
-              {t("checkout.placeOrder")}
+            <Button className="flex-1 max-w-xs h-14 text-base disabled:opacity-50" onClick={handlePlaceOrder} disabled={storeClosed}>
+              {storeClosed ? t("store.closedTitle") : t("checkout.placeOrder")}
             </Button>
           </div>
         </div>

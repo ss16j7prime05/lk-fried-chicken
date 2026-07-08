@@ -17,6 +17,7 @@ import {
   isReadyForDelivery,
 } from "./riderStatus";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
+import { useStoreStatus } from "../store/useStoreStatus";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
@@ -25,6 +26,10 @@ const FALLBACK_STORE_LNG = 100.0529543;
 // Rider Dashboard ใหม่: เห็นงานพร้อมส่งทั้งหมด, รับงานได้, อัปเดตสถานะแบบ realtime
 export default function RiderOrdersDashboard() {
   const { user, profile, logout } = useAuth();
+  // Same live store status the Store portal writes / Customer reads — new orders can't
+  // be created while closed, so no new jobs arrive; this just tells the rider why.
+  const { status: storeStatus } = useStoreStatus("store");
+  const storeClosed = storeStatus === "closed";
   const [availablePool, setAvailablePool] = useState([]);
   const [myJobs, setMyJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -239,6 +244,18 @@ export default function RiderOrdersDashboard() {
             </button>
           ))}
         </div>
+
+        {tab === "available" && storeClosed && (
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
+            <Power size={20} className="shrink-0 mt-0.5" />
+            <div>
+              <p className="font-black text-sm">Store is closed</p>
+              <p className="text-xs font-medium text-red-500 mt-0.5">
+                No new orders arrive while the store is closed. Deliveries already prepared still appear below.
+              </p>
+            </div>
+          </div>
+        )}
 
         {tab === "available" && !isOnline ? (
           <div className="space-y-4">

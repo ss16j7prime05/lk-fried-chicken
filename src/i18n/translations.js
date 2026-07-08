@@ -109,6 +109,9 @@ export const translations = {
     "common.items": "items",
 
     // home
+    "store.closedTitle": "Store Closed",
+    "store.closedOrder": "The store is currently closed and not accepting orders.",
+    "store.opensAt": "Opens {time}",
     "home.deliverTo": "Deliver to: 123 Sukhumvit, Bangkok",
     "home.searchPlaceholder": "Search for chicken, sides, drinks...",
     "home.all": "All",
@@ -524,6 +527,9 @@ export const translations = {
     "common.items": "รายการ",
 
     // home
+    "store.closedTitle": "ร้านปิด",
+    "store.closedOrder": "ขณะนี้ร้านปิด ไม่สามารถสั่งซื้อได้",
+    "store.opensAt": "จะเปิด {time}",
     "home.deliverTo": "จัดส่งที่: 123 สุขุมวิท กรุงเทพฯ",
     "home.searchPlaceholder": "ค้นหาไก่ทอด เครื่องเคียง เครื่องดื่ม...",
     "home.all": "ทั้งหมด",

@@ -5,6 +5,7 @@ import {
   Store, Bell, Printer, Shield, CheckCircle2, Save, Loader2,
   Volume2, VolumeX, Moon, Play,
   Upload, Image as ImageIcon, MapPin, Clock,
+  Power, Truck, CalendarX, Plus, Trash2,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
@@ -13,6 +14,7 @@ import { useAuth } from "../../AuthContext";
 import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../store/alarmSounds";
 import LocationPicker from "../../location/LocationPicker";
 import MapButton from "../../location/MapButton";
+import { DAY_ORDER, computeStatus } from "../../store/storeStatus";
 
 /* ─── default settings ─── */
 const DEFAULT_NOTIF = {
@@ -24,6 +26,18 @@ const DEFAULT_NOTIF = {
 
 const VOLUME_OPTIONS = [0, 25, 50, 75, 100];
 const PREP_OPTIONS = [10, 15, 20, 30, 45, 60];
+
+const DAY_LABELS = {
+  mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
+  fri: "Friday", sat: "Saturday", sun: "Sunday",
+};
+const DEFAULT_RANGE = { open: "10:00", close: "21:00" };
+
+const STATUS_META = {
+  open:         { label: "Open",         cls: "bg-green-100 text-green-700" },
+  closing_soon: { label: "Closing Soon", cls: "bg-amber-100 text-amber-700" },
+  closed:       { label: "Closed",       cls: "bg-red-100 text-red-600" },
+};
 
 /* ─── shared UI primitives ─── */
 function SettingSection({ icon: Icon, title, description, children }) {
@@ -116,6 +130,137 @@ function ImageUpload({ label, value, previewClass, uploading, onSelect }) {
   );
 }
 
+/* ─── Time-range row (one open–close slot) ─── */
+function TimeRangeRow({ range, onChange, onRemove }) {
+  const timeCls =
+    "px-3 py-2.5 min-h-[44px] rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all";
+  return (
+    <div className="flex items-center gap-2">
+      <input type="time" value={range.open} onChange={(e) => onChange({ ...range, open: e.target.value })} className={timeCls} />
+      <span className="text-gray-400 text-sm font-bold">–</span>
+      <input type="time" value={range.close} onChange={(e) => onChange({ ...range, close: e.target.value })} className={timeCls} />
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label="Remove time slot"
+        className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+      >
+        <Trash2 size={16} />
+      </button>
+    </div>
+  );
+}
+
+/* ─── Weekly hours editor (per-day, multiple slots) ─── */
+function DayHoursEditor({ hours, onChange }) {
+  const setDay = (day, ranges) => onChange({ ...hours, [day]: ranges });
+  return (
+    <div className="space-y-3">
+      {DAY_ORDER.map((day) => {
+        const ranges = Array.isArray(hours?.[day]) ? hours[day] : [];
+        const dayOpen = ranges.length > 0;
+        return (
+          <div key={day} className="pb-3 border-b border-gray-50 last:border-0 last:pb-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold text-gray-800">{DAY_LABELS[day]}</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold ${dayOpen ? "text-gray-400" : "text-red-400"}`}>
+                  {dayOpen ? "Open" : "Closed"}
+                </span>
+                <Toggle value={dayOpen} onChange={(v) => setDay(day, v ? [{ ...DEFAULT_RANGE }] : [])} />
+              </div>
+            </div>
+            {dayOpen && (
+              <div className="mt-3 space-y-2">
+                {ranges.map((r, i) => (
+                  <TimeRangeRow
+                    key={i}
+                    range={r}
+                    onChange={(nr) => setDay(day, ranges.map((x, j) => (j === i ? nr : x)))}
+                    onRemove={() => setDay(day, ranges.filter((_, j) => j !== i))}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setDay(day, [...ranges, { ...DEFAULT_RANGE }])}
+                  className="flex items-center gap-1.5 text-xs font-black text-primary hover:text-primary-dark transition-colors"
+                >
+                  <Plus size={14} /> Add time slot
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Holidays editor (add single/multi-day, list, remove) ─── */
+function HolidaysEditor({ holidays, onChange }) {
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [name, setName] = useState("");
+
+  const add = () => {
+    if (!start) return;
+    const item = { id: `hol_${Date.now()}`, start, end: end || start, name: name.trim() };
+    onChange([...(holidays || []), item].sort((a, b) => a.start.localeCompare(b.start)));
+    setStart(""); setEnd(""); setName("");
+  };
+  const remove = (id) => onChange((holidays || []).filter((h) => h.id !== id));
+
+  const dateCls =
+    "w-full px-3 py-2.5 min-h-[44px] rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all";
+
+  return (
+    <div className="space-y-4">
+      {(holidays || []).length > 0 && (
+        <div className="space-y-2">
+          {holidays.map((h) => (
+            <div key={h.id} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-gray-50 border border-gray-100">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-800 truncate">{h.name || "Holiday"}</p>
+                <p className="text-xs text-gray-400 font-medium">
+                  {h.start}{h.end && h.end !== h.start ? ` → ${h.end}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => remove(h.id)}
+                aria-label="Remove holiday"
+                className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">From</label>
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={`mt-1.5 ${dateCls}`} />
+        </div>
+        <div>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">To (optional)</label>
+          <input type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} className={`mt-1.5 ${dateCls}`} />
+        </div>
+      </div>
+      <FieldInput value={name} onChange={setName} placeholder="Holiday name (e.g. Songkran)" />
+      <button
+        type="button"
+        onClick={add}
+        disabled={!start}
+        className="flex items-center justify-center gap-2 w-full py-3 min-h-[44px] rounded-xl border-2 border-primary text-primary font-black hover:bg-primary/5 disabled:opacity-40 transition-colors text-sm"
+      >
+        <Plus size={16} /> Add Holiday
+      </button>
+    </div>
+  );
+}
+
 /* ─── Volume picker (5 preset levels) ─── */
 function VolumePicker({ value, onChange }) {
   return (
@@ -187,6 +332,16 @@ export function Settings() {
   const [savingStore, setSavingStore] = useState(false);
   const [savedStore, setSavedStore] = useState(false);
 
+  /* opening hours */
+  const [isOpen, setIsOpen] = useState(true);
+  const [storeHours, setStoreHours] = useState({});
+  const [deliveryHours, setDeliveryHours] = useState({});
+  const [holidays, setHolidays] = useState([]);
+  const [savingHours, setSavingHours] = useState(false);
+  const [savedHours, setSavedHours] = useState(false);
+  // Re-render every minute so the live Open/Closing Soon/Closed badge stays accurate.
+  const [nowTs, setNowTs] = useState(Date.now);
+
   /* notification settings — local draft */
   const [notif, setNotif] = useState(DEFAULT_NOTIF);
   const [savingNotif, setSavingNotif] = useState(false);
@@ -215,6 +370,10 @@ export function Settings() {
       setStoreLng(d.lng != null ? String(d.lng) : "");
       setDeliveryRadius(d.deliveryRadius != null ? String(d.deliveryRadius) : String(MAX_DELIVERY_RADIUS_KM));
       setPrepMinutes(d.prepMinutes != null ? d.prepMinutes : EST_PREP_MINUTES);
+      setIsOpen(d.isOpen !== false);
+      setStoreHours(d.storeHours || {});
+      setDeliveryHours(d.deliveryHours || {});
+      setHolidays(Array.isArray(d.holidays) ? d.holidays : []);
       if (d.notificationSettings) {
         setNotif(() => ({
           ...DEFAULT_NOTIF,
@@ -225,6 +384,31 @@ export function Settings() {
     });
     return unsub;
   }, []);
+
+  /* live-status ticker (updates the Open/Closing Soon/Closed badge) */
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  /* ── master open/close — saves instantly so orders pause/resume right away ── */
+  const handleToggleOpen = async (v) => {
+    setIsOpen(v);
+    try {
+      await updateDoc(doc(db, "stores", STORE_ID), { isOpen: v });
+    } catch { alert("Save failed. Please try again."); }
+  };
+
+  /* ── opening-hours save (hours + delivery + holidays) ── */
+  const handleSaveHours = async () => {
+    setSavingHours(true);
+    try {
+      await updateDoc(doc(db, "stores", STORE_ID), { storeHours, deliveryHours, holidays });
+      setSavedHours(true);
+      setTimeout(() => setSavedHours(false), 2500);
+    } catch { alert("Save failed. Please try again."); }
+    finally { setSavingHours(false); }
+  };
 
   /* ── image upload (logo / banner) ── */
   const handleUploadImage = async (file, kind) => {
@@ -308,6 +492,10 @@ export function Settings() {
   const handleAutoPrint = (v) => { setAutoPrint(v); localStorage.setItem("store_auto_print", v ? "1" : "0"); };
   const handlePrintSize = (v) => { setPrintSize(v); localStorage.setItem("store_print_size", v); };
   const handleAutoScroll = (v) => { setAutoScroll(v); localStorage.setItem("store_auto_scroll", v ? "1" : "0"); };
+
+  // Live storefront status for the badge — reflects unsaved edits too.
+  const liveStatus = computeStatus({ isOpen, storeHours, holidays }, new Date(nowTs), "store").status;
+  const statusMeta = STATUS_META[liveStatus] || STATUS_META.closed;
 
   return (
     <div className="p-4 md:p-5 lg:p-6 space-y-5 max-w-[900px] mx-auto">
@@ -426,6 +614,43 @@ export function Settings() {
           {savingStore ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedStore ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Store Info</>}
         </button>
       </SettingSection>
+
+      {/* ── Open / Close Store (master switch) ── */}
+      <SettingSection icon={Power} title="Store Status" description="Master switch — pauses new orders instantly when closed">
+        <SettingRow
+          label={isOpen ? "Store is Open" : "Store is Closed"}
+          description={isOpen ? "Accepting new orders" : "Customers can't order; riders get no new jobs"}
+        >
+          <div className="flex items-center gap-3">
+            <span className={`text-xs font-black px-3 py-1.5 rounded-full ${statusMeta.cls}`}>{statusMeta.label}</span>
+            <Toggle value={isOpen} onChange={handleToggleOpen} />
+          </div>
+        </SettingRow>
+      </SettingSection>
+
+      {/* ── Store Hours ── */}
+      <SettingSection icon={Clock} title="Store Hours" description="Weekly storefront hours — add several slots per day (e.g. break for lunch)">
+        <DayHoursEditor hours={storeHours} onChange={setStoreHours} />
+      </SettingSection>
+
+      {/* ── Delivery Hours ── */}
+      <SettingSection icon={Truck} title="Delivery Hours" description="When customers can place delivery orders — set separately from store hours">
+        <DayHoursEditor hours={deliveryHours} onChange={setDeliveryHours} />
+      </SettingSection>
+
+      {/* ── Special Holidays ── */}
+      <SettingSection icon={CalendarX} title="Special Holidays" description="Close on specific dates — single day or a range; remove to reopen">
+        <HolidaysEditor holidays={holidays} onChange={setHolidays} />
+      </SettingSection>
+
+      {/* Save all opening-hours settings */}
+      <button
+        onClick={handleSaveHours}
+        disabled={savingHours}
+        className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm"
+      >
+        {savingHours ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedHours ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Opening Hours</>}
+      </button>
 
       {/* ── Notification Sound ── */}
       <SettingSection icon={Bell} title="Notification Sound" description="Order alert alarm — saved to cloud, applies to all devices">

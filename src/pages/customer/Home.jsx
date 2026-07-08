@@ -10,6 +10,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { FoodCard } from "../../components/customer/FoodCard";
 import { MenuDetailModal } from "../../components/customer/MenuDetailModal";
 import { CartDrawer } from "../../components/customer/CartDrawer";
+import { StoreClosedBanner } from "../../components/customer/StoreClosedBanner";
 import { useCart } from "../../context/CartContext";
 import { usePreferences } from "../../context/PreferencesContext";
 
@@ -121,6 +122,8 @@ export const Home = () => {
           </button>
         </div>
       </header>
+
+      <StoreClosedBanner />
 
       {/* Search Bar */}
       <div className="relative">
