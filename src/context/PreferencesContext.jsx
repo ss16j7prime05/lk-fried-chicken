@@ -26,13 +26,23 @@ const readLocal = (key, allowed, fallback) => {
 export const PreferencesProvider = ({ children }) => {
   const { user } = useAuth();
   const uid = user?.uid;
-  const [theme, setThemeState] = useState(() => readLocal(THEME_KEY, ["light", "dark"], "light"));
+  const [theme, setThemeState] = useState(() => readLocal(THEME_KEY, ["light", "dark", "system"], "light"));
   const [language, setLanguageState] = useState(() => readLocal(LANG_KEY, ["en", "th"], "en"));
 
   // Apply the theme to <html> so the .dark override layer (index.css) takes effect
-  // everywhere instantly.
+  // everywhere instantly. "system" follows the OS prefers-color-scheme and re-applies
+  // live when the OS switches (matchMedia change event).
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const isDark = theme === "dark" || (theme === "system" && mql.matches);
+      document.documentElement.classList.toggle("dark", isDark);
+    };
+    apply();
+    if (theme === "system") {
+      mql.addEventListener("change", apply);
+      return () => mql.removeEventListener("change", apply);
+    }
   }, [theme]);
 
   // Account-level sync: users/{uid}.theme/.language override local values once loaded.
@@ -41,7 +51,7 @@ export const PreferencesProvider = ({ children }) => {
     const unsub = onSnapshot(doc(db, "users", uid), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
-      if (data.theme === "light" || data.theme === "dark") {
+      if (data.theme === "light" || data.theme === "dark" || data.theme === "system") {
         setThemeState(data.theme);
         try { localStorage.setItem(THEME_KEY, data.theme); } catch { /* blocked storage */ }
       }

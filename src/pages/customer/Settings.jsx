@@ -4,6 +4,7 @@ import {
   Bell,
   Moon,
   Sun,
+  Monitor,
   Globe,
   Info,
   Shield,
@@ -69,13 +70,13 @@ const LinkRow = ({ icon: Icon, label, onClick }) => (
   </button>
 );
 
-const InfoModal = ({ open, onClose, title, children }) => (
+const InfoModal = ({ open, onClose, title, closeLabel, children }) => (
   <Modal open={open} onClose={onClose} className="max-w-lg max-h-[80vh] overflow-y-auto">
     <div className="p-6 sm:p-8 space-y-4">
       <h2 className="text-xl font-black text-gray-900">{title}</h2>
       <div className="text-sm text-gray-500 space-y-3 leading-relaxed">{children}</div>
       <Button variant="outline" className="w-full" onClick={onClose}>
-        Close
+        {closeLabel}
       </Button>
     </div>
   </Modal>
@@ -134,7 +135,7 @@ export const Settings = () => {
   };
 
   if (loading) {
-    return <Loading text="Loading settings..." />;
+    return <Loading text={t("common.loading")} />;
   }
 
   return (
@@ -172,12 +173,12 @@ export const Settings = () => {
       <Card className="p-6">
         <SectionTitle>{t("settings.appearance")}</SectionTitle>
         <SettingRow
-          icon={theme === "dark" ? Moon : Sun}
+          icon={theme === "dark" ? Moon : theme === "system" ? Monitor : Sun}
           label={t("settings.theme")}
           description={t("settings.themeDesc")}
           control={
             <div className="flex gap-1 bg-gray-50 rounded-2xl p-1">
-              {["light", "dark"].map((option) => (
+              {["light", "dark", "system"].map((option) => (
                 <button
                   key={option}
                   type="button"
@@ -231,6 +232,7 @@ export const Settings = () => {
         open={activeModal === "about"}
         onClose={() => setActiveModal(null)}
         title={t("settings.about")}
+        closeLabel={t("common.close")}
       >
         <p>{t("settings.aboutBody", { name: PROMPTPAY_ACCOUNT_NAME })}</p>
         <p>{t("settings.version")}</p>
@@ -246,6 +248,7 @@ export const Settings = () => {
         open={activeModal === "privacy"}
         onClose={() => setActiveModal(null)}
         title={t("settings.privacy")}
+        closeLabel={t("common.close")}
       >
         <p>{t("settings.privacy1")}</p>
         <p>{t("settings.privacy2")}</p>
@@ -257,6 +260,7 @@ export const Settings = () => {
         open={activeModal === "terms"}
         onClose={() => setActiveModal(null)}
         title={t("settings.terms")}
+        closeLabel={t("common.close")}
       >
         <p>{t("settings.terms1")}</p>
         <p>{t("settings.terms2")}</p>
