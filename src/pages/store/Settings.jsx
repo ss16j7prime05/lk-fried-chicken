@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   Store, Bell, Printer, Shield, CheckCircle2, Save, Loader2,
   Volume2, VolumeX, Moon, Play,
+  Upload, Image as ImageIcon, MapPin, Clock,
 } from "lucide-react";
-import { db } from "../../firebase";
-import { STORE_ID } from "../../config";
+import { db, storage } from "../../firebase";
+import { STORE_ID, EST_PREP_MINUTES } from "../../config";
+import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION } from "../../constants/address";
 import { useAuth } from "../../AuthContext";
 import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../store/alarmSounds";
+import LocationPicker from "../../location/LocationPicker";
+import MapButton from "../../location/MapButton";
 
 /* ─── default settings ─── */
 const DEFAULT_NOTIF = {
@@ -18,6 +23,7 @@ const DEFAULT_NOTIF = {
 };
 
 const VOLUME_OPTIONS = [0, 25, 50, 75, 100];
+const PREP_OPTIONS = [10, 15, 20, 30, 45, 60];
 
 /* ─── shared UI primitives ─── */
 function SettingSection({ icon: Icon, title, description, children }) {
@@ -75,6 +81,41 @@ function FieldInput({ value, onChange, placeholder, type = "text" }) {
   );
 }
 
+/* ─── Labeled field wrapper ─── */
+function LabeledField({ label, children }) {
+  return (
+    <div>
+      <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{label}</label>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+/* ─── Image upload (logo / banner) with preview ─── */
+function ImageUpload({ label, value, previewClass, uploading, onSelect }) {
+  return (
+    <LabeledField label={label}>
+      <div className="flex items-center gap-3">
+        <div className={`${previewClass} rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center flex-shrink-0`}>
+          {value
+            ? <img src={value} alt={label} className="w-full h-full object-cover" />
+            : <ImageIcon size={20} className="text-gray-300" />}
+        </div>
+        <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
+          {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+          {uploading ? "Uploading…" : value ? "Change" : "Upload"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      </div>
+    </LabeledField>
+  );
+}
+
 /* ─── Volume picker (5 preset levels) ─── */
 function VolumePicker({ value, onChange }) {
   return (
@@ -129,8 +170,20 @@ export function Settings() {
 
   /* store info */
   const [storeName, setStoreName] = useState("");
+  const [storeCategory, setStoreCategory] = useState("");
   const [storePhone, setStorePhone] = useState("");
+  const [storeEmail, setStoreEmail] = useState("");
   const [storeAddr, setStoreAddr] = useState("");
+  const [storeLogo, setStoreLogo] = useState("");
+  const [storeBanner, setStoreBanner] = useState("");
+  const [mapLink, setMapLink] = useState("");
+  const [storeLat, setStoreLat] = useState("");
+  const [storeLng, setStoreLng] = useState("");
+  const [deliveryRadius, setDeliveryRadius] = useState(String(MAX_DELIVERY_RADIUS_KM));
+  const [prepMinutes, setPrepMinutes] = useState(EST_PREP_MINUTES);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
   const [savingStore, setSavingStore] = useState(false);
   const [savedStore, setSavedStore] = useState(false);
 
@@ -151,10 +204,19 @@ export function Settings() {
       if (!snap.exists()) return;
       const d = snap.data();
       setStoreName(d.storeName || "");
+      setStoreCategory(d.category || "");
       setStorePhone(d.phone    || "");
+      setStoreEmail(d.email    || "");
       setStoreAddr(d.address   || "");
+      setStoreLogo(d.storeLogo || "");
+      setStoreBanner(d.storeBanner || "");
+      setMapLink(d.mapLink || "");
+      setStoreLat(d.lat != null ? String(d.lat) : "");
+      setStoreLng(d.lng != null ? String(d.lng) : "");
+      setDeliveryRadius(d.deliveryRadius != null ? String(d.deliveryRadius) : String(MAX_DELIVERY_RADIUS_KM));
+      setPrepMinutes(d.prepMinutes != null ? d.prepMinutes : EST_PREP_MINUTES);
       if (d.notificationSettings) {
-        setNotif((prev) => ({
+        setNotif(() => ({
           ...DEFAULT_NOTIF,
           ...d.notificationSettings,
           nightMode: { ...DEFAULT_NOTIF.nightMode, ...(d.notificationSettings.nightMode || {}) },
@@ -164,15 +226,53 @@ export function Settings() {
     return unsub;
   }, []);
 
+  /* ── image upload (logo / banner) ── */
+  const handleUploadImage = async (file, kind) => {
+    if (!file) return;
+    const setUploading = kind === "logo" ? setUploadingLogo : setUploadingBanner;
+    const setUrl = kind === "logo" ? setStoreLogo : setStoreBanner;
+    setUploading(true);
+    try {
+      const r = ref(storage, `stores/${STORE_ID}/${kind}_${Date.now()}_${file.name}`);
+      await uploadBytes(r, file);
+      setUrl(await getDownloadURL(r));
+    } catch { alert("Upload failed. Please try again."); }
+    finally { setUploading(false); }
+  };
+
+  /* ── map picker confirm ── */
+  const handleConfirmMap = ({ lat, lng }) => {
+    setStoreLat(String(lat));
+    setStoreLng(String(lng));
+    setShowMapModal(false);
+  };
+
   /* ── store info save ── */
   const handleSaveStore = async () => {
     setSavingStore(true);
     try {
-      await updateDoc(doc(db, "stores", STORE_ID), {
+      const latNum = parseFloat(storeLat);
+      const lngNum = parseFloat(storeLng);
+      const radiusNum = parseFloat(deliveryRadius);
+      // lat/lng/storeName/phone/address are the exact fields Customer (Checkout) and
+      // Rider already read from stores/{STORE_ID} — kept identical so nothing breaks.
+      const patch = {
         storeName: storeName.trim() || "LK Fried Chicken",
+        category:  storeCategory.trim(),
         phone:     storePhone.trim(),
+        email:     storeEmail.trim(),
         address:   storeAddr.trim(),
-      });
+        storeLogo,
+        storeBanner,
+        mapLink:   mapLink.trim(),
+        deliveryRadius: Number.isFinite(radiusNum) ? radiusNum : MAX_DELIVERY_RADIUS_KM,
+        prepMinutes: Number(prepMinutes),
+      };
+      // Only overwrite coordinates when valid, so a bad manual edit can't wipe the
+      // store location Customer/Rider depend on.
+      if (Number.isFinite(latNum)) patch.lat = latNum;
+      if (Number.isFinite(lngNum)) patch.lng = lngNum;
+      await updateDoc(doc(db, "stores", STORE_ID), patch);
       setSavedStore(true);
       setTimeout(() => setSavedStore(false), 2500);
     } catch { alert("Save failed. Please try again."); }
@@ -197,7 +297,7 @@ export function Settings() {
       const ctx = getAlarmAudioCtx();
       if (ctx.state === "suspended") await ctx.resume();
       playSound(notif.sound || "classic", ctx, (notif.volume ?? 80) / 100);
-    } catch {}
+    } catch { /* audio not available */ }
     setTimeout(() => setTestingSound(false), 1000);
   };
 
@@ -219,18 +319,103 @@ export function Settings() {
 
       {/* ── Store Info ── */}
       <SettingSection icon={Store} title="Store Information" description="Basic store details shown to customers">
-        <div className="space-y-3">
-          <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Store Name</label>
-            <div className="mt-1.5"><FieldInput value={storeName} onChange={setStoreName} placeholder="LK Fried Chicken" /></div>
+        <div className="space-y-4">
+          {/* Logo + Banner */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <ImageUpload
+              label="Store Logo"
+              value={storeLogo}
+              previewClass="w-16 h-16"
+              uploading={uploadingLogo}
+              onSelect={(f) => handleUploadImage(f, "logo")}
+            />
+            <ImageUpload
+              label="Store Banner"
+              value={storeBanner}
+              previewClass="w-28 h-16"
+              uploading={uploadingBanner}
+              onSelect={(f) => handleUploadImage(f, "banner")}
+            />
           </div>
-          <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Phone Number</label>
-            <div className="mt-1.5"><FieldInput value={storePhone} onChange={setStorePhone} placeholder="+66 8X XXX XXXX" type="tel" /></div>
+
+          {/* Name + Category */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <LabeledField label="Store Name">
+              <FieldInput value={storeName} onChange={setStoreName} placeholder="LK Fried Chicken" />
+            </LabeledField>
+            <LabeledField label="Category">
+              <FieldInput value={storeCategory} onChange={setStoreCategory} placeholder="e.g. Fried Chicken" />
+            </LabeledField>
           </div>
+
+          {/* Phone + Email */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <LabeledField label="Phone Number">
+              <FieldInput value={storePhone} onChange={setStorePhone} placeholder="+66 8X XXX XXXX" type="tel" />
+            </LabeledField>
+            <LabeledField label="Email">
+              <FieldInput value={storeEmail} onChange={setStoreEmail} placeholder="store@example.com" type="email" />
+            </LabeledField>
+          </div>
+
+          {/* Address */}
+          <LabeledField label="Address">
+            <FieldInput value={storeAddr} onChange={setStoreAddr} placeholder="Store address…" />
+          </LabeledField>
+
+          {/* Google Maps link */}
+          <LabeledField label="Google Maps Link">
+            <FieldInput value={mapLink} onChange={setMapLink} placeholder="https://maps.google.com/…" type="url" />
+          </LabeledField>
+
+          {/* GPS coordinates */}
           <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Address</label>
-            <div className="mt-1.5"><FieldInput value={storeAddr} onChange={setStoreAddr} placeholder="Store address…" /></div>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">GPS Coordinates</label>
+            <div className="mt-1.5 grid grid-cols-2 gap-3">
+              <FieldInput value={storeLat} onChange={setStoreLat} placeholder="Latitude" type="number" />
+              <FieldInput value={storeLng} onChange={setStoreLng} placeholder="Longitude" type="number" />
+            </div>
+            <div className="mt-2 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setShowMapModal(true)}
+                className="flex items-center justify-center gap-2 flex-1 py-3 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold transition-colors"
+              >
+                <MapPin size={16} /> Pick on Map
+              </button>
+              <MapButton
+                lat={parseFloat(storeLat)}
+                lng={parseFloat(storeLng)}
+                mode="view"
+                label="🗺️ View on Google Maps"
+                style={{ flex: 1, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12 }}
+              />
+            </div>
+          </div>
+
+          {/* Delivery radius */}
+          <LabeledField label="Delivery Radius (km)">
+            <FieldInput value={deliveryRadius} onChange={setDeliveryRadius} placeholder="8" type="number" />
+          </LabeledField>
+
+          {/* Prep time */}
+          <div>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock size={12} /> Prep Time (minutes)
+            </label>
+            <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {PREP_OPTIONS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPrepMinutes(m)}
+                  className={`py-3 min-h-[44px] rounded-xl text-sm font-bold transition-colors
+                    ${prepMinutes === m ? "bg-primary text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <button
@@ -376,6 +561,21 @@ export function Settings() {
         <p className="text-xs text-gray-300 font-medium">LK Fried Chicken — Store Portal</p>
         <p className="text-[10px] text-gray-200 mt-0.5">Production v4 · Module 4+</p>
       </div>
+
+      <LocationPicker
+        isOpen={showMapModal}
+        storeLocation={{
+          lat: Number.isFinite(parseFloat(storeLat)) ? parseFloat(storeLat) : STORE_LOCATION.lat,
+          lng: Number.isFinite(parseFloat(storeLng)) ? parseFloat(storeLng) : STORE_LOCATION.lng,
+        }}
+        initialPosition={
+          Number.isFinite(parseFloat(storeLat)) && Number.isFinite(parseFloat(storeLng))
+            ? { lat: parseFloat(storeLat), lng: parseFloat(storeLng) }
+            : null
+        }
+        onConfirm={handleConfirmMap}
+        onClose={() => setShowMapModal(false)}
+      />
     </div>
   );
 }
