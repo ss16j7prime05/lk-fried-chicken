@@ -6,11 +6,14 @@ import {
   Volume2, VolumeX, Moon, Play,
   Upload, Image as ImageIcon, MapPin, Clock,
   Power, Truck, CalendarX, Plus, Trash2,
+  Phone, CreditCard, User, Users, Globe, HelpCircle, FileText, LogOut,
+  ChevronRight, ChevronLeft, Wrench,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION } from "../../constants/address";
 import { useAuth } from "../../AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../store/alarmSounds";
 import LocationPicker from "../../location/LocationPicker";
 import MapButton from "../../location/MapButton";
@@ -38,6 +41,91 @@ const STATUS_META = {
   closing_soon: { label: "Closing Soon", cls: "bg-amber-100 text-amber-700" },
   closed:       { label: "Closed",       cls: "bg-red-100 text-red-600" },
 };
+
+// LINE MAN-style grouped settings menu. Each item routes to a section within this same
+// page (no new router routes). labelKey/titleKey resolve through the shared i18n t().
+const MENU_GROUPS = [
+  {
+    titleKey: "ss.groupStore",
+    items: [
+      { key: "store-info",    icon: Store,      labelKey: "ss.storeInfo" },
+      { key: "hours",         icon: Clock,      labelKey: "ss.hours" },
+      { key: "open-close",    icon: Power,      labelKey: "ss.openClose" },
+      { key: "contact",       icon: Phone,      labelKey: "ss.contact" },
+      { key: "notifications", icon: Bell,       labelKey: "ss.notifications" },
+      { key: "payment",       icon: CreditCard, labelKey: "ss.payment" },
+    ],
+  },
+  {
+    titleKey: "ss.groupAccount",
+    items: [
+      { key: "account", icon: User,  labelKey: "ss.myAccount" },
+      { key: "staff",   icon: Users, labelKey: "ss.staff" },
+    ],
+  },
+  {
+    titleKey: "ss.groupApp",
+    items: [
+      { key: "language", icon: Globe,      labelKey: "ss.language" },
+      { key: "help",     icon: HelpCircle, labelKey: "ss.help" },
+      { key: "privacy",  icon: Shield,     labelKey: "ss.privacy" },
+      { key: "terms",    icon: FileText,   labelKey: "ss.terms" },
+      { key: "logout",   icon: LogOut,     labelKey: "ss.logout", danger: true },
+    ],
+  },
+];
+
+// Flat lookup for the section header title.
+const SECTION_TITLE = MENU_GROUPS.flatMap((g) => g.items).reduce(
+  (acc, it) => ({ ...acc, [it.key]: it.labelKey }),
+  {}
+);
+
+/* ─── Grouped menu (default view) ─── */
+function SettingsMenu({ t, onSelect, onLogout }) {
+  return (
+    <div className="space-y-6">
+      {MENU_GROUPS.map((group) => (
+        <div key={group.titleKey}>
+          <p className="text-[11px] font-black text-gray-400 uppercase tracking-wider mb-2 px-1">
+            {t(group.titleKey)}
+          </p>
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            {group.items.map((it, idx) => (
+              <button
+                key={it.key}
+                type="button"
+                onClick={() => (it.key === "logout" ? onLogout() : onSelect(it.key))}
+                className={`w-full flex items-center gap-4 px-5 py-4 min-h-[56px] text-left hover:bg-gray-50 transition-colors ${idx > 0 ? "border-t border-gray-50" : ""}`}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${it.danger ? "bg-red-50 text-red-500" : "bg-primary/10 text-primary"}`}>
+                  <it.icon size={18} />
+                </div>
+                <span className={`flex-1 text-sm font-bold ${it.danger ? "text-red-500" : "text-gray-800"}`}>
+                  {t(it.labelKey)}
+                </span>
+                {!it.danger && <ChevronRight size={18} className="text-gray-300 flex-shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Placeholder for sections not built yet (production layout) ─── */
+function PlaceholderSection({ t }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
+        <Wrench size={22} className="text-gray-300" />
+      </div>
+      <p className="text-base font-black text-gray-800">{t("ss.comingSoon")}</p>
+      <p className="text-sm text-gray-400 font-medium mt-1">{t("ss.placeholderDesc")}</p>
+    </div>
+  );
+}
 
 /* ─── shared UI primitives ─── */
 function SettingSection({ icon: Icon, title, description, children }) {
@@ -311,7 +399,12 @@ function SoundSelector({ value, onChange }) {
 
 /* ─── Settings ─── */
 export function Settings() {
-  const { profile } = useAuth();
+  const { profile, logout } = useAuth();
+  const { t, language, setLanguage } = usePreferences();
+
+  // Which menu section is open (null = the grouped menu itself). Stays on the existing
+  // /store/settings route — no new router routes.
+  const [activeSection, setActiveSection] = useState(null);
 
   /* store info */
   const [storeName, setStoreName] = useState("");
@@ -493,19 +586,43 @@ export function Settings() {
   const handlePrintSize = (v) => { setPrintSize(v); localStorage.setItem("store_print_size", v); };
   const handleAutoScroll = (v) => { setAutoScroll(v); localStorage.setItem("store_auto_scroll", v ? "1" : "0"); };
 
+  const handleLogout = () => { logout(); };
+
   // Live storefront status for the badge — reflects unsaved edits too.
   const liveStatus = computeStatus({ isOpen, storeHours, holidays }, new Date(nowTs), "store").status;
   const statusMeta = STATUS_META[liveStatus] || STATUS_META.closed;
 
+  const sec = activeSection;
+  const isMenu = sec === null;
+
   return (
     <div className="p-4 md:p-5 lg:p-6 space-y-5 max-w-[900px] mx-auto">
-      {/* Header */}
+      {/* Header — shows a back button once inside a section */}
       <div>
-        <h1 className="text-xl md:text-2xl font-black text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-400 font-medium mt-0.5">Manage your store configuration</p>
+        {!isMenu && (
+          <button
+            type="button"
+            onClick={() => setActiveSection(null)}
+            className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-primary transition-colors mb-2"
+          >
+            <ChevronLeft size={18} /> {t("ss.back")}
+          </button>
+        )}
+        <h1 className="text-xl md:text-2xl font-black text-gray-900">
+          {isMenu ? t("ss.title") : t(SECTION_TITLE[sec] || "ss.title")}
+        </h1>
+        {isMenu && (
+          <p className="text-sm text-gray-400 font-medium mt-0.5">{t("ss.subtitle")}</p>
+        )}
       </div>
 
+      {/* Grouped menu (default view) */}
+      {isMenu && (
+        <SettingsMenu t={t} onSelect={setActiveSection} onLogout={handleLogout} />
+      )}
+
       {/* ── Store Info ── */}
+      {sec === "store-info" && (
       <SettingSection icon={Store} title="Store Information" description="Basic store details shown to customers">
         <div className="space-y-4">
           {/* Logo + Banner */}
@@ -614,8 +731,31 @@ export function Settings() {
           {savingStore ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedStore ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Store Info</>}
         </button>
       </SettingSection>
+      )}
+
+      {/* ── Contact Number (focused view; shares the same store phone/email state) ── */}
+      {sec === "contact" && (
+      <SettingSection icon={Phone} title="Contact Number" description="Phone and email customers can reach you on">
+        <div className="space-y-4">
+          <LabeledField label="Phone Number">
+            <FieldInput value={storePhone} onChange={setStorePhone} placeholder="+66 8X XXX XXXX" type="tel" />
+          </LabeledField>
+          <LabeledField label="Email">
+            <FieldInput value={storeEmail} onChange={setStoreEmail} placeholder="store@example.com" type="email" />
+          </LabeledField>
+        </div>
+        <button
+          onClick={handleSaveStore}
+          disabled={savingStore}
+          className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm mt-2"
+        >
+          {savingStore ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedStore ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Contact</>}
+        </button>
+      </SettingSection>
+      )}
 
       {/* ── Open / Close Store (master switch) ── */}
+      {sec === "open-close" && (
       <SettingSection icon={Power} title="Store Status" description="Master switch — pauses new orders instantly when closed">
         <SettingRow
           label={isOpen ? "Store is Open" : "Store is Closed"}
@@ -627,8 +767,10 @@ export function Settings() {
           </div>
         </SettingRow>
       </SettingSection>
+      )}
 
-      {/* ── Store Hours ── */}
+      {/* ── Opening Hours (store + delivery + holidays) ── */}
+      {sec === "hours" && (<>
       <SettingSection icon={Clock} title="Store Hours" description="Weekly storefront hours — add several slots per day (e.g. break for lunch)">
         <DayHoursEditor hours={storeHours} onChange={setStoreHours} />
       </SettingSection>
@@ -651,8 +793,10 @@ export function Settings() {
       >
         {savingHours ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedHours ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Opening Hours</>}
       </button>
+      </>)}
 
-      {/* ── Notification Sound ── */}
+      {/* ── Notifications (sound + night mode + receipt) ── */}
+      {sec === "notifications" && (<>
       <SettingSection icon={Bell} title="Notification Sound" description="Order alert alarm — saved to cloud, applies to all devices">
         {/* Master enable */}
         <SettingRow label="Enable Order Alert" description="Play alarm when a new order arrives">
@@ -764,9 +908,11 @@ export function Settings() {
           </SettingRow>
         </div>
       </SettingSection>
+      </>)}
 
       {/* ── Account ── */}
-      <SettingSection icon={Shield} title="Account" description="Your store manager account">
+      {sec === "account" && (
+      <SettingSection icon={User} title="My Account" description="Your store manager account">
         <SettingRow label="Email" description="Login email address">
           <span className="text-sm font-bold text-gray-500">{profile?.email || "—"}</span>
         </SettingRow>
@@ -781,11 +927,39 @@ export function Settings() {
           </SettingRow>
         </div>
       </SettingSection>
+      )}
 
+      {/* ── Language (reuses the shared i18n language switch) ── */}
+      {sec === "language" && (
+      <SettingSection icon={Globe} title={t("ss.language")} description={t("ss.languageDesc")}>
+        <SettingRow label={t("ss.language")}>
+          <div className="flex gap-1 bg-gray-50 rounded-2xl p-1">
+            {[{ value: "en", label: "EN" }, { value: "th", label: "TH" }].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setLanguage(opt.value)}
+                className={`px-4 py-2 min-h-[40px] rounded-xl text-xs font-black transition-all ${language === opt.value ? "bg-primary text-white" : "text-gray-500"}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
+      </SettingSection>
+      )}
+
+      {/* ── Placeholder sections (not built yet) ── */}
+      {(sec === "payment" || sec === "staff" || sec === "help" || sec === "privacy" || sec === "terms") && (
+        <PlaceholderSection t={t} />
+      )}
+
+      {isMenu && (
       <div className="text-center py-4">
         <p className="text-xs text-gray-300 font-medium">LK Fried Chicken — Store Portal</p>
         <p className="text-[10px] text-gray-200 mt-0.5">Production v4 · Module 4+</p>
       </div>
+      )}
 
       <LocationPicker
         isOpen={showMapModal}
