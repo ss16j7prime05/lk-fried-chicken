@@ -1,9 +1,13 @@
 // ปุ่มเปิด Google Maps แบบ reusable
 // mode="view" เปิดดูตำแหน่งบนแผนที่ / mode="navigate" เปิดนำทางขับรถไปยังตำแหน่งนั้น
-export default function MapButton({ lat, lng, address, mode = "view", label, style }) {
-  const hasCoords = lat != null && lng != null;
+export default function MapButton({ lat, lng, address, mapLink, mode = "view", label, style }) {
+  const hasCoords = lat != null && lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
 
-  const href = hasCoords
+  // A saved Google Maps link wins in view mode (lets the store point to an exact
+  // place page); navigation still uses coords for turn-by-turn.
+  const href = mode === "view" && mapLink
+    ? mapLink
+    : hasCoords
     ? mode === "navigate"
       ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`
       : `https://www.google.com/maps?q=${lat},${lng}`

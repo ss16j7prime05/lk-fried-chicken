@@ -1,23 +1,52 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import {
   Store, Bell, Printer, Shield, CheckCircle2, Save, Loader2,
   Volume2, VolumeX, Moon, Play,
   Upload, Image as ImageIcon, MapPin, Clock,
   Power, Truck, CalendarX, Plus, Trash2,
   Phone, CreditCard, User, Users, Globe, HelpCircle, FileText, LogOut,
-  ChevronRight, ChevronLeft, Wrench,
+  ChevronRight, ChevronLeft, Wrench, AlertCircle,
+  Link2, MessageCircle, AtSign, Music2, Copy, Check,
+  Wifi, ParkingCircle, PawPrint, Snowflake, Receipt,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
-import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION } from "../../constants/address";
+import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION, isValidThaiPhone } from "../../constants/address";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../store/alarmSounds";
 import LocationPicker from "../../location/LocationPicker";
 import MapButton from "../../location/MapButton";
+import BannerCropper from "../../components/store/BannerCropper";
 import { DAY_ORDER, computeStatus } from "../../store/storeStatus";
+
+/* ─── store-profile validators (reuse isValidThaiPhone from address constants) ─── */
+const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
+const isValidTaxId = (v) => /^\d{13}$/.test(String(v).replace(/[\s-]/g, ""));
+const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n <= hi;
+
+// Blank sub-objects — mirror the Firestore field shape so a missing doc field
+// never throws. Stored under stores/{STORE_ID} (no new collection).
+const EMPTY_SOCIAL = { facebook: "", line: "", instagram: "", tiktok: "", website: "" };
+const EMPTY_FACILITIES = { wifi: false, parking: false, petFriendly: false, airCondition: false };
+const EMPTY_TAX = { taxId: "", companyName: "", branch: "" };
+
+const SOCIAL_FIELDS = [
+  { key: "facebook",  icon: Link2,          labelKey: "si.facebook",  ph: "https://facebook.com/…" },
+  { key: "line",      icon: MessageCircle,  labelKey: "si.line",      ph: "@yourlineid" },
+  { key: "instagram", icon: AtSign,         labelKey: "si.instagram", ph: "@yourhandle" },
+  { key: "tiktok",    icon: Music2,         labelKey: "si.tiktok",    ph: "@yourhandle" },
+  { key: "website",   icon: Globe,          labelKey: "si.website",   ph: "https://…" },
+];
+
+const FACILITY_FIELDS = [
+  { key: "wifi",         icon: Wifi,          labelKey: "si.wifi" },
+  { key: "parking",      icon: ParkingCircle, labelKey: "si.parking" },
+  { key: "petFriendly",  icon: PawPrint,      labelKey: "si.petFriendly" },
+  { key: "airCondition", icon: Snowflake,     labelKey: "si.airCondition" },
+];
 
 /* ─── default settings ─── */
 const DEFAULT_NOTIF = {
@@ -193,8 +222,33 @@ function LabeledField({ label, children }) {
   );
 }
 
-/* ─── Image upload (logo / banner) with preview ─── */
-function ImageUpload({ label, value, previewClass, uploading, onSelect }) {
+/* ─── Multi-line text field (Description) ─── */
+function TextArea({ value, onChange, placeholder, rows = 3 }) {
+  return (
+    <div className="px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className="w-full bg-transparent text-sm font-medium text-gray-800 outline-none resize-y placeholder:text-gray-300"
+      />
+    </div>
+  );
+}
+
+/* ─── Inline field error ─── */
+function FieldError({ message }) {
+  if (!message) return null;
+  return (
+    <p className="flex items-center gap-1 text-xs font-bold text-red-500 mt-1.5">
+      <AlertCircle size={12} className="flex-shrink-0" /> {message}
+    </p>
+  );
+}
+
+/* ─── Image upload (logo / banner) with preview, replace + delete ─── */
+function ImageUpload({ label, value, previewClass, uploading, onSelect, onDelete, t }) {
   return (
     <LabeledField label={label}>
       <div className="flex items-center gap-3">
@@ -203,16 +257,29 @@ function ImageUpload({ label, value, previewClass, uploading, onSelect }) {
             ? <img src={value} alt={label} className="w-full h-full object-cover" />
             : <ImageIcon size={20} className="text-gray-300" />}
         </div>
-        <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
-          {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-          {uploading ? "Uploading…" : value ? "Change" : "Upload"}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
-          />
-        </label>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 px-4 py-2.5 min-h-[40px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
+            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+            {uploading ? t("si.uploading") : value ? t("si.replace") : t("si.upload")}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => { onSelect(e.target.files?.[0] ?? null); e.target.value = ""; }}
+            />
+          </label>
+          {value && onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={uploading}
+              className="flex items-center gap-2 px-4 py-2.5 min-h-[40px] rounded-xl border-2 border-gray-200 hover:border-red-400 text-gray-500 hover:text-red-500 text-sm font-bold transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={16} /> {t("si.delete")}
+            </button>
+          )}
+        </div>
       </div>
     </LabeledField>
   );
@@ -409,6 +476,7 @@ export function Settings() {
   /* store info */
   const [storeName, setStoreName] = useState("");
   const [storeCategory, setStoreCategory] = useState("");
+  const [storeDesc, setStoreDesc] = useState("");
   const [storePhone, setStorePhone] = useState("");
   const [storeEmail, setStoreEmail] = useState("");
   const [storeAddr, setStoreAddr] = useState("");
@@ -419,9 +487,15 @@ export function Settings() {
   const [storeLng, setStoreLng] = useState("");
   const [deliveryRadius, setDeliveryRadius] = useState(String(MAX_DELIVERY_RADIUS_KM));
   const [prepMinutes, setPrepMinutes] = useState(EST_PREP_MINUTES);
+  const [social, setSocial] = useState(EMPTY_SOCIAL);
+  const [facilities, setFacilities] = useState(EMPTY_FACILITIES);
+  const [tax, setTax] = useState(EMPTY_TAX);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
+  const [cropFile, setCropFile] = useState(null);   // banner file awaiting crop
+  const [copiedMap, setCopiedMap] = useState(false);
+  const [errors, setErrors] = useState({});
   const [savingStore, setSavingStore] = useState(false);
   const [savedStore, setSavedStore] = useState(false);
 
@@ -453,6 +527,7 @@ export function Settings() {
       const d = snap.data();
       setStoreName(d.storeName || "");
       setStoreCategory(d.category || "");
+      setStoreDesc(d.description || "");
       setStorePhone(d.phone    || "");
       setStoreEmail(d.email    || "");
       setStoreAddr(d.address   || "");
@@ -463,6 +538,9 @@ export function Settings() {
       setStoreLng(d.lng != null ? String(d.lng) : "");
       setDeliveryRadius(d.deliveryRadius != null ? String(d.deliveryRadius) : String(MAX_DELIVERY_RADIUS_KM));
       setPrepMinutes(d.prepMinutes != null ? d.prepMinutes : EST_PREP_MINUTES);
+      setSocial({ ...EMPTY_SOCIAL, ...(d.social || {}) });
+      setFacilities({ ...EMPTY_FACILITIES, ...(d.facilities || {}) });
+      setTax({ ...EMPTY_TAX, ...(d.tax || {}) });
       setIsOpen(d.isOpen !== false);
       setStoreHours(d.storeHours || {});
       setDeliveryHours(d.deliveryHours || {});
@@ -503,18 +581,53 @@ export function Settings() {
     finally { setSavingHours(false); }
   };
 
-  /* ── image upload (logo / banner) ── */
-  const handleUploadImage = async (file, kind) => {
+  /* ── upload a file/blob to storage and return its URL ── */
+  const uploadTo = async (data, kind, name) => {
+    const r = ref(storage, `stores/${STORE_ID}/${kind}_${Date.now()}_${name}`);
+    await uploadBytes(r, data);
+    return getDownloadURL(r);
+  };
+
+  /* ── logo: upload directly ── */
+  const handleUploadLogo = async (file) => {
     if (!file) return;
-    const setUploading = kind === "logo" ? setUploadingLogo : setUploadingBanner;
-    const setUrl = kind === "logo" ? setStoreLogo : setStoreBanner;
-    setUploading(true);
+    setUploadingLogo(true);
     try {
-      const r = ref(storage, `stores/${STORE_ID}/${kind}_${Date.now()}_${file.name}`);
-      await uploadBytes(r, file);
-      setUrl(await getDownloadURL(r));
+      setStoreLogo(await uploadTo(file, "logo", file.name));
     } catch { alert("Upload failed. Please try again."); }
-    finally { setUploading(false); }
+    finally { setUploadingLogo(false); }
+  };
+
+  /* ── logo: delete (best-effort remove from storage + clear field) ── */
+  const handleDeleteLogo = async () => {
+    if (!storeLogo) return;
+    if (!window.confirm(t("si.deleteLogoConfirm"))) return;
+    const prev = storeLogo;
+    setStoreLogo("");
+    try {
+      await deleteObject(ref(storage, prev));
+    } catch { /* file may be gone / not a storage URL — clearing the field is enough */ }
+  };
+
+  /* ── banner: crop first, then upload the cropped blob ── */
+  const handleBannerCropped = async (blob) => {
+    setCropFile(null);
+    setUploadingBanner(true);
+    try {
+      setStoreBanner(await uploadTo(blob, "banner", "banner.jpg"));
+    } catch { alert("Upload failed. Please try again."); }
+    finally { setUploadingBanner(false); }
+  };
+
+  /* ── copy the Google Maps link ── */
+  const handleCopyMap = async () => {
+    const link = mapLink.trim();
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedMap(true);
+      setTimeout(() => setCopiedMap(false), 2000);
+    } catch { /* clipboard blocked */ }
   };
 
   /* ── map picker confirm ── */
@@ -524,8 +637,24 @@ export function Settings() {
     setShowMapModal(false);
   };
 
+  /* ── validation (Phone, Email, Tax ID, Lat, Lng) — empty optional fields pass ── */
+  const validateStore = () => {
+    const e = {};
+    const latNum = parseFloat(storeLat);
+    const lngNum = parseFloat(storeLng);
+    if (storePhone.trim() && !isValidThaiPhone(storePhone)) e.phone = t("si.errPhone");
+    if (storeEmail.trim() && !isValidEmail(storeEmail)) e.email = t("si.errEmail");
+    if (tax.taxId.trim() && !isValidTaxId(tax.taxId)) e.taxId = t("si.errTaxId");
+    if (storeLat.trim() && !inRange(latNum, -90, 90)) e.lat = t("si.errLat");
+    if (storeLng.trim() && !inRange(lngNum, -180, 180)) e.lng = t("si.errLng");
+    return e;
+  };
+
   /* ── store info save ── */
   const handleSaveStore = async () => {
+    const e = validateStore();
+    setErrors(e);
+    if (Object.keys(e).length > 0) return; // block save until fields are clean
     setSavingStore(true);
     try {
       const latNum = parseFloat(storeLat);
@@ -533,17 +662,32 @@ export function Settings() {
       const radiusNum = parseFloat(deliveryRadius);
       // lat/lng/storeName/phone/address are the exact fields Customer (Checkout) and
       // Rider already read from stores/{STORE_ID} — kept identical so nothing breaks.
+      // description/social/facilities/tax are new fields on the same doc (no new collection).
       const patch = {
-        storeName: storeName.trim() || "LK Fried Chicken",
-        category:  storeCategory.trim(),
-        phone:     storePhone.trim(),
-        email:     storeEmail.trim(),
-        address:   storeAddr.trim(),
+        storeName:   storeName.trim() || "LK Fried Chicken",
+        category:    storeCategory.trim(),
+        description: storeDesc.trim(),
+        phone:       storePhone.trim(),
+        email:       storeEmail.trim(),
+        address:     storeAddr.trim(),
         storeLogo,
         storeBanner,
-        mapLink:   mapLink.trim(),
+        mapLink:     mapLink.trim(),
         deliveryRadius: Number.isFinite(radiusNum) ? radiusNum : MAX_DELIVERY_RADIUS_KM,
         prepMinutes: Number(prepMinutes),
+        social: {
+          facebook:  social.facebook.trim(),
+          line:      social.line.trim(),
+          instagram: social.instagram.trim(),
+          tiktok:    social.tiktok.trim(),
+          website:   social.website.trim(),
+        },
+        facilities,
+        tax: {
+          taxId:       tax.taxId.replace(/[\s-]/g, ""),
+          companyName: tax.companyName.trim(),
+          branch:      tax.branch.trim(),
+        },
       };
       // Only overwrite coordinates when valid, so a bad manual edit can't wipe the
       // store location Customer/Rider depend on.
@@ -621,135 +765,263 @@ export function Settings() {
         <SettingsMenu t={t} onSelect={setActiveSection} onLogout={handleLogout} />
       )}
 
-      {/* ── Store Info ── */}
-      {sec === "store-info" && (
-      <SettingSection icon={Store} title="Store Information" description="Basic store details shown to customers">
-        <div className="space-y-4">
-          {/* Logo + Banner */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <ImageUpload
-              label="Store Logo"
-              value={storeLogo}
-              previewClass="w-16 h-16"
-              uploading={uploadingLogo}
-              onSelect={(f) => handleUploadImage(f, "logo")}
-            />
-            <ImageUpload
-              label="Store Banner"
-              value={storeBanner}
-              previewClass="w-28 h-16"
-              uploading={uploadingBanner}
-              onSelect={(f) => handleUploadImage(f, "banner")}
-            />
+      {/* ── Store Info (Store Profile — production) ── */}
+      {sec === "store-info" && (<>
+      {/* Logo & Banner */}
+      <SettingSection icon={ImageIcon} title={t("si.secMedia")} description={t("si.secMediaDesc")}>
+        <ImageUpload
+          label={t("si.logo")}
+          value={storeLogo}
+          previewClass="w-16 h-16"
+          uploading={uploadingLogo}
+          onSelect={handleUploadLogo}
+          onDelete={handleDeleteLogo}
+          t={t}
+        />
+        {/* Banner: full-width preview + crop-on-select */}
+        <LabeledField label={t("si.banner")}>
+          <div className="space-y-3">
+            <div className="w-full aspect-[2/1] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+              {storeBanner
+                ? <img src={storeBanner} alt={t("si.banner")} className="w-full h-full object-cover" />
+                : <ImageIcon size={24} className="text-gray-300" />}
+            </div>
+            <div className="flex gap-2">
+              <label className="flex items-center justify-center gap-2 flex-1 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
+                {uploadingBanner ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                {uploadingBanner ? t("si.uploading") : storeBanner ? t("si.replace") : t("si.upload")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingBanner}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ""; }}
+                />
+              </label>
+            </div>
           </div>
+        </LabeledField>
+      </SettingSection>
 
-          {/* Name + Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <LabeledField label="Store Name">
-              <FieldInput value={storeName} onChange={setStoreName} placeholder="LK Fried Chicken" />
+      {/* Basic Information */}
+      <SettingSection icon={Store} title={t("si.secBasic")} description={t("si.secBasicDesc")}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <LabeledField label={t("si.storeName")}>
+            <FieldInput value={storeName} onChange={setStoreName} placeholder="LK Fried Chicken" />
+          </LabeledField>
+          <LabeledField label={t("si.category")}>
+            <FieldInput value={storeCategory} onChange={setStoreCategory} placeholder={t("si.categoryPh")} />
+          </LabeledField>
+        </div>
+        <LabeledField label={t("si.description")}>
+          <TextArea value={storeDesc} onChange={setStoreDesc} placeholder={t("si.descriptionPh")} rows={4} />
+        </LabeledField>
+      </SettingSection>
+
+      {/* Contact & Location */}
+      <SettingSection icon={MapPin} title={t("si.secContact")} description={t("si.secContactDesc")}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <LabeledField label={t("si.phone")}>
+              <FieldInput value={storePhone} onChange={setStorePhone} placeholder="08X-XXX-XXXX" type="tel" />
             </LabeledField>
-            <LabeledField label="Category">
-              <FieldInput value={storeCategory} onChange={setStoreCategory} placeholder="e.g. Fried Chicken" />
-            </LabeledField>
+            <FieldError message={errors.phone} />
           </div>
-
-          {/* Phone + Email */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <LabeledField label="Phone Number">
-              <FieldInput value={storePhone} onChange={setStorePhone} placeholder="+66 8X XXX XXXX" type="tel" />
-            </LabeledField>
-            <LabeledField label="Email">
+          <div>
+            <LabeledField label={t("si.email")}>
               <FieldInput value={storeEmail} onChange={setStoreEmail} placeholder="store@example.com" type="email" />
             </LabeledField>
-          </div>
-
-          {/* Address */}
-          <LabeledField label="Address">
-            <FieldInput value={storeAddr} onChange={setStoreAddr} placeholder="Store address…" />
-          </LabeledField>
-
-          {/* Google Maps link */}
-          <LabeledField label="Google Maps Link">
-            <FieldInput value={mapLink} onChange={setMapLink} placeholder="https://maps.google.com/…" type="url" />
-          </LabeledField>
-
-          {/* GPS coordinates */}
-          <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">GPS Coordinates</label>
-            <div className="mt-1.5 grid grid-cols-2 gap-3">
-              <FieldInput value={storeLat} onChange={setStoreLat} placeholder="Latitude" type="number" />
-              <FieldInput value={storeLng} onChange={setStoreLng} placeholder="Longitude" type="number" />
-            </div>
-            <div className="mt-2 flex flex-col sm:flex-row gap-2">
-              <button
-                type="button"
-                onClick={() => setShowMapModal(true)}
-                className="flex items-center justify-center gap-2 flex-1 py-3 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold transition-colors"
-              >
-                <MapPin size={16} /> Pick on Map
-              </button>
-              <MapButton
-                lat={parseFloat(storeLat)}
-                lng={parseFloat(storeLng)}
-                mode="view"
-                label="🗺️ View on Google Maps"
-                style={{ flex: 1, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12 }}
-              />
-            </div>
-          </div>
-
-          {/* Delivery radius */}
-          <LabeledField label="Delivery Radius (km)">
-            <FieldInput value={deliveryRadius} onChange={setDeliveryRadius} placeholder="8" type="number" />
-          </LabeledField>
-
-          {/* Prep time */}
-          <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock size={12} /> Prep Time (minutes)
-            </label>
-            <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {PREP_OPTIONS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setPrepMinutes(m)}
-                  className={`py-3 min-h-[44px] rounded-xl text-sm font-bold transition-colors
-                    ${prepMinutes === m ? "bg-primary text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
+            <FieldError message={errors.email} />
           </div>
         </div>
-        <button
-          onClick={handleSaveStore}
-          disabled={savingStore}
-          className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm mt-2"
-        >
-          {savingStore ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedStore ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Store Info</>}
-        </button>
+
+        <LabeledField label={t("si.address")}>
+          <FieldInput value={storeAddr} onChange={setStoreAddr} placeholder={t("si.addressPh")} />
+        </LabeledField>
+
+        {/* Google Maps link + copy */}
+        <div>
+          <LabeledField label={t("si.mapLink")}>
+            <FieldInput value={mapLink} onChange={setMapLink} placeholder="https://maps.google.com/…" type="url" />
+          </LabeledField>
+          <div className="mt-2 flex flex-col sm:flex-row gap-2">
+            <MapButton
+              lat={parseFloat(storeLat)}
+              lng={parseFloat(storeLng)}
+              mapLink={mapLink.trim() || undefined}
+              mode="view"
+              label={`🗺️ ${t("si.openMap")}`}
+              style={{ flex: 1, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12 }}
+            />
+            <button
+              type="button"
+              onClick={handleCopyMap}
+              disabled={!mapLink.trim()}
+              className="flex items-center justify-center gap-2 flex-1 py-3 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold transition-colors disabled:opacity-40"
+            >
+              {copiedMap ? <><Check size={16} className="text-green-500" /> {t("si.copied")}</> : <><Copy size={16} /> {t("si.copyLink")}</>}
+            </button>
+          </div>
+        </div>
+
+        {/* GPS coordinates */}
+        <div>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("si.gps")}</label>
+          <div className="mt-1.5 grid grid-cols-2 gap-3">
+            <div>
+              <FieldInput value={storeLat} onChange={setStoreLat} placeholder={t("si.lat")} type="number" />
+              <FieldError message={errors.lat} />
+            </div>
+            <div>
+              <FieldInput value={storeLng} onChange={setStoreLng} placeholder={t("si.lng")} type="number" />
+              <FieldError message={errors.lng} />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowMapModal(true)}
+            className="mt-2 flex items-center justify-center gap-2 w-full py-3 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold transition-colors"
+          >
+            <MapPin size={16} /> {t("si.pickOnMap")}
+          </button>
+        </div>
+
+        {/* Delivery radius */}
+        <LabeledField label={t("si.deliveryRadius")}>
+          <FieldInput value={deliveryRadius} onChange={setDeliveryRadius} placeholder="8" type="number" />
+        </LabeledField>
+
+        {/* Prep time */}
+        <div>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Clock size={12} /> {t("si.prepTime")}
+          </label>
+          <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-6 gap-2">
+            {PREP_OPTIONS.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setPrepMinutes(m)}
+                className={`py-3 min-h-[44px] rounded-xl text-sm font-bold transition-colors
+                  ${prepMinutes === m ? "bg-primary text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
       </SettingSection>
+
+      {/* Social Media */}
+      <SettingSection icon={Link2} title={t("si.secSocial")} description={t("si.secSocialDesc")}>
+        <div className="space-y-3">
+          {SOCIAL_FIELDS.map(({ key, icon: Icon, labelKey, ph }) => (
+            <div key={key} className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Icon size={16} className="text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <FieldInput
+                  value={social[key]}
+                  onChange={(v) => setSocial((p) => ({ ...p, [key]: v }))}
+                  placeholder={`${t(labelKey)} · ${ph}`}
+                  type="url"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </SettingSection>
+
+      {/* Facilities */}
+      <SettingSection icon={Wifi} title={t("si.secFacilities")} description={t("si.secFacilitiesDesc")}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {FACILITY_FIELDS.map(({ key, icon: Icon, labelKey }) => {
+            const on = !!facilities[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setFacilities((p) => ({ ...p, [key]: !p[key] }))}
+                className={`flex items-center gap-3 p-4 min-h-[56px] rounded-xl border-2 text-left transition-colors
+                  ${on ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300 bg-white"}`}
+              >
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${on ? "bg-primary text-white" : "bg-gray-100 text-gray-400"}`}>
+                  <Icon size={16} />
+                </div>
+                <span className={`flex-1 text-sm font-bold ${on ? "text-primary" : "text-gray-700"}`}>{t(labelKey)}</span>
+                {/* presentational toggle (the whole row is the button — no nested button) */}
+                <span className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${on ? "bg-primary" : "bg-gray-300"}`}>
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? "translate-x-7" : "translate-x-1"}`} />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </SettingSection>
+
+      {/* Tax Information */}
+      <SettingSection icon={Receipt} title={t("si.secTax")} description={t("si.secTaxDesc")}>
+        <div>
+          <LabeledField label={t("si.taxId")}>
+            <FieldInput
+              value={tax.taxId}
+              onChange={(v) => setTax((p) => ({ ...p, taxId: v }))}
+              placeholder="0-0000-00000-00-0"
+              type="text"
+            />
+          </LabeledField>
+          <FieldError message={errors.taxId} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <LabeledField label={t("si.companyName")}>
+            <FieldInput value={tax.companyName} onChange={(v) => setTax((p) => ({ ...p, companyName: v }))} placeholder={t("si.companyName")} />
+          </LabeledField>
+          <LabeledField label={t("si.branch")}>
+            <FieldInput value={tax.branch} onChange={(v) => setTax((p) => ({ ...p, branch: v }))} placeholder={t("si.branchPh")} />
+          </LabeledField>
+        </div>
+      </SettingSection>
+
+      {/* Validation summary + Save */}
+      {Object.keys(errors).length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-sm font-bold text-red-600">
+          <AlertCircle size={16} className="flex-shrink-0" /> {t("si.fixErrors")}
+        </div>
       )}
+      <button
+        onClick={handleSaveStore}
+        disabled={savingStore}
+        className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm"
+      >
+        {savingStore ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedStore ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("si.save")}</>}
+      </button>
+      </>)}
 
       {/* ── Contact Number (focused view; shares the same store phone/email state) ── */}
       {sec === "contact" && (
-      <SettingSection icon={Phone} title="Contact Number" description="Phone and email customers can reach you on">
+      <SettingSection icon={Phone} title={t("ss.contact")} description={t("si.secContactDesc")}>
         <div className="space-y-4">
-          <LabeledField label="Phone Number">
-            <FieldInput value={storePhone} onChange={setStorePhone} placeholder="+66 8X XXX XXXX" type="tel" />
-          </LabeledField>
-          <LabeledField label="Email">
-            <FieldInput value={storeEmail} onChange={setStoreEmail} placeholder="store@example.com" type="email" />
-          </LabeledField>
+          <div>
+            <LabeledField label={t("si.phone")}>
+              <FieldInput value={storePhone} onChange={setStorePhone} placeholder="08X-XXX-XXXX" type="tel" />
+            </LabeledField>
+            <FieldError message={errors.phone} />
+          </div>
+          <div>
+            <LabeledField label={t("si.email")}>
+              <FieldInput value={storeEmail} onChange={setStoreEmail} placeholder="store@example.com" type="email" />
+            </LabeledField>
+            <FieldError message={errors.email} />
+          </div>
         </div>
         <button
           onClick={handleSaveStore}
           disabled={savingStore}
           className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm mt-2"
         >
-          {savingStore ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedStore ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Contact</>}
+          {savingStore ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedStore ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("si.save")}</>}
         </button>
       </SettingSection>
       )}
@@ -975,6 +1247,15 @@ export function Settings() {
         onConfirm={handleConfirmMap}
         onClose={() => setShowMapModal(false)}
       />
+
+      {/* Banner cropper — opens when a banner file is picked, uploads the cropped blob */}
+      {cropFile && (
+        <BannerCropper
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onCropped={handleBannerCropped}
+        />
+      )}
     </div>
   );
 }
