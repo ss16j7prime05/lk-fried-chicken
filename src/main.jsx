@@ -41,6 +41,7 @@ const StoreOrdersNew = lazy(() => import('./pages/store/Orders.jsx').then((m) =>
 const StoreKitchenNew = lazy(() => import('./pages/store/Kitchen.jsx').then((m) => ({ default: m.Kitchen })))
 const StoreMenuNew = lazy(() => import('./pages/store/Menu.jsx').then((m) => ({ default: m.Menu })))
 const StoreSettingsNew = lazy(() => import('./pages/store/Settings.jsx').then((m) => ({ default: m.Settings })))
+const StoreNotificationsNew = lazy(() => import('./pages/store/Notifications.jsx').then((m) => ({ default: m.Notifications })))
 
 // Customer — production UI
 const CustomerLayout = lazy(() => import('./layouts/CustomerLayout.jsx').then((m) => ({ default: m.CustomerLayout })))
@@ -156,6 +157,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/store/orders" element={<StoreOrdersNew />} />
             <Route path="/store/kitchen" element={<StoreKitchenNew />} />
             <Route path="/store/menu" element={<StoreMenuNew />} />
+            <Route path="/store/notifications" element={<StoreNotificationsNew />} />
             <Route path="/store/settings" element={<StoreSettingsNew />} />
           </Route>
 

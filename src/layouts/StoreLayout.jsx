@@ -13,11 +13,12 @@ import { getAlarmAudioCtx, playSound, getEffectiveVolume } from "../store/alarmS
 
 /* ─── constants ─── */
 const NAV = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/store" },
-  { icon: ClipboardList,   label: "Orders",    path: "/store/orders"   },
-  { icon: ChefHat,         label: "Kitchen",   path: "/store/kitchen"  },
-  { icon: UtensilsCrossed, label: "Menu",      path: "/store/menu"     },
-  { icon: Settings,        label: "Settings",  path: "/store/settings" },
+  { icon: LayoutDashboard, label: "Dashboard",     path: "/store" },
+  { icon: ClipboardList,   label: "Orders",        path: "/store/orders"        },
+  { icon: ChefHat,         label: "Kitchen",       path: "/store/kitchen"       },
+  { icon: UtensilsCrossed, label: "Menu",          path: "/store/menu"          },
+  { icon: Bell,            label: "Notifications", path: "/store/notifications" },
+  { icon: Settings,        label: "Settings",      path: "/store/settings"      },
 ];
 
 const DEFAULT_NOTIF = {
@@ -381,7 +382,7 @@ export function StoreLayout() {
                   )}
                   <Icon size={20} className={`flex-shrink-0 transition-colors duration-150 ${isActive ? "text-primary" : "text-gray-400 group-hover:text-gray-600"}`} />
                   <span className="flex-1 text-sm">{label}</span>
-                  {label === "Orders" && pendingOrders.length > 0 && (
+                  {(label === "Orders" || label === "Notifications") && pendingOrders.length > 0 && (
                     <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
                       {pendingOrders.length > 9 ? "9+" : pendingOrders.length}
                     </span>
@@ -443,9 +444,9 @@ export function StoreLayout() {
 
           {/* Notification bell */}
           <button
-            onClick={() => navigate("/store/orders")}
+            onClick={() => navigate("/store/notifications")}
             className="relative min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Pending orders"
+            aria-label="Notifications"
           >
             <Bell size={20} className={pendingOrders.length > 0 ? "text-red-500" : ""} />
             {pendingOrders.length > 0 && (
