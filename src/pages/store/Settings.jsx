@@ -10,6 +10,7 @@ import {
   ChevronRight, ChevronLeft, Wrench, AlertCircle,
   Link2, MessageCircle, AtSign, Music2, Copy, Check,
   Wifi, ParkingCircle, PawPrint, Snowflake, Receipt,
+  Mail, ExternalLink, PhoneCall,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
@@ -26,6 +27,18 @@ import { DAY_ORDER, computeStatus } from "../../store/storeStatus";
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
 const isValidTaxId = (v) => /^\d{13}$/.test(String(v).replace(/[\s-]/g, ""));
 const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n <= hi;
+
+/* ─── contact action links (pure helpers) ─── */
+const telHref = (v) => { const s = String(v || "").replace(/[\s-]/g, ""); return s ? `tel:${s}` : ""; };
+const mailHref = (v) => { const s = String(v || "").trim(); return s ? `mailto:${s}` : ""; };
+const urlHref = (v) => { const s = String(v || "").trim(); return s ? (/^https?:\/\//i.test(s) ? s : `https://${s}`) : ""; };
+// LINE: accept a full URL, an @id, or a bare id → deep link to the LINE profile.
+const lineHref = (v) => {
+  const s = String(v || "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://line.me/R/ti/p/${s.startsWith("@") ? s : `@${s}`}`;
+};
 
 // Blank sub-objects — mirror the Firestore field shape so a missing doc field
 // never throws. Stored under stores/{STORE_ID} (no new collection).
@@ -244,6 +257,62 @@ function FieldError({ message }) {
     <p className="flex items-center gap-1 text-xs font-bold text-red-500 mt-1.5">
       <AlertCircle size={12} className="flex-shrink-0" /> {message}
     </p>
+  );
+}
+
+/* ─── Copy-to-clipboard button (single clipboard primitive — reused for phone,
+   email and the map link, so the copy logic lives in one place) ─── */
+function CopyButton({ text, label, t, className }) {
+  const [copied, setCopied] = useState(false);
+  const value = String(text || "").trim();
+  const copy = async (e) => {
+    e?.stopPropagation?.();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked */ }
+  };
+  // Labeled variant (full-width button, e.g. map link)
+  if (label) {
+    return (
+      <button type="button" onClick={copy} disabled={!value} className={className}>
+        {copied ? <><Check size={16} className="text-green-500" /> {t("si.copied")}</> : <><Copy size={16} /> {label}</>}
+      </button>
+    );
+  }
+  // Icon-only variant (contact rows)
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      disabled={!value}
+      aria-label={t("sc.copy")}
+      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-500 hover:border-primary hover:text-primary disabled:opacity-40 transition-colors flex-shrink-0"
+    >
+      {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+    </button>
+  );
+}
+
+/* ─── Action link button (call / open LINE / open website) — renders a disabled
+   placeholder when there's nothing to link to. Reused for every contact action. ─── */
+function LinkIconButton({ href, icon: Icon, label, external = true }) {
+  const cls = "min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition-colors flex-shrink-0";
+  if (!href) {
+    return <span className={`${cls} opacity-40`} aria-label={label}><Icon size={16} /></span>;
+  }
+  return (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel="noreferrer"
+      aria-label={label}
+      className={cls}
+    >
+      <Icon size={16} />
+    </a>
   );
 }
 
@@ -478,6 +547,8 @@ export function Settings() {
   const [storeCategory, setStoreCategory] = useState("");
   const [storeDesc, setStoreDesc] = useState("");
   const [storePhone, setStorePhone] = useState("");
+  const [extraPhones, setExtraPhones] = useState([]); // additional numbers beyond the primary `phone`
+  const [mobile, setMobile] = useState("");
   const [storeEmail, setStoreEmail] = useState("");
   const [storeAddr, setStoreAddr] = useState("");
   const [storeLogo, setStoreLogo] = useState("");
@@ -494,7 +565,6 @@ export function Settings() {
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [cropFile, setCropFile] = useState(null);   // banner file awaiting crop
-  const [copiedMap, setCopiedMap] = useState(false);
   const [errors, setErrors] = useState({});
   const [savingStore, setSavingStore] = useState(false);
   const [savedStore, setSavedStore] = useState(false);
@@ -529,6 +599,8 @@ export function Settings() {
       setStoreCategory(d.category || "");
       setStoreDesc(d.description || "");
       setStorePhone(d.phone    || "");
+      setExtraPhones(Array.isArray(d.phones) ? d.phones : []);
+      setMobile(d.mobile || "");
       setStoreEmail(d.email    || "");
       setStoreAddr(d.address   || "");
       setStoreLogo(d.storeLogo || "");
@@ -619,17 +691,6 @@ export function Settings() {
     finally { setUploadingBanner(false); }
   };
 
-  /* ── copy the Google Maps link ── */
-  const handleCopyMap = async () => {
-    const link = mapLink.trim();
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopiedMap(true);
-      setTimeout(() => setCopiedMap(false), 2000);
-    } catch { /* clipboard blocked */ }
-  };
-
   /* ── map picker confirm ── */
   const handleConfirmMap = ({ lat, lng }) => {
     setStoreLat(String(lat));
@@ -643,6 +704,10 @@ export function Settings() {
     const latNum = parseFloat(storeLat);
     const lngNum = parseFloat(storeLng);
     if (storePhone.trim() && !isValidThaiPhone(storePhone)) e.phone = t("si.errPhone");
+    if (mobile.trim() && !isValidThaiPhone(mobile)) e.mobile = t("si.errPhone");
+    extraPhones.forEach((p, i) => {
+      if (p.trim() && !isValidThaiPhone(p)) e[`extraPhone_${i}`] = t("si.errPhone");
+    });
     if (storeEmail.trim() && !isValidEmail(storeEmail)) e.email = t("si.errEmail");
     if (tax.taxId.trim() && !isValidTaxId(tax.taxId)) e.taxId = t("si.errTaxId");
     if (storeLat.trim() && !inRange(latNum, -90, 90)) e.lat = t("si.errLat");
@@ -668,6 +733,10 @@ export function Settings() {
         category:    storeCategory.trim(),
         description: storeDesc.trim(),
         phone:       storePhone.trim(),
+        // `phone` stays the single primary number Customer/Rider read; `phones` holds
+        // the extra numbers so nothing else has to change (no duplicate source of truth).
+        phones:      extraPhones.map((p) => p.trim()).filter(Boolean),
+        mobile:      mobile.trim(),
         email:       storeEmail.trim(),
         address:     storeAddr.trim(),
         storeLogo,
@@ -853,14 +922,12 @@ export function Settings() {
               label={`🗺️ ${t("si.openMap")}`}
               style={{ flex: 1, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12 }}
             />
-            <button
-              type="button"
-              onClick={handleCopyMap}
-              disabled={!mapLink.trim()}
+            <CopyButton
+              text={mapLink}
+              label={t("si.copyLink")}
+              t={t}
               className="flex items-center justify-center gap-2 flex-1 py-3 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold transition-colors disabled:opacity-40"
-            >
-              {copiedMap ? <><Check size={16} className="text-green-500" /> {t("si.copied")}</> : <><Copy size={16} /> {t("si.copyLink")}</>}
-            </button>
+            />
           </div>
         </div>
 
@@ -999,32 +1066,134 @@ export function Settings() {
       </button>
       </>)}
 
-      {/* ── Contact Number (focused view; shares the same store phone/email state) ── */}
-      {sec === "contact" && (
-      <SettingSection icon={Phone} title={t("ss.contact")} description={t("si.secContactDesc")}>
-        <div className="space-y-4">
-          <div>
-            <LabeledField label={t("si.phone")}>
-              <FieldInput value={storePhone} onChange={setStorePhone} placeholder="08X-XXX-XXXX" type="tel" />
-            </LabeledField>
-            <FieldError message={errors.phone} />
-          </div>
-          <div>
-            <LabeledField label={t("si.email")}>
-              <FieldInput value={storeEmail} onChange={setStoreEmail} placeholder="store@example.com" type="email" />
-            </LabeledField>
-            <FieldError message={errors.email} />
-          </div>
+      {/* ── Contact (production — multi-phone, mobile, email, LINE, web & social) ── */}
+      {sec === "contact" && (<>
+      {/* Phone & Mobile */}
+      <SettingSection icon={Phone} title={t("sc.secPhone")} description={t("sc.secPhoneDesc")}>
+        {/* Primary phone (this is the shared `phone` Customer/Rider read) */}
+        <div>
+          <LabeledField label={t("sc.primaryPhone")}>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <FieldInput value={storePhone} onChange={setStorePhone} placeholder="08X-XXX-XXXX" type="tel" />
+              </div>
+              <LinkIconButton href={telHref(storePhone)} icon={PhoneCall} label={t("sc.call")} external={false} />
+              <CopyButton text={storePhone} t={t} />
+            </div>
+          </LabeledField>
+          <FieldError message={errors.phone} />
         </div>
+
+        {/* Additional phone numbers (add / edit / delete) */}
+        {extraPhones.map((p, i) => (
+          <div key={i}>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <FieldInput
+                  value={p}
+                  onChange={(v) => setExtraPhones((prev) => prev.map((x, j) => (j === i ? v : x)))}
+                  placeholder="0X-XXX-XXXX"
+                  type="tel"
+                />
+              </div>
+              <LinkIconButton href={telHref(p)} icon={PhoneCall} label={t("sc.call")} external={false} />
+              <CopyButton text={p} t={t} />
+              <button
+                type="button"
+                onClick={() => setExtraPhones((prev) => prev.filter((_, j) => j !== i))}
+                aria-label={t("si.delete")}
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+            <FieldError message={errors[`extraPhone_${i}`]} />
+          </div>
+        ))}
+
         <button
-          onClick={handleSaveStore}
-          disabled={savingStore}
-          className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm mt-2"
+          type="button"
+          onClick={() => setExtraPhones((prev) => [...prev, ""])}
+          className="flex items-center gap-1.5 text-xs font-black text-primary hover:text-primary-dark transition-colors"
         >
-          {savingStore ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedStore ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("si.save")}</>}
+          <Plus size={14} /> {t("sc.addPhone")}
         </button>
+
+        {/* Mobile */}
+        <div className="pt-4 border-t border-gray-50">
+          <LabeledField label={t("sc.mobile")}>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <FieldInput value={mobile} onChange={setMobile} placeholder="08X-XXX-XXXX" type="tel" />
+              </div>
+              <LinkIconButton href={telHref(mobile)} icon={PhoneCall} label={t("sc.call")} external={false} />
+              <CopyButton text={mobile} t={t} />
+            </div>
+          </LabeledField>
+          <FieldError message={errors.mobile} />
+        </div>
       </SettingSection>
+
+      {/* Email & Messaging */}
+      <SettingSection icon={Mail} title={t("sc.secOnline")} description={t("sc.secOnlineDesc")}>
+        <div>
+          <LabeledField label={t("si.email")}>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <FieldInput value={storeEmail} onChange={setStoreEmail} placeholder="store@example.com" type="email" />
+              </div>
+              <LinkIconButton href={mailHref(storeEmail)} icon={Mail} label={t("si.email")} external={false} />
+              <CopyButton text={storeEmail} t={t} />
+            </div>
+          </LabeledField>
+          <FieldError message={errors.email} />
+        </div>
+
+        <LabeledField label={t("sc.lineOa")}>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <FieldInput value={social.line} onChange={(v) => setSocial((p) => ({ ...p, line: v }))} placeholder="@yourlineid" />
+            </div>
+            <LinkIconButton href={lineHref(social.line)} icon={MessageCircle} label={t("sc.openLine")} />
+          </div>
+        </LabeledField>
+      </SettingSection>
+
+      {/* Web & Social */}
+      <SettingSection icon={Globe} title={t("sc.secWeb")} description={t("sc.secWebDesc")}>
+        {[
+          { key: "website",   icon: Globe,     labelKey: "si.website",   ph: "https://…",              open: urlHref },
+          { key: "facebook",  icon: Link2,     labelKey: "si.facebook",  ph: "https://facebook.com/…", open: urlHref },
+          { key: "instagram", icon: AtSign,    labelKey: "si.instagram", ph: "@yourhandle",            open: urlHref },
+          { key: "tiktok",    icon: Music2,    labelKey: "si.tiktok",    ph: "@yourhandle",            open: urlHref },
+        ].map(({ key, icon: Icon, labelKey, ph, open }) => (
+          <LabeledField key={key} label={t(labelKey)}>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <FieldInput value={social[key]} onChange={(v) => setSocial((p) => ({ ...p, [key]: v }))} placeholder={ph} type="url" />
+              </div>
+              <LinkIconButton href={open(social[key])} icon={ExternalLink} label={t("sc.open")} />
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Icon size={16} className="text-primary" />
+              </div>
+            </div>
+          </LabeledField>
+        ))}
+      </SettingSection>
+
+      {Object.keys(errors).length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-sm font-bold text-red-600">
+          <AlertCircle size={16} className="flex-shrink-0" /> {t("si.fixErrors")}
+        </div>
       )}
+      <button
+        onClick={handleSaveStore}
+        disabled={savingStore}
+        className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm"
+      >
+        {savingStore ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedStore ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("si.save")}</>}
+      </button>
+      </>)}
 
       {/* ── Open / Close Store (master switch) ── */}
       {sec === "open-close" && (
