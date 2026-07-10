@@ -57,6 +57,7 @@ import {
   approvePayment, rejectPayment, isPaymentSettled,
 } from "../../payment/paymentUtils";
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
+import OrderEditModal from "./OrderEditModal.jsx";
 
 /* ═══════════════════════ constants ═══════════════════════ */
 export const TABS = [
@@ -1005,7 +1006,7 @@ function PrintPanel({ order }) {
 }
 
 /* ═══════════════════════ Order Detail Drawer (collapsible sections) ═══════════════════════ */
-function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onReject, onVerifyPayment, onUpdateETA }) {
+function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onReject, onVerifyPayment, onUpdateETA, onEdit }) {
   if (!order) return null;
   const status = normalizeStatus(order.status);
   const statusIdx = STATUS_ORDER.indexOf(status);
@@ -1163,6 +1164,11 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
           )}
           {!isCancelled && next && (
             <button onClick={() => { onAdvance(order.id, next.to); onClose(); }} className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700">{next.label}</button>
+          )}
+          {!isCancelled && status !== "completed" && (
+            <button onClick={() => { onEdit(order); onClose(); }} className="w-full py-3 rounded-xl border-2 border-gray-200 text-gray-600 text-sm font-black hover:border-primary hover:text-primary flex items-center justify-center gap-2">
+              <Pencil size={15} /> Edit Order{order.version > 1 ? ` · v${order.version}` : ""}
+            </button>
           )}
         </div>
       </div>
@@ -1594,6 +1600,7 @@ export function Orders() {
   const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [activeOrder, setActiveOrder] = useState(null);
+  const [editOrder, setEditOrder] = useState(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // ETA accept modal
@@ -2101,6 +2108,15 @@ export function Orders() {
           onReject={rejectOrder}
           onVerifyPayment={verifyPayment}
           onUpdateETA={updateETA}
+          onEdit={setEditOrder}
+        />
+      )}
+
+      {editOrder && (
+        <OrderEditModal
+          order={orders.find((o) => o.id === editOrder.id) || editOrder}
+          editedBy={reviewer}
+          onClose={() => setEditOrder(null)}
         />
       )}
     </div>

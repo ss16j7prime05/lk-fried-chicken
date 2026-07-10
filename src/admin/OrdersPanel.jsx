@@ -224,6 +224,22 @@ export default function OrdersPanel({ orders }) {
             <h3 style={{ color: "#ff9800", marginTop: "12px" }}>
               💰 รวม {selected.grandTotal ?? 0} บาท
             </h3>
+
+            {/* Edit version history (Phase 3.7F) — Admin sees every version */}
+            {Array.isArray(selected.editHistory) && selected.editHistory.length > 0 && (
+              <div style={{ marginTop: "12px", borderTop: "1px solid #444", paddingTop: "10px" }}>
+                <p style={{ fontWeight: 700, marginBottom: "6px" }}>
+                  📝 ประวัติการแก้ไข (v{selected.version ?? 1})
+                </p>
+                {selected.editHistory.map((h, i) => (
+                  <div key={i} style={{ fontSize: "12px", color: "#bbb", borderTop: "1px dashed #444", paddingTop: "6px", marginTop: "6px" }}>
+                    v{h.version}: {(h.items || []).map((it) => `${it.qty || 1}×${it.name}`).join(", ") || "-"}
+                    <br />รวม {h.grandTotal ?? 0} บาท{h.reason ? ` · ${h.reason}` : ""}{h.editedBy ? ` · ${h.editedBy}` : ""}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <button
               onClick={() => setSelected(null)}
               style={{ width: "100%", padding: "10px", marginTop: "10px", borderRadius: "10px", border: "none", background: "#444", color: "#fff", cursor: "pointer" }}

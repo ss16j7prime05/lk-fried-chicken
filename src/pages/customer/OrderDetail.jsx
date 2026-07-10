@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { Phone, MapPin, Navigation, RotateCcw, Check, Bike, Clock, Upload, X, Loader2 } from "lucide-react";
+import { Phone, MapPin, Navigation, RotateCcw, Check, Bike, Clock, Upload, X, Loader2, Pencil } from "lucide-react";
 import { db } from "../../firebase";
 import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { getStore } from "./getStore";
@@ -276,12 +276,21 @@ export const OrderDetail = () => {
   const hasRider = Boolean(order.riderId);
   const cookingEta = normalizedStatus === "cooking" ? formatTime(order.estimatedFinishTime) : null;
 
-  // Payment states (PromptPay / Bank Transfer): awaiting payment (countdown) or
-  // rejected (re-upload). Both surface the same slip-upload box.
+  // Payment states (PromptPay / Bank Transfer): awaiting payment (countdown),
+  // rejected (re-upload), or an additional payment after a store edit. All three
+  // surface the same slip-upload box.
   const isWaitingPayment = order.payment?.status === PAYMENT_STATUS.WAITING_PAYMENT;
   const isRejected = order.payment?.status === PAYMENT_STATUS.REJECTED;
-  const showPayBox = isWaitingPayment || isRejected;
-  const countdown = isWaitingPayment ? countdownFrom(order.payment.expireAt, nowMs) : null;
+  const isAdditional = order.payment?.status === PAYMENT_STATUS.ADDITIONAL_PAYMENT;
+  const showPayBox = isWaitingPayment || isRejected || isAdditional;
+  const hasCountdown = isWaitingPayment || isAdditional;
+  const countdown = hasCountdown ? countdownFrom(order.payment.expireAt, nowMs) : null;
+
+  // Store edit history (Phase 3.7F) — show the customer the previous vs current order.
+  const editHistory = Array.isArray(order.editHistory) ? order.editHistory : [];
+  const isEdited = (order.version ?? 1) > 1 && editHistory.length > 0;
+  const prevSnapshot = isEdited ? editHistory[editHistory.length - 1] : null;
+  const refundAmount = Number(order.refundAmount || 0);
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6 pb-32">
@@ -299,17 +308,24 @@ export const OrderDetail = () => {
       {/* Payment action — live countdown (waiting) or rejected notice, plus slip upload */}
       {showPayBox && (
         <Card className={`p-6 border-2 ${isRejected ? "border-secondary/40" : "border-primary/30"}`}>
-          {isWaitingPayment && countdown && (
+          {hasCountdown && countdown && (
             <>
               <div className="flex items-center gap-2 text-primary">
                 <Clock size={18} />
-                <span className="text-base font-black">{t("od.waitingPayment")}</span>
+                <span className="text-base font-black">
+                  {isAdditional ? t("od.additionalPayment") : t("od.waitingPayment")}
+                </span>
               </div>
+              {isAdditional && (
+                <p className="mt-1 text-center text-2xl font-black text-primary">฿{order.payment?.additionalAmount ?? 0}</p>
+              )}
               <div className="mt-3 text-center">
                 <p className="text-5xl font-black tabular-nums text-primary">{countdown.label}</p>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{t("od.timeLeft")}</p>
               </div>
-              <p className="mt-3 text-sm font-medium text-gray-500 text-center">{t("od.payBeforeExpire")}</p>
+              <p className="mt-3 text-sm font-medium text-gray-500 text-center">
+                {isAdditional ? t("od.payDiffHint") : t("od.payBeforeExpire")}
+              </p>
             </>
           )}
 
@@ -359,6 +375,56 @@ export const OrderDetail = () => {
               {uploadingSlip ? t("od.slipUploading") : isRejected ? t("od.reuploadSlip") : t("od.confirmSlip")}
             </Button>
           </div>
+        </Card>
+      )}
+
+      {/* Order edited by store — previous vs current (Phase 3.7F) */}
+      {isEdited && (
+        <Card className="p-6 border border-amber-200">
+          <div className="flex items-center gap-2 text-amber-600">
+            <Pencil size={16} />
+            <span className="text-base font-black">{t("od.orderEdited")}</span>
+          </div>
+          {order.editReason && (
+            <p className="text-sm font-medium text-gray-500 mt-1">
+              {t("od.editReason")}: {t(`oe.reason.${order.editReason}`) || order.editReason}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div>
+              <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1">{t("od.previous")}</p>
+              {(prevSnapshot.items || []).map((it, i) => (
+                <p key={i} className="text-xs text-gray-400 font-medium line-through">{(it.qty || 1)}× {it.name}</p>
+              ))}
+              <p className="text-sm font-bold text-gray-400 mt-1">฿{prevSnapshot.grandTotal}</p>
+            </div>
+            <div>
+              <p className="text-xs font-black text-primary uppercase tracking-wider mb-1">{t("od.updated")}</p>
+              {(order.items || []).map((it, i) => (
+                <p key={i} className="text-xs text-gray-700 font-bold">{(it.qty || 1)}× {it.name}</p>
+              ))}
+              <p className="text-sm font-black text-gray-900 mt-1">฿{order.grandTotal}</p>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-sm font-black">
+            <span className="text-gray-500">{t("od.difference")}</span>
+            <span className={order.grandTotal - prevSnapshot.grandTotal >= 0 ? "text-amber-600" : "text-blue-600"}>
+              {order.grandTotal - prevSnapshot.grandTotal >= 0 ? "+" : "−"}฿{Math.abs(order.grandTotal - prevSnapshot.grandTotal)}
+            </span>
+          </div>
+        </Card>
+      )}
+
+      {/* Refund pending (store lowered the total) */}
+      {refundAmount > 0 && (
+        <Card className="p-6 border border-blue-200">
+          <div className="flex items-center justify-between">
+            <span className="text-base font-black text-blue-600">{t("od.refundPending")}</span>
+            <span className="text-lg font-black text-blue-600">฿{refundAmount}</span>
+          </div>
+          <p className="text-sm font-medium text-gray-500 mt-1">
+            {t("od.refundVia")}: {t(`payment.${order.refundMethod || "cash"}`)}
+          </p>
         </Card>
       )}
 

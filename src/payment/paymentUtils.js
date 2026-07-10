@@ -12,6 +12,7 @@ export const PAYMENT_STATUS = {
   PAID: "approved", // alias — ชำระเงินยืนยันแล้ว (ร้านอนุมัติใน Phase 3.7E)
   REJECTED: "rejected",
   EXPIRED: "expired", // หมดเวลาชำระ → order ถูกยกเลิกอัตโนมัติ
+  ADDITIONAL_PAYMENT: "additional_payment", // ร้านแก้ออเดอร์แล้วยอดเพิ่ม รอลูกค้าชำระส่วนต่าง (Phase 3.7F)
 };
 
 // เหตุผลการยกเลิก (order.payment.cancelReason)
