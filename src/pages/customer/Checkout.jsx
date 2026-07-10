@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { MapPin, Map, Upload } from "lucide-react";
+import { MapPin, Map, Upload, X, Copy, Check } from "lucide-react";
 import { db, storage } from "../../firebase";
 import { useAuth } from "../../AuthContext";
-import { STORE_ID, PROMPTPAY_ACCOUNT_NAME, EST_PREP_MINUTES } from "../../config";
+import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { generateOrderNo } from "../../orderNoUtils";
 import { PAYMENT_STATUS } from "../../payment/paymentUtils";
+import { normalizePayment, enabledMethods, promptPayQrUrl } from "../../payment/paymentSettings";
 import PromptPayQR from "../../payment/PromptPayQR.jsx";
 import LocationPicker from "../../location/LocationPicker.jsx";
 import MapButton from "../../location/MapButton.jsx";
@@ -42,6 +43,9 @@ const SPICY_SALAD_NAME = "ข้าวยำไก่แซ่บ";
 // touch the users/{uid} schema.
 const SAVED_ADDRESS_KEY = "lkfc_saved_address";
 
+// Slip upload guard — image only, ≤ 5 MB.
+const MAX_SLIP_BYTES = 5 * 1024 * 1024;
+
 const optionLabel = (value) => {
   if (!value) return "";
   return typeof value === "object" ? value.name || "" : value;
@@ -66,8 +70,8 @@ const ToggleOption = ({ label, active, onClick }) => (
 );
 
 // Reused for both PromptPay and Transfer — file input styled to match Button's
-// "outline" variant, plus an image preview once a slip is selected.
-const SlipUploadField = ({ file, onChange, t }) => {
+// "outline" variant, plus an image preview + remove once a slip is selected.
+const SlipUploadField = ({ file, onChange, onRemove, t }) => {
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => () => previewUrl && URL.revokeObjectURL(previewUrl), [previewUrl]);
 
@@ -80,7 +84,7 @@ const SlipUploadField = ({ file, onChange, t }) => {
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+          onChange={(e) => { onChange(e.target.files?.[0] ?? null); e.target.value = ""; }}
         />
       </label>
       {previewUrl && (
@@ -90,9 +94,48 @@ const SlipUploadField = ({ file, onChange, t }) => {
             alt={t("checkout.slipPreviewAlt")}
             className="w-20 h-20 rounded-2xl object-cover border border-gray-100"
           />
-          <p className="text-sm font-bold text-primary">{t("checkout.slipAttached")}</p>
+          <p className="flex-1 text-sm font-bold text-primary">{t("checkout.slipAttached")}</p>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex items-center gap-1 text-sm font-bold text-gray-400 hover:text-secondary transition-colors"
+          >
+            <X size={16} /> {t("checkout.removeSlip")}
+          </button>
         </div>
       )}
+    </div>
+  );
+};
+
+// Read-only labelled value with a copy button — used for PromptPay ID and each
+// bank-account field (single copy primitive, no duplication).
+const CopyField = ({ label, value, t }) => {
+  const [copied, setCopied] = useState(false);
+  const v = String(value || "").trim();
+  const copy = async () => {
+    if (!v) return;
+    try {
+      await navigator.clipboard.writeText(v);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked */ }
+  };
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>
+        <p className="text-sm font-bold text-gray-800 truncate">{v || "—"}</p>
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        disabled={!v}
+        aria-label={t("checkout.copy")}
+        className="flex items-center gap-1 shrink-0 text-sm font-bold text-primary hover:underline disabled:opacity-40"
+      >
+        {copied ? <><Check size={15} /> {t("checkout.copied")}</> : <><Copy size={15} /> {t("checkout.copy")}</>}
+      </button>
     </div>
   );
 };
@@ -101,9 +144,15 @@ export const Checkout = () => {
   const { cartItems, subtotal, clearCart, deliveryFee, setDeliveryFee } = useCart();
   const { profile, user } = useAuth();
   const { t } = usePreferences();
-  const { status: storeStatus } = useStoreStatus("delivery");
+  // Reuse the existing store listener (subscribes to stores/{STORE_ID}) — it also
+  // returns the full store doc, so we read paymentSettings from it (no extra read).
+  const { status: storeStatus, store } = useStoreStatus("delivery");
   const storeClosed = storeStatus === "closed";
   const navigate = useNavigate();
+
+  // Live e-payment config from the store (single source of truth).
+  const paySettings = useMemo(() => normalizePayment(store?.paymentSettings), [store]);
+  const methods = useMemo(() => enabledMethods(paySettings), [paySettings]);
 
   // Saved delivery addresses (users/{uid}/addresses). The default one is
   // auto-applied below so checkout is one tap (LINE MAN / GrabFood style).
@@ -138,6 +187,7 @@ export const Checkout = () => {
 
   const [paymentMethod, setPaymentMethod] = useState("cash"); // 'cash' | 'promptpay' | 'transfer'
   const [slipFile, setSlipFile] = useState(null);
+  const payInitialized = useRef(false); // guards the one-time default-method sync
 
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState(null);
@@ -153,6 +203,17 @@ export const Checkout = () => {
       if (s) setStoreLocation({ lat: s.lat, lng: s.lng, name: s.storeName || "LK Fried Chicken" });
     });
   }, []);
+
+  // Pre-select the store's default method once its settings load, then keep the
+  // selection valid if the merchant disables the chosen method mid-session.
+  useEffect(() => {
+    if (!store) return;
+    const firstLoad = !payInitialized.current;
+    payInitialized.current = true;
+    if (firstLoad || !methods.includes(paymentMethod)) {
+      setPaymentMethod(paySettings.default);
+    }
+  }, [store, methods, paySettings.default, paymentMethod]);
 
   useEffect(() => {
     try {
@@ -242,6 +303,15 @@ export const Checkout = () => {
     }
   };
 
+  // Slip picker with inline image/size validation.
+  const handleSlipChange = (f) => {
+    if (!f) { setSlipFile(null); return; }
+    if (!f.type.startsWith("image/")) { setValidationError(t("checkout.slipTypeErr")); return; }
+    if (f.size > MAX_SLIP_BYTES) { setValidationError(t("checkout.slipSizeErr")); return; }
+    setValidationError(null);
+    setSlipFile(f);
+  };
+
   const outOfArea =
     deliveryMethod === "delivery" && distanceKm != null && distanceKm > MAX_RADIUS_KM;
 
@@ -271,6 +341,17 @@ export const Checkout = () => {
         return t("checkout.valLocation");
       }
       if (outOfArea) return t("checkout.outOfArea", { km: MAX_RADIUS_KM });
+    }
+
+    // Payment: the selected method must be fully configured by the store.
+    if (paymentMethod === "promptpay" && !promptPayQrUrl(paySettings.promptpayId)) {
+      return t("checkout.valPromptpay");
+    }
+    if (paymentMethod === "transfer") {
+      const b = paySettings.bankTransfer;
+      if (!b.bankName.trim() || !b.accountName.trim() || !b.accountNumber.trim()) {
+        return t("checkout.valBank");
+      }
     }
 
     return null;
@@ -345,8 +426,10 @@ export const Checkout = () => {
             : paymentMethod === "cash"
             ? PAYMENT_STATUS.UNPAID
             : PAYMENT_STATUS.PENDING_VERIFICATION,
-          slipUrl: slipImage,
-          paidAt: paymentTime,
+          slip: slipImage,       // requested Phase 3.7C field (slip image URL)
+          createdAt: paymentTime, // when the customer attached payment / placed the order
+          slipUrl: slipImage,    // kept: Store/Rider/Admin already read payment.slipUrl
+          paidAt: paymentTime,   // kept: existing consumers read payment.paidAt
           verifiedBy: null,
         },
         customerName: displayName,
@@ -636,37 +719,52 @@ export const Checkout = () => {
       {/* Payment */}
       <Card className="p-6">
         <SectionTitle>{t("checkout.payment")}</SectionTitle>
+        {/* Only the methods the store has enabled in paymentSettings are shown */}
         <div className="flex gap-3 mb-4">
-          <ToggleOption
-            label={t("payment.cash")}
-            active={paymentMethod === "cash"}
-            onClick={() => setPaymentMethod("cash")}
-          />
-          <ToggleOption
-            label={t("payment.promptpay")}
-            active={paymentMethod === "promptpay"}
-            onClick={() => setPaymentMethod("promptpay")}
-          />
-          <ToggleOption
-            label={t("payment.transfer")}
-            active={paymentMethod === "transfer"}
-            onClick={() => setPaymentMethod("transfer")}
-          />
+          {methods.map((m) => (
+            <ToggleOption
+              key={m}
+              label={t(`payment.${m}`)}
+              active={paymentMethod === m}
+              onClick={() => setPaymentMethod(m)}
+            />
+          ))}
         </div>
+
+        {paymentMethod === "cash" && (
+          <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm font-medium text-gray-600">
+            {t("checkout.cashInstr")}
+          </div>
+        )}
 
         {paymentMethod === "promptpay" && (
           <div className="space-y-4">
-            <PromptPayQR amount={grandTotal} />
-            <SlipUploadField file={slipFile} onChange={setSlipFile} t={t} />
+            {promptPayQrUrl(paySettings.promptpayId) ? (
+              <>
+                <PromptPayQR
+                  amount={grandTotal}
+                  promptpayId={paySettings.promptpayId}
+                  accountName={storeLocation.name}
+                />
+                <CopyField label={t("sp.promptpayId")} value={paySettings.promptpayId} t={t} />
+              </>
+            ) : (
+              <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm font-bold text-secondary">
+                {t("checkout.valPromptpay")}
+              </div>
+            )}
+            <SlipUploadField file={slipFile} onChange={handleSlipChange} onRemove={() => setSlipFile(null)} t={t} />
           </div>
         )}
 
         {paymentMethod === "transfer" && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm text-gray-600">
-              {t("checkout.transferInstr", { name: PROMPTPAY_ACCOUNT_NAME })}
+            <div className="space-y-2">
+              <CopyField label={t("sp.bankName")} value={paySettings.bankTransfer.bankName} t={t} />
+              <CopyField label={t("sp.accountName")} value={paySettings.bankTransfer.accountName} t={t} />
+              <CopyField label={t("sp.accountNumber")} value={paySettings.bankTransfer.accountNumber} t={t} />
             </div>
-            <SlipUploadField file={slipFile} onChange={setSlipFile} t={t} />
+            <SlipUploadField file={slipFile} onChange={handleSlipChange} onRemove={() => setSlipFile(null)} t={t} />
           </div>
         )}
       </Card>

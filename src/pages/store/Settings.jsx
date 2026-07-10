@@ -21,6 +21,10 @@ import { usePreferences } from "../../context/PreferencesContext";
 import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../store/alarmSounds";
 import LocationPicker from "../../location/LocationPicker";
 import MapButton from "../../location/MapButton";
+import {
+  PAYMENT_KEYS, DEFAULT_PAYMENT, normalizePayment,
+  isValidPromptPayId, isValidAccountNumber, promptPayQrUrl,
+} from "../../payment/paymentSettings";
 import BannerCropper from "../../components/store/BannerCropper";
 import { DAY_ORDER, computeStatus } from "../../store/storeStatus";
 
@@ -81,29 +85,8 @@ const PAYMENT_METHODS = [
   { key: "promptpay", icon: QrCode,   labelKey: "payment.promptpay", descKey: "sp.promptpayDesc" },
   { key: "transfer",  icon: Landmark, labelKey: "payment.transfer",  descKey: "sp.transferDesc" },
 ];
-const PAYMENT_KEYS = PAYMENT_METHODS.map((m) => m.key);
-const EMPTY_BANK = { bankName: "", accountName: "", accountNumber: "" };
-const DEFAULT_PAYMENT = {
-  cash: true, promptpay: true, transfer: true, default: "cash",
-  promptpayId: "",           // Thai PromptPay ID — phone (10 digits) or national ID (13)
-  bankTransfer: EMPTY_BANK,  // bank account for manual transfer
-};
-// Keep at least one method on and the default pointing at an enabled method.
-const normalizePayment = (p) => {
-  const next = {
-    ...DEFAULT_PAYMENT,
-    ...(p || {}),
-    bankTransfer: { ...EMPTY_BANK, ...(p?.bankTransfer || {}) },
-  };
-  const enabled = PAYMENT_KEYS.filter((k) => next[k]);
-  if (enabled.length === 0) return { ...next, cash: true, default: "cash" };
-  if (!next[next.default]) next.default = enabled[0];
-  return next;
-};
-// PromptPay ID = 10-digit phone or 13-digit national ID; bank account = 10–15 digits.
-const isValidPromptPayId = (v) => { const s = String(v).replace(/\D/g, ""); return s.length === 10 || s.length === 13; };
-const isValidAccountNumber = (v) => { const s = String(v).replace(/\D/g, ""); return s.length >= 10 && s.length <= 15; };
-const promptPayQrUrl = (v) => { const s = String(v).replace(/\D/g, ""); return isValidPromptPayId(s) ? `https://promptpay.io/${s}.png` : ""; };
+// Payment shape/defaults/validators live in ../../payment/paymentSettings (shared
+// with Customer Checkout). PAYMENT_METHODS below only adds the editor's icons/labels.
 
 const DAY_LABELS = {
   mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
