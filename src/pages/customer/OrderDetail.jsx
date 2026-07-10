@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { Phone, MapPin, Navigation, RotateCcw, Check, Bike } from "lucide-react";
+import { Phone, MapPin, Navigation, RotateCcw, Check, Bike, Clock, Upload, X, Loader2 } from "lucide-react";
 import { db } from "../../firebase";
 import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { getStore } from "./getStore";
-import { PAYMENT_STATUS } from "../../payment/paymentUtils";
+import {
+  PAYMENT_STATUS, countdownFrom, expireOrderPayment, submitSlip, uploadSlip,
+} from "../../payment/paymentUtils";
 import { normalizeStatus } from "../../store/orderStatus";
 import { usePreferences } from "../../context/PreferencesContext";
 import { Card } from "../../components/ui/Card";
@@ -53,17 +55,24 @@ const STATUS_BADGE_COLOR = {
 // order.payment.status (enum) -> od.payStatus.* i18n subkey.
 const PAY_STATUS_KEY = {
   [PAYMENT_STATUS.UNPAID]: "unpaid",
+  [PAYMENT_STATUS.WAITING_PAYMENT]: "waiting",
   [PAYMENT_STATUS.PENDING_VERIFICATION]: "pending",
   [PAYMENT_STATUS.APPROVED]: "approved",
   [PAYMENT_STATUS.REJECTED]: "rejected",
+  [PAYMENT_STATUS.EXPIRED]: "expired",
 };
 
 const PAYMENT_STATUS_COLOR = {
   [PAYMENT_STATUS.UNPAID]: "orange",
+  [PAYMENT_STATUS.WAITING_PAYMENT]: "orange",
   [PAYMENT_STATUS.PENDING_VERIFICATION]: "blue",
   [PAYMENT_STATUS.APPROVED]: "green",
   [PAYMENT_STATUS.REJECTED]: "orange",
+  [PAYMENT_STATUS.EXPIRED]: "orange",
 };
+
+// slip upload guard — image only, ≤ 5 MB (mirrors Checkout).
+const MAX_SLIP_BYTES = 5 * 1024 * 1024;
 
 const formatDateTime = (timestamp, locale) => {
   if (!timestamp?.toDate) return "-";
@@ -141,11 +150,59 @@ export const OrderDetail = () => {
   const [storeLocation, setStoreLocation] = useState(null);
   const trackingRef = useRef(null);
 
+  // Payment countdown — recomputed from expireAt each tick so it survives reloads.
+  // Date.now (bare reference) as the lazy initializer — React calls it, so it isn't
+  // an impure call in the render body (same pattern as useStoreStatus).
+  const [nowMs, setNowMs] = useState(Date.now);
+  const [slipFile, setSlipFile] = useState(null);
+  const [uploadingSlip, setUploadingSlip] = useState(false);
+  const [slipError, setSlipError] = useState(null);
+  const slipPreview = useMemo(() => (slipFile ? URL.createObjectURL(slipFile) : null), [slipFile]);
+  useEffect(() => () => slipPreview && URL.revokeObjectURL(slipPreview), [slipPreview]);
+  const expiringRef = useRef(false);
+
   useEffect(() => {
     getStore().then((s) => {
       if (s) setStoreLocation({ lat: s.lat, lng: s.lng, name: s.storeName || "Store" });
     });
   }, []);
+
+  // 1-second ticker (drives the live countdown).
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-cancel when the payment window elapses (idempotent, guarded against re-fire).
+  useEffect(() => {
+    if (order?.payment?.status !== PAYMENT_STATUS.WAITING_PAYMENT) return;
+    if (!countdownFrom(order.payment.expireAt, nowMs).expired || expiringRef.current) return;
+    expiringRef.current = true;
+    expireOrderPayment(order).catch(() => { expiringRef.current = false; });
+  }, [order, nowMs]);
+
+  const handlePickSlip = (f) => {
+    if (!f) { setSlipFile(null); return; }
+    if (!f.type.startsWith("image/")) { setSlipError(t("checkout.slipTypeErr")); return; }
+    if (f.size > MAX_SLIP_BYTES) { setSlipError(t("checkout.slipSizeErr")); return; }
+    setSlipError(null);
+    setSlipFile(f);
+  };
+
+  const handleSubmitSlip = async () => {
+    if (!slipFile || uploadingSlip) return;
+    setUploadingSlip(true);
+    setSlipError(null);
+    try {
+      const url = await uploadSlip(slipFile);
+      await submitSlip(orderId, url);
+      setSlipFile(null);
+    } catch {
+      setSlipError(t("od.slipUploadErr"));
+    } finally {
+      setUploadingSlip(false);
+    }
+  };
 
   useEffect(() => {
     if (!orderId) return;
@@ -219,6 +276,10 @@ export const OrderDetail = () => {
   const hasRider = Boolean(order.riderId);
   const cookingEta = normalizedStatus === "cooking" ? formatTime(order.estimatedFinishTime) : null;
 
+  // Payment countdown state (PromptPay / Bank Transfer awaiting payment).
+  const isWaitingPayment = order.payment?.status === PAYMENT_STATUS.WAITING_PAYMENT;
+  const countdown = isWaitingPayment ? countdownFrom(order.payment.expireAt, nowMs) : null;
+
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6 pb-32">
       {/* Header */}
@@ -231,6 +292,55 @@ export const OrderDetail = () => {
           {formatDateTime(order.createdAt, language)}
         </p>
       </div>
+
+      {/* Waiting for payment — live countdown + pay-now slip upload */}
+      {isWaitingPayment && countdown && (
+        <Card className="p-6 border-2 border-primary/30">
+          <div className="flex items-center gap-2 text-primary">
+            <Clock size={18} />
+            <span className="text-base font-black">{t("od.waitingPayment")}</span>
+          </div>
+          <div className="mt-3 text-center">
+            <p className="text-5xl font-black tabular-nums text-primary">{countdown.label}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{t("od.timeLeft")}</p>
+          </div>
+          <p className="mt-3 text-sm font-medium text-gray-500 text-center">{t("od.payBeforeExpire")}</p>
+
+          <div className="mt-4 space-y-3">
+            <label className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-bold text-sm border-2 border-gray-100 hover:border-primary text-gray-700 cursor-pointer transition-all">
+              <Upload size={18} />
+              {slipFile ? t("checkout.changeSlip") : t("checkout.uploadSlip")}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { handlePickSlip(e.target.files?.[0] ?? null); e.target.value = ""; }}
+              />
+            </label>
+
+            {slipPreview && (
+              <div className="flex items-center gap-3">
+                <img src={slipPreview} alt={t("checkout.slipPreviewAlt")} className="w-20 h-20 rounded-2xl object-cover border border-gray-100" />
+                <p className="flex-1 text-sm font-bold text-primary">{t("checkout.slipAttached")}</p>
+                <button
+                  type="button"
+                  onClick={() => setSlipFile(null)}
+                  className="flex items-center gap-1 text-sm font-bold text-gray-400 hover:text-secondary transition-colors"
+                >
+                  <X size={16} /> {t("checkout.removeSlip")}
+                </button>
+              </div>
+            )}
+
+            {slipError && <p className="text-sm font-bold text-secondary">{slipError}</p>}
+
+            <Button className="w-full" onClick={handleSubmitSlip} disabled={!slipFile || uploadingSlip}>
+              {uploadingSlip ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              {uploadingSlip ? t("od.slipUploading") : t("od.confirmSlip")}
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Store Information */}
       <Card className="p-6">

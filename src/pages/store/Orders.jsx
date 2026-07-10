@@ -51,7 +51,7 @@ import {
 } from "lucide-react";
 import { db } from "../../firebase";
 import { fmtMoney, fmtTime, normalizeStatus, toDate } from "../../store/orderStatus";
-import { PAYMENT_STATUS } from "../../payment/paymentUtils";
+import { PAYMENT_STATUS, countdownFrom, expireOrderPayment } from "../../payment/paymentUtils";
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
 
 /* ═══════════════════════ constants ═══════════════════════ */
@@ -853,21 +853,34 @@ function DeliveryInfo({ order }) {
 function PaymentCenter({ order, onVerifyPayment }) {
   const isPromptPay = order.paymentMethod === "promptpay";
   const status = order.payment?.status;
+  const isWaiting = status === PAYMENT_STATUS.WAITING_PAYMENT;
+  const [payNow, setPayNow] = useState(Date.now); // lazy ref initializer (pure)
+  useEffect(() => {
+    if (!isWaiting) return undefined;
+    const id = setInterval(() => setPayNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isWaiting]);
+  const countdown = isWaiting ? countdownFrom(order.payment?.expireAt, payNow) : null;
+
   const badgeCls =
     status === PAYMENT_STATUS.APPROVED ? "bg-green-100 text-green-700" :
     status === PAYMENT_STATUS.REJECTED ? "bg-red-100 text-red-600" :
+    status === PAYMENT_STATUS.EXPIRED ? "bg-red-100 text-red-600" :
+    status === PAYMENT_STATUS.WAITING_PAYMENT ? "bg-amber-100 text-amber-700" :
     status === PAYMENT_STATUS.PENDING_VERIFICATION ? "bg-yellow-100 text-yellow-700" :
     "bg-gray-100 text-gray-500";
   const badgeLabel =
     status === PAYMENT_STATUS.APPROVED ? "Paid" :
     status === PAYMENT_STATUS.REJECTED ? "Rejected" :
+    status === PAYMENT_STATUS.EXPIRED ? "Expired" :
+    status === PAYMENT_STATUS.WAITING_PAYMENT ? `Waiting ${countdown?.label ?? ""}`.trim() :
     status === PAYMENT_STATUS.PENDING_VERIFICATION ? "Pending" :
     "Cash";
 
   if (!isPromptPay) {
     return (
       <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-bold text-gray-700"><CreditCard size={15} className="text-gray-400" />Cash on Delivery</span>
+        <span className="flex items-center gap-2 text-sm font-bold text-gray-700"><CreditCard size={15} className="text-gray-400" />{order.paymentMethod === "transfer" ? "Bank Transfer" : "Cash on Delivery"}</span>
         <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badgeCls}`}>{badgeLabel}</span>
       </div>
     );
@@ -1623,6 +1636,20 @@ export function Orders() {
     );
     return unsub;
   }, []);
+
+  // Auto-cancel orders whose 10-min payment window elapsed. The store dashboard is
+  // the reliable sweeper (a customer may have closed the app). expireOrderPayment is
+  // idempotent; the ref stops the same order from being written twice.
+  const expiringIds = useRef(new Set());
+  useEffect(() => {
+    orders.forEach((o) => {
+      if (o.payment?.status !== PAYMENT_STATUS.WAITING_PAYMENT) return;
+      if (!countdownFrom(o.payment.expireAt, now).expired) return;
+      if (expiringIds.current.has(o.id)) return;
+      expiringIds.current.add(o.id);
+      expireOrderPayment(o).catch(() => expiringIds.current.delete(o.id));
+    });
+  }, [orders, now]);
 
   // auto scroll to order list when new order arrives (ใช้ประวัติแจ้งเตือนเป็นทริกเกอร์)
   useEffect(() => {

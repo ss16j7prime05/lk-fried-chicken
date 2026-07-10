@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { MapPin, Map, Upload, X, Copy, Check } from "lucide-react";
-import { db, storage } from "../../firebase";
+import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { generateOrderNo } from "../../orderNoUtils";
-import { PAYMENT_STATUS } from "../../payment/paymentUtils";
+import { PAYMENT_STATUS, requiresCountdown, paymentExpireTimestamp, uploadSlip } from "../../payment/paymentUtils";
 import { normalizePayment, enabledMethods, promptPayQrUrl } from "../../payment/paymentSettings";
 import PromptPayQR from "../../payment/PromptPayQR.jsx";
 import LocationPicker from "../../location/LocationPicker.jsx";
@@ -379,14 +378,24 @@ export const Checkout = () => {
       const orderLat = isDelivery ? lat : null;
       const orderLng = isDelivery ? lng : null;
 
+      const needsCountdown = requiresCountdown(paymentMethod); // promptpay / transfer
       let slipImage = "";
       let paymentTime = null;
-      if (slipFile && (paymentMethod === "promptpay" || paymentMethod === "transfer")) {
-        const slipRef = ref(storage, `slips/${Date.now()}_${slipFile.name}`);
-        await uploadBytes(slipRef, slipFile);
-        slipImage = await getDownloadURL(slipRef);
+      if (slipFile && needsCountdown) {
+        slipImage = await uploadSlip(slipFile);
         paymentTime = new Date();
       }
+
+      // Payment status + countdown window:
+      //  cash            → UNPAID, no expiry
+      //  slip at checkout → PENDING_REVIEW (awaiting store review), no countdown
+      //  no slip yet      → WAITING_PAYMENT with a 10-min expireAt (customer pays on Order Detail)
+      const payStatus = !needsCountdown
+        ? PAYMENT_STATUS.UNPAID
+        : slipImage
+        ? PAYMENT_STATUS.PENDING_REVIEW
+        : PAYMENT_STATUS.WAITING_PAYMENT;
+      const expireAt = payStatus === PAYMENT_STATUS.WAITING_PAYMENT ? paymentExpireTimestamp() : null;
 
       // Legacy item shape (matches src/App.jsx's addToCart / Store & Rider dashboards):
       // top_chicken/spicy/Sauce/sauce/powder/tableCheese as flat option fields (set by
@@ -421,15 +430,14 @@ export const Checkout = () => {
         paymentTime,
         payment: {
           method: paymentMethod,
-          status: slipImage
-            ? PAYMENT_STATUS.PENDING_VERIFICATION
-            : paymentMethod === "cash"
-            ? PAYMENT_STATUS.UNPAID
-            : PAYMENT_STATUS.PENDING_VERIFICATION,
-          slip: slipImage,       // requested Phase 3.7C field (slip image URL)
-          createdAt: paymentTime, // when the customer attached payment / placed the order
-          slipUrl: slipImage,    // kept: Store/Rider/Admin already read payment.slipUrl
-          paidAt: paymentTime,   // kept: existing consumers read payment.paidAt
+          status: payStatus,
+          slip: slipImage,           // slip image URL (Phase 3.7C)
+          slipUrl: slipImage,        // kept: Store/Rider/Admin already read payment.slipUrl
+          createdAt: serverTimestamp(), // payment record created (Phase 3.7D)
+          expireAt,                  // countdown deadline (null for cash / already-reviewed)
+          updatedAt: serverTimestamp(),
+          cancelReason: null,
+          paidAt: paymentTime,       // kept: existing consumers read payment.paidAt
           verifiedBy: null,
         },
         customerName: displayName,
