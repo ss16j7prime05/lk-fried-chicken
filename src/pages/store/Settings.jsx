@@ -11,6 +11,7 @@ import {
   Link2, MessageCircle, AtSign, Music2, Copy, Check,
   Wifi, ParkingCircle, PawPrint, Snowflake, Receipt,
   Mail, ExternalLink, PhoneCall,
+  Banknote, QrCode, Landmark,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
@@ -71,6 +72,25 @@ const DEFAULT_NOTIF = {
 
 const VOLUME_OPTIONS = [0, 25, 50, 75, 100];
 const PREP_OPTIONS = [10, 15, 20, 30, 45, 60];
+
+/* ─── E-payment methods — keys match the values Customer Checkout writes to
+   orders (`cash` | `promptpay` | `transfer`), so a single source of truth is
+   shared with the storefront. Stored under stores/{STORE_ID}.paymentSettings. ─── */
+const PAYMENT_METHODS = [
+  { key: "cash",      icon: Banknote, labelKey: "payment.cash",      descKey: "sp.cashDesc" },
+  { key: "promptpay", icon: QrCode,   labelKey: "payment.promptpay", descKey: "sp.promptpayDesc" },
+  { key: "transfer",  icon: Landmark, labelKey: "payment.transfer",  descKey: "sp.transferDesc" },
+];
+const PAYMENT_KEYS = PAYMENT_METHODS.map((m) => m.key);
+const DEFAULT_PAYMENT = { cash: true, promptpay: true, transfer: true, default: "cash" };
+// Keep at least one method on and the default pointing at an enabled method.
+const normalizePayment = (p) => {
+  const next = { ...DEFAULT_PAYMENT, ...(p || {}) };
+  const enabled = PAYMENT_KEYS.filter((k) => next[k]);
+  if (enabled.length === 0) return { ...next, cash: true, default: "cash" };
+  if (!next[next.default]) next.default = enabled[0];
+  return next;
+};
 
 const DAY_LABELS = {
   mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
@@ -585,6 +605,11 @@ export function Settings() {
   const [savedNotif, setSavedNotif] = useState(false);
   const [testingSound, setTestingSound] = useState(false);
 
+  /* e-payment settings — local draft */
+  const [paySettings, setPaySettings] = useState(DEFAULT_PAYMENT);
+  const [savingPay, setSavingPay] = useState(false);
+  const [savedPay, setSavedPay] = useState(false);
+
   /* receipt */
   const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem("store_auto_print") === "1");
   const [printSize, setPrintSize] = useState(() => localStorage.getItem("store_print_size") || "80mm");
@@ -624,6 +649,7 @@ export function Settings() {
           nightMode: { ...DEFAULT_NOTIF.nightMode, ...(d.notificationSettings.nightMode || {}) },
         }));
       }
+      setPaySettings(normalizePayment(d.paymentSettings));
     });
     return unsub;
   }, []);
@@ -778,6 +804,27 @@ export function Settings() {
       setTimeout(() => setSavedNotif(false), 2500);
     } catch { alert("Save failed. Please try again."); }
     finally { setSavingNotif(false); }
+  };
+
+  /* ── e-payment: toggle a method (keeps ≥1 on, repoints default if needed) ── */
+  const handleTogglePay = (key, v) =>
+    setPaySettings((p) => {
+      const next = { ...p, [key]: v };
+      if (PAYMENT_KEYS.filter((k) => next[k]).length === 0) return p; // block turning off the last
+      return normalizePayment(next);
+    });
+  const handleDefaultPay = (key) =>
+    setPaySettings((p) => (p[key] ? { ...p, default: key } : p));
+
+  /* ── e-payment settings save ── */
+  const handleSavePayment = async () => {
+    setSavingPay(true);
+    try {
+      await updateDoc(doc(db, "stores", STORE_ID), { paymentSettings: normalizePayment(paySettings) });
+      setSavedPay(true);
+      setTimeout(() => setSavedPay(false), 2500);
+    } catch { alert("Save failed. Please try again."); }
+    finally { setSavingPay(false); }
   };
 
   /* ── test sound ── */
@@ -1390,8 +1437,63 @@ export function Settings() {
       </SettingSection>
       )}
 
+      {/* ── E-Payment (accepted methods + default) ── */}
+      {sec === "payment" && (<>
+      <SettingSection icon={CreditCard} title={t("sp.secMethods")} description={t("sp.secMethodsDesc")}>
+        {PAYMENT_METHODS.map(({ key, icon: Icon, labelKey, descKey }, idx) => (
+          <div key={key} className={idx > 0 ? "pt-4 border-t border-gray-50" : ""}>
+            <div className="flex items-center justify-between gap-4 min-h-[48px]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Icon size={16} className="text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-gray-800">{t(labelKey)}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{t(descKey)}</p>
+                </div>
+              </div>
+              <Toggle value={!!paySettings[key]} onChange={(v) => handleTogglePay(key, v)} />
+            </div>
+          </div>
+        ))}
+        <p className="text-xs font-medium text-gray-400">{t("sp.needOne")}</p>
+      </SettingSection>
+
+      {/* Default method — chosen from the enabled ones only */}
+      <SettingSection icon={CheckCircle2} title={t("sp.secDefault")} description={t("sp.secDefaultDesc")}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {PAYMENT_METHODS.filter((m) => paySettings[m.key]).map(({ key, icon: Icon, labelKey }) => {
+            const active = paySettings.default === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => handleDefaultPay(key)}
+                className={`flex items-center gap-3 p-4 min-h-[56px] rounded-xl border-2 text-left transition-colors
+                  ${active ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300 bg-white"}`}
+              >
+                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${active ? "border-primary" : "border-gray-300"}`}>
+                  {active && <div className="w-2 h-2 rounded-full bg-primary" />}
+                </div>
+                <Icon size={16} className={active ? "text-primary" : "text-gray-400"} />
+                <span className={`flex-1 text-sm font-bold ${active ? "text-primary" : "text-gray-700"}`}>{t(labelKey)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </SettingSection>
+
+      <button
+        onClick={handleSavePayment}
+        disabled={savingPay}
+        className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm"
+      >
+        {savingPay ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedPay ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("sp.save")}</>}
+      </button>
+      </>)}
+
       {/* ── Placeholder sections (not built yet) ── */}
-      {(sec === "payment" || sec === "staff" || sec === "help" || sec === "privacy" || sec === "terms") && (
+      {(sec === "staff" || sec === "help" || sec === "privacy" || sec === "terms") && (
         <PlaceholderSection t={t} />
       )}
 
