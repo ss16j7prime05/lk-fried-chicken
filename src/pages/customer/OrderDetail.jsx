@@ -276,8 +276,11 @@ export const OrderDetail = () => {
   const hasRider = Boolean(order.riderId);
   const cookingEta = normalizedStatus === "cooking" ? formatTime(order.estimatedFinishTime) : null;
 
-  // Payment countdown state (PromptPay / Bank Transfer awaiting payment).
+  // Payment states (PromptPay / Bank Transfer): awaiting payment (countdown) or
+  // rejected (re-upload). Both surface the same slip-upload box.
   const isWaitingPayment = order.payment?.status === PAYMENT_STATUS.WAITING_PAYMENT;
+  const isRejected = order.payment?.status === PAYMENT_STATUS.REJECTED;
+  const showPayBox = isWaitingPayment || isRejected;
   const countdown = isWaitingPayment ? countdownFrom(order.payment.expireAt, nowMs) : null;
 
   return (
@@ -293,18 +296,35 @@ export const OrderDetail = () => {
         </p>
       </div>
 
-      {/* Waiting for payment — live countdown + pay-now slip upload */}
-      {isWaitingPayment && countdown && (
-        <Card className="p-6 border-2 border-primary/30">
-          <div className="flex items-center gap-2 text-primary">
-            <Clock size={18} />
-            <span className="text-base font-black">{t("od.waitingPayment")}</span>
-          </div>
-          <div className="mt-3 text-center">
-            <p className="text-5xl font-black tabular-nums text-primary">{countdown.label}</p>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{t("od.timeLeft")}</p>
-          </div>
-          <p className="mt-3 text-sm font-medium text-gray-500 text-center">{t("od.payBeforeExpire")}</p>
+      {/* Payment action — live countdown (waiting) or rejected notice, plus slip upload */}
+      {showPayBox && (
+        <Card className={`p-6 border-2 ${isRejected ? "border-secondary/40" : "border-primary/30"}`}>
+          {isWaitingPayment && countdown && (
+            <>
+              <div className="flex items-center gap-2 text-primary">
+                <Clock size={18} />
+                <span className="text-base font-black">{t("od.waitingPayment")}</span>
+              </div>
+              <div className="mt-3 text-center">
+                <p className="text-5xl font-black tabular-nums text-primary">{countdown.label}</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{t("od.timeLeft")}</p>
+              </div>
+              <p className="mt-3 text-sm font-medium text-gray-500 text-center">{t("od.payBeforeExpire")}</p>
+            </>
+          )}
+
+          {isRejected && (
+            <div className="flex items-start gap-2 text-secondary">
+              <X size={18} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-base font-black">{t("od.paymentRejected")}</p>
+                {order.payment?.rejectReason && (
+                  <p className="text-sm font-medium text-gray-500 mt-0.5">{t("od.rejectReason")}: {order.payment.rejectReason}</p>
+                )}
+                <p className="text-sm font-medium text-gray-500 mt-1">{t("od.reuploadHint")}</p>
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 space-y-3">
             <label className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-bold text-sm border-2 border-gray-100 hover:border-primary text-gray-700 cursor-pointer transition-all">
@@ -336,7 +356,7 @@ export const OrderDetail = () => {
 
             <Button className="w-full" onClick={handleSubmitSlip} disabled={!slipFile || uploadingSlip}>
               {uploadingSlip ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
-              {uploadingSlip ? t("od.slipUploading") : t("od.confirmSlip")}
+              {uploadingSlip ? t("od.slipUploading") : isRejected ? t("od.reuploadSlip") : t("od.confirmSlip")}
             </Button>
           </div>
         </Card>

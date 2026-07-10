@@ -599,8 +599,12 @@ export const translations = {
     "od.timeLeft": "Time Left",
     "od.payBeforeExpire": "Pay and upload your slip before the timer runs out, or the order will be cancelled automatically.",
     "od.confirmSlip": "Confirm Payment Slip",
+    "od.reuploadSlip": "Upload New Slip",
     "od.slipUploading": "Uploading…",
     "od.slipUploadErr": "Couldn't upload the slip. Please try again.",
+    "od.paymentRejected": "Payment Rejected",
+    "od.rejectReason": "Reason",
+    "od.reuploadHint": "Please upload a new payment slip.",
   },
   th: {
     // navigation
@@ -1198,7 +1202,11 @@ export const translations = {
     "od.timeLeft": "เหลือเวลา",
     "od.payBeforeExpire": "กรุณาชำระเงินและอัปโหลดสลิปก่อนหมดเวลา มิฉะนั้นออเดอร์จะถูกยกเลิกอัตโนมัติ",
     "od.confirmSlip": "ยืนยันสลิปการชำระเงิน",
+    "od.reuploadSlip": "อัปโหลดสลิปใหม่",
     "od.slipUploading": "กำลังอัปโหลด…",
     "od.slipUploadErr": "อัปโหลดสลิปไม่สำเร็จ กรุณาลองใหม่",
+    "od.paymentRejected": "การชำระเงินถูกปฏิเสธ",
+    "od.rejectReason": "เหตุผล",
+    "od.reuploadHint": "กรุณาอัปโหลดสลิปการชำระเงินใหม่",
   },
 };

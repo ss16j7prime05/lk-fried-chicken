@@ -59,12 +59,44 @@ export async function expireOrderPayment(order) {
   });
 }
 
-// ลูกค้าแนบสลิประหว่าง countdown → PENDING_REVIEW (countdown หยุด, รอร้านตรวจใน 3.7E)
+// ลูกค้าแนบสลิป (ครั้งแรกระหว่าง countdown หรืออัปโหลดใหม่หลังถูกปฏิเสธ) → PENDING_REVIEW.
+// เคลียร์ rejectReason ทุกครั้งเพื่อให้การอัปโหลดใหม่รีเซ็ตสถานะการปฏิเสธ (ใช้ payment เดิม).
 export async function submitSlip(orderId, slipUrl) {
   await updateDoc(doc(db, "orders", orderId), {
     "payment.status": PAYMENT_STATUS.PENDING_REVIEW,
     "payment.slip": slipUrl,
     "payment.slipUrl": slipUrl,
+    "payment.rejectReason": null,
+    "payment.updatedAt": serverTimestamp(),
+  });
+}
+
+// วิธีชำระที่ต้องรอชำระ/ตรวจสลิปก่อน (ยกเว้นเงินสด)
+export const isCashOrder = (order) => !requiresCountdown(order?.payment?.method ?? order?.paymentMethod);
+
+// ออเดอร์ชำระเรียบร้อยแล้วหรือยัง — เงินสดผ่านเสมอ, อื่น ๆ ต้อง PAID (ร้านอนุมัติแล้ว).
+// ใช้กั้นไม่ให้ร้านรับออเดอร์ / ไรเดอร์เห็น จนกว่าจะชำระผ่าน.
+export const isPaymentSettled = (order) =>
+  isCashOrder(order) || order?.payment?.status === PAYMENT_STATUS.PAID;
+
+// ร้านอนุมัติสลิป → PAID (เข้าสู่ flow เดิม), บันทึกผู้ตรวจ/เวลา (Phase 3.7E)
+export async function approvePayment(orderId, reviewer) {
+  await updateDoc(doc(db, "orders", orderId), {
+    "payment.status": PAYMENT_STATUS.PAID,
+    "payment.paidAt": serverTimestamp(),
+    "payment.reviewedAt": serverTimestamp(),
+    "payment.reviewedBy": reviewer || null,
+    "payment.updatedAt": serverTimestamp(),
+  });
+}
+
+// ร้านปฏิเสธสลิป → REJECTED (ลูกค้าอัปโหลดใหม่ได้), บันทึกเหตุผล/ผู้ตรวจ/เวลา (Phase 3.7E)
+export async function rejectPayment(orderId, reviewer, reason) {
+  await updateDoc(doc(db, "orders", orderId), {
+    "payment.status": PAYMENT_STATUS.REJECTED,
+    "payment.rejectReason": reason || null,
+    "payment.reviewedAt": serverTimestamp(),
+    "payment.reviewedBy": reviewer || null,
     "payment.updatedAt": serverTimestamp(),
   });
 }

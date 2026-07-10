@@ -50,8 +50,12 @@ import {
   Pencil,
 } from "lucide-react";
 import { db } from "../../firebase";
+import { useAuth } from "../../AuthContext";
 import { fmtMoney, fmtTime, normalizeStatus, toDate } from "../../store/orderStatus";
-import { PAYMENT_STATUS, countdownFrom, expireOrderPayment } from "../../payment/paymentUtils";
+import {
+  PAYMENT_STATUS, countdownFrom, expireOrderPayment,
+  approvePayment, rejectPayment, isPaymentSettled,
+} from "../../payment/paymentUtils";
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
 
 /* ═══════════════════════ constants ═══════════════════════ */
@@ -354,6 +358,9 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
   const mins = elapsedMinutes(order.createdAt, now);
   const p = getPriority(mins);
   const isDone = status === "completed" || status === "cancelled";
+  // Non-cash orders can't be accepted until the slip is approved (payment PAID) —
+  // keeps unpaid orders out of the kitchen/rider flow (Phase 3.7E gate).
+  const paymentBlocked = status === "pending" && !isPaymentSettled(order);
 
   // ── Compact (list row) ──
   if (displaySize === "compact") {
@@ -377,7 +384,9 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
         {!isDone ? <BigTimer createdAt={order.createdAt} size="sm" /> : <span className="text-[10px] text-gray-300">{fmtTime(order.createdAt)}</span>}
         <span className="font-black text-gray-900 text-sm flex-shrink-0">฿{fmtMoney(order.grandTotal ?? order.subtotal)}</span>
         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          {status === "pending" && <button onClick={() => onAcceptETA(order)} className="px-2.5 py-1.5 rounded-lg bg-primary text-white text-[10px] font-black hover:bg-primary-dark">Accept</button>}
+          {status === "pending" && (paymentBlocked
+            ? <span className="px-2.5 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-black">Awaiting payment</span>
+            : <button onClick={() => onAcceptETA(order)} className="px-2.5 py-1.5 rounded-lg bg-primary text-white text-[10px] font-black hover:bg-primary-dark">Accept</button>)}
           {next && <button onClick={() => onAdvance(order.id, next.to)} className="px-2.5 py-1.5 rounded-lg bg-gray-800 text-white text-[10px] font-black hover:bg-gray-700">{next.label}</button>}
         </div>
       </div>
@@ -450,7 +459,9 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
         {status === "pending" && (
           <>
             <button onClick={() => onReject(order.id)} className="px-3.5 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-red-50 hover:text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">Reject</button>
-            <button onClick={() => onAcceptETA(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">✓ Accept</button>
+            {paymentBlocked
+              ? <span className="flex-1 py-3 rounded-xl bg-amber-100 text-amber-700 text-sm font-black text-center">Awaiting payment</span>
+              : <button onClick={() => onAcceptETA(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">✓ Accept</button>}
           </>
         )}
         {next && (
@@ -851,10 +862,14 @@ function DeliveryInfo({ order }) {
 
 /* ═══════════════════════ Payment Center ═══════════════════════ */
 function PaymentCenter({ order, onVerifyPayment }) {
-  const isPromptPay = order.paymentMethod === "promptpay";
+  const method = order.paymentMethod;
+  const isPromptPay = method === "promptpay";
+  const isCash = method !== "promptpay" && method !== "transfer";
   const status = order.payment?.status;
   const isWaiting = status === PAYMENT_STATUS.WAITING_PAYMENT;
+  const awaitingReview = order.payment?.slipUrl && status === PAYMENT_STATUS.PENDING_VERIFICATION;
   const [payNow, setPayNow] = useState(Date.now); // lazy ref initializer (pure)
+  const [rejectReason, setRejectReason] = useState("");
   useEffect(() => {
     if (!isWaiting) return undefined;
     const id = setInterval(() => setPayNow(Date.now()), 1000);
@@ -867,20 +882,21 @@ function PaymentCenter({ order, onVerifyPayment }) {
     status === PAYMENT_STATUS.REJECTED ? "bg-red-100 text-red-600" :
     status === PAYMENT_STATUS.EXPIRED ? "bg-red-100 text-red-600" :
     status === PAYMENT_STATUS.WAITING_PAYMENT ? "bg-amber-100 text-amber-700" :
-    status === PAYMENT_STATUS.PENDING_VERIFICATION ? "bg-yellow-100 text-yellow-700" :
+    status === PAYMENT_STATUS.PENDING_VERIFICATION ? "bg-blue-100 text-blue-700" :
     "bg-gray-100 text-gray-500";
   const badgeLabel =
     status === PAYMENT_STATUS.APPROVED ? "Paid" :
     status === PAYMENT_STATUS.REJECTED ? "Rejected" :
     status === PAYMENT_STATUS.EXPIRED ? "Expired" :
     status === PAYMENT_STATUS.WAITING_PAYMENT ? `Waiting ${countdown?.label ?? ""}`.trim() :
-    status === PAYMENT_STATUS.PENDING_VERIFICATION ? "Pending" :
+    status === PAYMENT_STATUS.PENDING_VERIFICATION ? "Waiting Review" :
     "Cash";
+  const methodLabel = isPromptPay ? "PromptPay" : method === "transfer" ? "Bank Transfer" : "Cash on Delivery";
 
-  if (!isPromptPay) {
+  if (isCash) {
     return (
       <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-bold text-gray-700"><CreditCard size={15} className="text-gray-400" />{order.paymentMethod === "transfer" ? "Bank Transfer" : "Cash on Delivery"}</span>
+        <span className="flex items-center gap-2 text-sm font-bold text-gray-700"><CreditCard size={15} className="text-gray-400" />{methodLabel}</span>
         <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badgeCls}`}>{badgeLabel}</span>
       </div>
     );
@@ -891,11 +907,11 @@ function PaymentCenter({ order, onVerifyPayment }) {
   return (
     <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-bold text-gray-700"><CreditCard size={15} className="text-gray-400" />PromptPay</span>
+        <span className="flex items-center gap-2 text-sm font-bold text-gray-700"><CreditCard size={15} className="text-gray-400" />{methodLabel}</span>
         <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badgeCls}`}>{badgeLabel}</span>
       </div>
 
-      {!order.payment?.slipUrl && (
+      {isPromptPay && !order.payment?.slipUrl && (
         <div className="text-center">
           <img src={qrUrl} alt="PromptPay QR" className="w-36 mx-auto rounded-xl bg-white p-2 border border-gray-100" />
           <p className="text-xs text-gray-400 mt-1">{PROMPTPAY_ACCOUNT_NAME}</p>
@@ -912,14 +928,28 @@ function PaymentCenter({ order, onVerifyPayment }) {
       )}
 
       <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+        <div>Amount<br/><span className="font-bold text-gray-700">฿{fmtMoney(order.grandTotal ?? order.subtotal ?? 0)}</span></div>
+        <div>Method<br/><span className="font-bold text-gray-700">{methodLabel}</span></div>
         <div>Payment Time<br/><span className="font-bold text-gray-700">{fmtDateTime(order.paymentTime)}</span></div>
         <div>Transaction ID<br/><span className="font-bold text-gray-700 break-all">{order.payment?.transactionId || order.id}</span></div>
       </div>
 
-      {order.payment?.slipUrl && status === PAYMENT_STATUS.PENDING_VERIFICATION && (
-        <div className="flex gap-2">
-          <button onClick={() => onVerifyPayment(order.id, true)} className="flex-1 py-2 rounded-xl bg-primary text-white text-xs font-black">Approve Payment</button>
-          <button onClick={() => onVerifyPayment(order.id, false)} className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-black">Reject Payment</button>
+      {status === PAYMENT_STATUS.REJECTED && order.payment?.rejectReason && (
+        <p className="text-xs font-bold text-red-600">Rejected: {order.payment.rejectReason}</p>
+      )}
+
+      {awaitingReview && (
+        <div className="space-y-2">
+          <input
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Reason for rejection (optional)"
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-700 outline-none focus:border-primary"
+          />
+          <div className="flex gap-2">
+            <button onClick={() => onVerifyPayment(order.id, true)} className="flex-1 py-2 rounded-xl bg-primary text-white text-xs font-black hover:bg-primary-dark">Approve Payment</button>
+            <button onClick={() => onVerifyPayment(order.id, false, rejectReason.trim())} className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-black hover:bg-gray-200">Reject Payment</button>
+          </div>
         </div>
       )}
     </div>
@@ -1126,7 +1156,9 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
           {!isCancelled && status === "pending" && (
             <div className="flex gap-2">
               <button onClick={() => { onReject(order.id); onClose(); }} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">Reject Order</button>
-              <button onClick={() => onAccept(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Accept Order</button>
+              {isPaymentSettled(order)
+                ? <button onClick={() => onAccept(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Accept Order</button>
+                : <span className="flex-1 py-3 rounded-xl bg-amber-100 text-amber-700 text-sm font-black text-center">Awaiting payment</span>}
             </div>
           )}
           {!isCancelled && next && (
@@ -1543,6 +1575,7 @@ const SORT_OPTIONS = [
 ];
 
 export function Orders() {
+  const { profile, user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
@@ -1772,8 +1805,10 @@ export function Orders() {
   const advanceOrder = useCallback((id, to) => updateDoc(doc(db, "orders", id), { status: to }), []);
   const updateETA = useCallback((id, mins, finishTime) =>
     updateDoc(doc(db, "orders", id), { estimatedMinutes: mins, estimatedFinishTime: finishTime }), []);
-  const verifyPayment = useCallback((id, approved) =>
-    updateDoc(doc(db, "orders", id), { "payment.status": approved ? PAYMENT_STATUS.APPROVED : PAYMENT_STATUS.REJECTED }), []);
+  // Approve → PAID, Reject → REJECTED (+ reason). Records reviewer + timestamps.
+  const reviewer = profile?.name || profile?.email || user?.email || STORE_ID;
+  const verifyPayment = useCallback((id, approved, reason) =>
+    approved ? approvePayment(id, reviewer) : rejectPayment(id, reviewer, reason), [reviewer]);
 
   const toggleSelect = useCallback((id) => {
     setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -1786,7 +1821,8 @@ export function Orders() {
   const bulkAccept = async () => {
     if (!selected.size) return;
     const batch = writeBatch(db);
-    selected.forEach((id) => batch.update(doc(db, "orders", id), { status: "accepted" }));
+    // Skip orders whose payment isn't settled yet (non-cash awaiting approval).
+    selectedOrders.forEach((o) => { if (isPaymentSettled(o)) batch.update(doc(db, "orders", o.id), { status: "accepted" }); });
     await batch.commit();
     setSelected(new Set());
   };
