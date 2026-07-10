@@ -82,15 +82,28 @@ const PAYMENT_METHODS = [
   { key: "transfer",  icon: Landmark, labelKey: "payment.transfer",  descKey: "sp.transferDesc" },
 ];
 const PAYMENT_KEYS = PAYMENT_METHODS.map((m) => m.key);
-const DEFAULT_PAYMENT = { cash: true, promptpay: true, transfer: true, default: "cash" };
+const EMPTY_BANK = { bankName: "", accountName: "", accountNumber: "" };
+const DEFAULT_PAYMENT = {
+  cash: true, promptpay: true, transfer: true, default: "cash",
+  promptpayId: "",           // Thai PromptPay ID — phone (10 digits) or national ID (13)
+  bankTransfer: EMPTY_BANK,  // bank account for manual transfer
+};
 // Keep at least one method on and the default pointing at an enabled method.
 const normalizePayment = (p) => {
-  const next = { ...DEFAULT_PAYMENT, ...(p || {}) };
+  const next = {
+    ...DEFAULT_PAYMENT,
+    ...(p || {}),
+    bankTransfer: { ...EMPTY_BANK, ...(p?.bankTransfer || {}) },
+  };
   const enabled = PAYMENT_KEYS.filter((k) => next[k]);
   if (enabled.length === 0) return { ...next, cash: true, default: "cash" };
   if (!next[next.default]) next.default = enabled[0];
   return next;
 };
+// PromptPay ID = 10-digit phone or 13-digit national ID; bank account = 10–15 digits.
+const isValidPromptPayId = (v) => { const s = String(v).replace(/\D/g, ""); return s.length === 10 || s.length === 13; };
+const isValidAccountNumber = (v) => { const s = String(v).replace(/\D/g, ""); return s.length >= 10 && s.length <= 15; };
+const promptPayQrUrl = (v) => { const s = String(v).replace(/\D/g, ""); return isValidPromptPayId(s) ? `https://promptpay.io/${s}.png` : ""; };
 
 const DAY_LABELS = {
   mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
@@ -607,6 +620,7 @@ export function Settings() {
 
   /* e-payment settings — local draft */
   const [paySettings, setPaySettings] = useState(DEFAULT_PAYMENT);
+  const [payErrors, setPayErrors] = useState({});
   const [savingPay, setSavingPay] = useState(false);
   const [savedPay, setSavedPay] = useState(false);
 
@@ -815,12 +829,40 @@ export function Settings() {
     });
   const handleDefaultPay = (key) =>
     setPaySettings((p) => (p[key] ? { ...p, default: key } : p));
+  const setBank = (key, v) =>
+    setPaySettings((p) => ({ ...p, bankTransfer: { ...p.bankTransfer, [key]: v } }));
+
+  /* ── e-payment validation — an enabled method requires its account details;
+     a filled field must be well-formed even when its method is off ── */
+  const validatePayment = () => {
+    const e = {};
+    const { promptpay, transfer, promptpayId, bankTransfer: b } = paySettings;
+    if (promptpay && !promptpayId.trim()) e.promptpayId = t("sp.errRequired");
+    else if (promptpayId.trim() && !isValidPromptPayId(promptpayId)) e.promptpayId = t("sp.errPromptpay");
+    if (transfer && !b.bankName.trim()) e.bankName = t("sp.errRequired");
+    if (transfer && !b.accountName.trim()) e.accountName = t("sp.errRequired");
+    if (transfer && !b.accountNumber.trim()) e.accountNumber = t("sp.errRequired");
+    else if (b.accountNumber.trim() && !isValidAccountNumber(b.accountNumber)) e.accountNumber = t("sp.errAccount");
+    return e;
+  };
 
   /* ── e-payment settings save ── */
   const handleSavePayment = async () => {
+    const e = validatePayment();
+    setPayErrors(e);
+    if (Object.keys(e).length > 0) return;
     setSavingPay(true);
     try {
-      await updateDoc(doc(db, "stores", STORE_ID), { paymentSettings: normalizePayment(paySettings) });
+      const clean = normalizePayment({
+        ...paySettings,
+        promptpayId: paySettings.promptpayId.replace(/\D/g, ""),
+        bankTransfer: {
+          bankName:      paySettings.bankTransfer.bankName.trim(),
+          accountName:   paySettings.bankTransfer.accountName.trim(),
+          accountNumber: paySettings.bankTransfer.accountNumber.replace(/\D/g, ""),
+        },
+      });
+      await updateDoc(doc(db, "stores", STORE_ID), { paymentSettings: clean });
       setSavedPay(true);
       setTimeout(() => setSavedPay(false), 2500);
     } catch { alert("Save failed. Please try again."); }
@@ -1459,6 +1501,57 @@ export function Settings() {
         <p className="text-xs font-medium text-gray-400">{t("sp.needOne")}</p>
       </SettingSection>
 
+      {/* PromptPay configuration — shown when the method is enabled */}
+      {paySettings.promptpay && (
+      <SettingSection icon={QrCode} title={t("sp.secPromptpay")} description={t("sp.secPromptpayDesc")}>
+        <div>
+          <LabeledField label={t("sp.promptpayId")}>
+            <FieldInput
+              value={paySettings.promptpayId}
+              onChange={(v) => setPaySettings((p) => ({ ...p, promptpayId: v }))}
+              placeholder="08X-XXX-XXXX / 1-XXXX-XXXXX-XX-X"
+              type="tel"
+            />
+          </LabeledField>
+          <FieldError message={payErrors.promptpayId} />
+        </div>
+        {promptPayQrUrl(paySettings.promptpayId) && (
+          <div className="flex flex-col items-center gap-2 pt-2">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("sp.qrPreview")}</span>
+            <img
+              src={promptPayQrUrl(paySettings.promptpayId)}
+              alt={t("sp.qrPreview")}
+              className="w-44 h-44 rounded-xl border border-gray-200 bg-white p-2 object-contain"
+            />
+          </div>
+        )}
+      </SettingSection>
+      )}
+
+      {/* Bank Transfer configuration — shown when the method is enabled */}
+      {paySettings.transfer && (
+      <SettingSection icon={Landmark} title={t("sp.secBank")} description={t("sp.secBankDesc")}>
+        <div>
+          <LabeledField label={t("sp.bankName")}>
+            <FieldInput value={paySettings.bankTransfer.bankName} onChange={(v) => setBank("bankName", v)} placeholder={t("sp.bankNamePh")} />
+          </LabeledField>
+          <FieldError message={payErrors.bankName} />
+        </div>
+        <div>
+          <LabeledField label={t("sp.accountName")}>
+            <FieldInput value={paySettings.bankTransfer.accountName} onChange={(v) => setBank("accountName", v)} placeholder={t("sp.accountNamePh")} />
+          </LabeledField>
+          <FieldError message={payErrors.accountName} />
+        </div>
+        <div>
+          <LabeledField label={t("sp.accountNumber")}>
+            <FieldInput value={paySettings.bankTransfer.accountNumber} onChange={(v) => setBank("accountNumber", v)} placeholder="XXX-X-XXXXX-X" type="tel" />
+          </LabeledField>
+          <FieldError message={payErrors.accountNumber} />
+        </div>
+      </SettingSection>
+      )}
+
       {/* Default method — chosen from the enabled ones only */}
       <SettingSection icon={CheckCircle2} title={t("sp.secDefault")} description={t("sp.secDefaultDesc")}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1483,6 +1576,11 @@ export function Settings() {
         </div>
       </SettingSection>
 
+      {Object.keys(payErrors).length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-sm font-bold text-red-600">
+          <AlertCircle size={16} className="flex-shrink-0" /> {t("si.fixErrors")}
+        </div>
+      )}
       <button
         onClick={handleSavePayment}
         disabled={savingPay}
