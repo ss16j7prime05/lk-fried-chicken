@@ -267,13 +267,13 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
       {/* status actions: ready -> [Accept] -> picked_up -> [Start Delivering] -> delivering -> [Delivered] */}
       <div className="flex flex-wrap gap-2">
         {effectiveStatus === READY_STATUS && (
-          <Button className="flex-1" onClick={() => onAccept(order.id)}>
+          <Button className="flex-1" onClick={() => onAccept(order)}>
             <Package size={16} />
             Accept Delivery
           </Button>
         )}
         {effectiveStatus === PICKED_UP_STATUS && (
-          <Button className="flex-1" onClick={() => onStartDelivering(order.id)}>
+          <Button className="flex-1" onClick={() => onStartDelivering(order)}>
             <Bike size={16} />
             Start Delivering
           </Button>
@@ -284,7 +284,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
               <MapPin size={16} />
               {nearNotified ? "Customer Notified" : "I'm Near"}
             </Button>
-            <Button className="flex-1" onClick={() => onDelivered(order.id)}>
+            <Button className="flex-1" onClick={() => onDelivered(order)}>
               Delivered
             </Button>
           </>

@@ -6,6 +6,7 @@ import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
 import RiderOrderCard from "./RiderOrderCard.jsx";
+import { NotificationBell } from "../components/notifications/NotificationBell";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Loading } from "../components/ui/Loading";
@@ -18,6 +19,7 @@ import {
 } from "./riderStatus";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { useStoreStatus } from "../store/useStoreStatus";
+import { notifyCustomer, notifyStore, NOTIF_TYPE } from "../notifications/notificationUtils";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
@@ -109,8 +111,9 @@ export default function RiderOrdersDashboard() {
 
   // รับงาน: บันทึก riderId/riderName + ย้ายสถานะเป็น "picked_up" (ออเดอร์พร้อมส่งอยู่แล้วที่เคาน์เตอร์)
   // ต้องออนไลน์ก่อนถึงรับงานได้ (กันแย่งงานทั้งที่ปิดรับ)
-  const acceptDelivery = async (orderId) => {
+  const acceptDelivery = async (order) => {
     if (!user || !isOnline) return;
+    const orderId = order.id;
     await updateDoc(doc(db, "orders", orderId), {
       riderId: user.uid,
       riderName: profile?.name || profile?.riderName || user.email || "ไรเดอร์",
@@ -119,18 +122,42 @@ export default function RiderOrdersDashboard() {
       acceptedAt: serverTimestamp(),
       pickedUpAt: serverTimestamp(),
     });
-  };
-
-  const startDelivering = async (orderId) => {
-    await updateDoc(doc(db, "orders", orderId), {
-      status: DELIVERING_STATUS,
+    const orderNo = order.orderNo || orderId;
+    notifyCustomer(order.phone, {
+      type: NOTIF_TYPE.RIDER_ASSIGNED, orderId, actionUrl: `/shop/orders/${orderId}`,
+      message: `ไรเดอร์รับงานออเดอร์ ${orderNo} แล้ว`,
+    });
+    notifyStore({
+      type: NOTIF_TYPE.RIDER_ASSIGNED, orderId, actionUrl: "/store/orders",
+      message: `ไรเดอร์รับงานออเดอร์ ${orderNo}`,
     });
   };
 
-  const markDelivered = async (orderId) => {
+  const startDelivering = async (order) => {
+    const orderId = order.id;
+    await updateDoc(doc(db, "orders", orderId), {
+      status: DELIVERING_STATUS,
+    });
+    notifyCustomer(order.phone, {
+      type: NOTIF_TYPE.RIDER_DELIVERING, orderId, actionUrl: `/shop/orders/${orderId}`,
+      message: `ไรเดอร์กำลังจัดส่งออเดอร์ ${order.orderNo || orderId}`,
+    });
+  };
+
+  const markDelivered = async (order) => {
+    const orderId = order.id;
     await updateDoc(doc(db, "orders", orderId), {
       status: DELIVERED_STATUS,
       deliveredAt: serverTimestamp(),
+    });
+    const orderNo = order.orderNo || orderId;
+    notifyCustomer(order.phone, {
+      type: NOTIF_TYPE.DELIVERED, orderId, actionUrl: `/shop/orders/${orderId}`,
+      message: `ออเดอร์ ${orderNo} จัดส่งสำเร็จ`,
+    });
+    notifyStore({
+      type: NOTIF_TYPE.RIDER_DELIVERED, orderId, actionUrl: "/store/orders",
+      message: `ไรเดอร์ส่งออเดอร์ ${orderNo} สำเร็จ`,
     });
   };
 
@@ -177,7 +204,8 @@ export default function RiderOrdersDashboard() {
       <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-2xl font-black text-gray-900">Rider Dashboard</h1>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <NotificationBell />
             <Button
               variant={isOnline ? "primary" : "outline"}
               className={`!px-4 !py-2 text-sm ${

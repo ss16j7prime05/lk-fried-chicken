@@ -4,6 +4,7 @@ import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
 import { adminNormalizeStatus, isSameDay, isSameMonth, toDate } from "./adminUtils";
+import { NotificationBell } from "../components/notifications/NotificationBell";
 import SummaryCards from "./SummaryCards.jsx";
 import SalesChart from "./SalesChart.jsx";
 import TopMenuChart from "./TopMenuChart.jsx";
@@ -138,7 +139,8 @@ export default function AdminControlCenter() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: "22px" }}>🛠️ Admin Control Center</h1>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <NotificationBell />
           <button style={{ ...navBtn, background: "#e53935" }} onClick={logout}>
             ออกจากระบบ
           </button>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { notifyAdmin, NOTIF_TYPE } from "../notifications/notificationUtils";
 import { useNavigate, Link } from "react-router-dom";
 
 const wrap = {
@@ -82,6 +83,10 @@ export default function SignupStore() {
         email: f.email.trim(),
         address: f.address.trim(),
         createdAt: serverTimestamp(),
+      });
+      notifyAdmin({
+        type: NOTIF_TYPE.STORE_SIGNUP, actionUrl: "/admin",
+        message: `ร้านค้าสมัครใหม่: ${f.storeName.trim()}`,
       });
       navigate("/store", { replace: true });
     } catch (err) {

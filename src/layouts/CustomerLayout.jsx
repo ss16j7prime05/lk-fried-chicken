@@ -1,6 +1,7 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Home, ShoppingBag, User, Bell, CreditCard, Star, MapPin, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
 import { usePreferences } from '../context/PreferencesContext';
+import { NotificationBell } from '../components/notifications/NotificationBell';
 
 export const CustomerLayout = () => {
   const { pathname } = useLocation();
@@ -22,6 +23,11 @@ export const CustomerLayout = () => {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 md:pl-64">
+      {/* Notification Center bell (Phase 3.7G) — floating, all breakpoints */}
+      <div className="fixed top-3 right-3 z-[55]">
+        <NotificationBell className="bg-white shadow-soft border border-gray-50" />
+      </div>
+
       {/* Desktop Sidebar */}
       <nav className="hidden md:flex flex-col fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-100 p-6">
         <h1 className="text-2xl font-black text-primary mb-12">FoodFlow</h1>

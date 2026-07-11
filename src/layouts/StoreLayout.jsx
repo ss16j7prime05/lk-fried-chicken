@@ -10,6 +10,7 @@ import { useAuth } from "../AuthContext";
 import { STORE_ID } from "../config";
 import { normalizeStatus } from "../store/orderStatus";
 import { getAlarmAudioCtx, playSound, getEffectiveVolume } from "../store/alarmSounds";
+import { NotificationBell } from "../components/notifications/NotificationBell";
 
 /* ─── constants ─── */
 const NAV = [
@@ -442,7 +443,10 @@ export function StoreLayout() {
             {isOpen ? "Open" : "Closed"}
           </button>
 
-          {/* Notification bell */}
+          {/* Notification Center (Phase 3.7G) */}
+          <NotificationBell />
+
+          {/* Pending-orders shortcut bell */}
           <button
             onClick={() => navigate("/store/notifications")}
             className="relative min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"

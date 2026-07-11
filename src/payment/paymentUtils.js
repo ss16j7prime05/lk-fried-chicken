@@ -1,6 +1,7 @@
 import { doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
+import { notifyCustomer, notifyStore, NOTIF_TYPE } from "../notifications/notificationUtils";
 
 // สถานะการชำระเงิน (nested ใน order.payment.status)
 export const PAYMENT_STATUS = {
@@ -58,17 +59,32 @@ export async function expireOrderPayment(order) {
     status: "cancelled",
     cancelledAt: serverTimestamp(),
   });
+  const orderNo = order.orderNo || order.id;
+  notifyCustomer(order.phone, {
+    type: NOTIF_TYPE.PAY_EXPIRED, orderId: order.id, actionUrl: `/shop/orders/${order.id}`,
+    message: `หมดเวลาชำระ ออเดอร์ ${orderNo} ถูกยกเลิก`,
+  });
 }
 
 // ลูกค้าแนบสลิป (ครั้งแรกระหว่าง countdown หรืออัปโหลดใหม่หลังถูกปฏิเสธ) → PENDING_REVIEW.
 // เคลียร์ rejectReason ทุกครั้งเพื่อให้การอัปโหลดใหม่รีเซ็ตสถานะการปฏิเสธ (ใช้ payment เดิม).
-export async function submitSlip(orderId, slipUrl) {
+export async function submitSlip(orderId, slipUrl, order = null) {
+  const wasRejected = order?.payment?.status === PAYMENT_STATUS.REJECTED;
   await updateDoc(doc(db, "orders", orderId), {
     "payment.status": PAYMENT_STATUS.PENDING_REVIEW,
     "payment.slip": slipUrl,
     "payment.slipUrl": slipUrl,
     "payment.rejectReason": null,
     "payment.updatedAt": serverTimestamp(),
+  });
+  // Notify the store (role-broadcast) that a slip arrived / was re-uploaded.
+  const orderNo = order?.orderNo || orderId;
+  notifyStore({
+    type: wasRejected ? NOTIF_TYPE.SLIP_REUPLOADED : NOTIF_TYPE.SLIP_UPLOADED,
+    orderId, actionUrl: "/store/orders",
+    message: wasRejected
+      ? `ลูกค้าอัปโหลดสลิปใหม่ ออเดอร์ ${orderNo}`
+      : `ลูกค้าอัปโหลดสลิป ออเดอร์ ${orderNo}`,
   });
 }
 
@@ -81,7 +97,7 @@ export const isPaymentSettled = (order) =>
   isCashOrder(order) || order?.payment?.status === PAYMENT_STATUS.PAID;
 
 // ร้านอนุมัติสลิป → PAID (เข้าสู่ flow เดิม), บันทึกผู้ตรวจ/เวลา (Phase 3.7E)
-export async function approvePayment(orderId, reviewer) {
+export async function approvePayment(orderId, reviewer, order = null) {
   await updateDoc(doc(db, "orders", orderId), {
     "payment.status": PAYMENT_STATUS.PAID,
     "payment.paidAt": serverTimestamp(),
@@ -89,16 +105,26 @@ export async function approvePayment(orderId, reviewer) {
     "payment.reviewedBy": reviewer || null,
     "payment.updatedAt": serverTimestamp(),
   });
+  const orderNo = order?.orderNo || orderId;
+  notifyCustomer(order?.phone, {
+    type: NOTIF_TYPE.SLIP_APPROVED, orderId, actionUrl: `/shop/orders/${orderId}`,
+    message: `ร้านอนุมัติสลิป ออเดอร์ ${orderNo}`,
+  });
 }
 
 // ร้านปฏิเสธสลิป → REJECTED (ลูกค้าอัปโหลดใหม่ได้), บันทึกเหตุผล/ผู้ตรวจ/เวลา (Phase 3.7E)
-export async function rejectPayment(orderId, reviewer, reason) {
+export async function rejectPayment(orderId, reviewer, reason, order = null) {
   await updateDoc(doc(db, "orders", orderId), {
     "payment.status": PAYMENT_STATUS.REJECTED,
     "payment.rejectReason": reason || null,
     "payment.reviewedAt": serverTimestamp(),
     "payment.reviewedBy": reviewer || null,
     "payment.updatedAt": serverTimestamp(),
+  });
+  const orderNo = order?.orderNo || orderId;
+  notifyCustomer(order?.phone, {
+    type: NOTIF_TYPE.SLIP_REJECTED, orderId, actionUrl: `/shop/orders/${orderId}`,
+    message: reason ? `ร้านปฏิเสธสลิป ออเดอร์ ${orderNo}: ${reason}` : `ร้านปฏิเสธสลิป ออเดอร์ ${orderNo}`,
   });
 }
 

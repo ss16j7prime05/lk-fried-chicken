@@ -195,7 +195,7 @@ export const OrderDetail = () => {
     setSlipError(null);
     try {
       const url = await uploadSlip(slipFile);
-      await submitSlip(orderId, url);
+      await submitSlip(orderId, url, order);
       setSlipFile(null);
     } catch {
       setSlipError(t("od.slipUploadErr"));

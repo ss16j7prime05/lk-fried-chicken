@@ -136,6 +136,23 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // ---------- notifications (Notification Center — Phase 3.7G) ----------
+    // recipient key (userId): customer=phone, rider=uid, store/admin="" (role-broadcast).
+    // อ่าน/แก้/ลบ ได้เฉพาะเจ้าของ (role ตรง + userId ตรง uid/phone หรือ broadcast) ;
+    // สร้างได้ทุกผู้ใช้ที่ล็อกอิน (actor แจ้งเตือนถึง role อื่น — เหมือน orders ที่ create เปิดกว้าง)
+    match /notifications/{id} {
+      function isMine() {
+        return isSignedIn() &&
+          resource.data.role == role() &&
+          (resource.data.userId == "" ||
+           resource.data.userId == request.auth.uid ||
+           resource.data.userId == myPhone());
+      }
+      allow read: if isMine();
+      allow create: if isSignedIn();
+      allow update, delete: if isMine();
+    }
+
     // ---------- deny all others ----------
     match /{document=**} {
       allow read, write: if false;

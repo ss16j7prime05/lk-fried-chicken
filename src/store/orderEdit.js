@@ -7,6 +7,7 @@ import { doc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore"
 import { db } from "../firebase";
 import { recalcOrder, orderTotal } from "./orderTotals";
 import { PAYMENT_STATUS, paymentExpireTimestamp } from "../payment/paymentUtils";
+import { notifyCustomer, NOTIF_TYPE } from "../notifications/notificationUtils";
 
 // Reasons a store may edit an order (i18n keys resolve via oe.reason.*).
 export const EDIT_REASONS = ["out_of_stock", "customer_add", "customer_reduce", "promotion", "other"];
@@ -76,5 +77,25 @@ export async function saveOrderEdit(order, { items, reason, reasonNote, refundMe
   }
 
   await updateDoc(doc(db, "orders", order.id), patch);
+
+  // Notify the customer: the edit itself + the money outcome (Phase 3.7G).
+  const orderNo = order.orderNo || order.id;
+  const actionUrl = `/shop/orders/${order.id}`;
+  notifyCustomer(order.phone, {
+    type: NOTIF_TYPE.ORDER_EDITED, orderId: order.id, actionUrl,
+    message: `ร้านแก้ไขออเดอร์ ${orderNo}`,
+  });
+  if (diff > 0) {
+    notifyCustomer(order.phone, {
+      type: NOTIF_TYPE.ADDITIONAL_PAYMENT, orderId: order.id, actionUrl,
+      message: `ออเดอร์ ${orderNo} ต้องชำระเพิ่ม ฿${diff}`,
+    });
+  } else if (diff < 0) {
+    notifyCustomer(order.phone, {
+      type: NOTIF_TYPE.PARTIAL_REFUND, orderId: order.id, actionUrl,
+      message: `ออเดอร์ ${orderNo} คืนเงินบางส่วน ฿${-diff}`,
+    });
+  }
+
   return { diff, totals };
 }

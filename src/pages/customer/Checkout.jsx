@@ -8,6 +8,7 @@ import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { generateOrderNo } from "../../orderNoUtils";
 import { PAYMENT_STATUS, requiresCountdown, paymentExpireTimestamp, uploadSlip } from "../../payment/paymentUtils";
 import { normalizePayment, enabledMethods, promptPayQrUrl } from "../../payment/paymentSettings";
+import { notifyStore, NOTIF_TYPE } from "../../notifications/notificationUtils";
 import PromptPayQR from "../../payment/PromptPayQR.jsx";
 import LocationPicker from "../../location/LocationPicker.jsx";
 import MapButton from "../../location/MapButton.jsx";
@@ -489,6 +490,12 @@ export const Checkout = () => {
 
       clearCart();
       setPlacedOrder({ orderId: docRef.id, orderNo });
+
+      // Notify the store of the new order (role-broadcast, single writer — Phase 3.7G).
+      notifyStore({
+        type: NOTIF_TYPE.NEW_ORDER, orderId: docRef.id, actionUrl: "/store/orders",
+        message: `ออเดอร์ใหม่ ${orderNo} · ฿${Math.round(grandTotal)}`,
+      });
     } catch (err) {
       console.error("Failed to place order:", err);
       setSubmitError(t("checkout.errorMsg"));

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { notifyAdmin, NOTIF_TYPE } from "../notifications/notificationUtils";
 import { useNavigate, Link } from "react-router-dom";
 
 const wrap = {
@@ -82,6 +83,10 @@ export default function SignupRider() {
         vehicleType: f.vehicleType,
         riderStatus: "offline",
         createdAt: serverTimestamp(),
+      });
+      notifyAdmin({
+        type: NOTIF_TYPE.RIDER_SIGNUP, actionUrl: "/admin",
+        message: `ไรเดอร์สมัครใหม่: ${f.name.trim()}`,
       });
       navigate("/rider", { replace: true });
     } catch (err) {
