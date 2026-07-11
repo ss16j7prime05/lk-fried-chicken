@@ -11,6 +11,7 @@ import {
   rejectPayment as _reject,
   submitSlip as _submitSlip,
   expireOrderPayment as _expire,
+  setRefundStatus as _setRefundStatus,
 } from "./paymentUtils";
 import { recordEvent } from "../store/orderEngine";
 
@@ -44,4 +45,10 @@ export async function submitSlip(order, slipUrl) {
 export async function expire(order) {
   await _expire(order);
   await recordEvent(oid(order), "payment:expired");
+}
+
+// Admin sets refund status (none/pending/refunded); notifies the customer on refunded.
+export async function setRefund(order, refundStatus) {
+  await _setRefundStatus(oid(order), refundStatus, order);
+  await recordEvent(oid(order), `refund:${refundStatus}`);
 }

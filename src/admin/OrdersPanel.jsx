@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "../firebase";
 import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
 import { adminNormalizeStatus, formatDateTime, toDate } from "./adminUtils";
 import { updateOrderStatus, cancelOrder as engineCancelOrder } from "../store/orderEngine";
+import { setRefund } from "../payment/paymentService";
 import { input, thA as th, tdA as td } from "./adminStyles";
 
 const STATUS_OPTIONS = [
@@ -58,10 +57,8 @@ export default function OrdersPanel({ orders }) {
     await engineCancelOrder(findOrder(orderId), { by: "admin" });
   };
 
-  // refundStatus is a payment/refund field, not a lifecycle status transition.
-  const setRefundStatus = async (orderId, refundStatus) => {
-    await updateDoc(doc(db, "orders", orderId), { refundStatus });
-  };
+  // Refund is part of the payment SSOT (Phase 3.10).
+  const setRefundStatus = (orderId, refundStatus) => setRefund(findOrder(orderId), refundStatus);
 
   // Admin manual override to any status → force past the transition graph.
   const setOrderStatus = (orderId, status) =>

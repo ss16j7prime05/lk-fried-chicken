@@ -128,6 +128,21 @@ export async function rejectPayment(orderId, reviewer, reason, order = null) {
   });
 }
 
+// อัปเดตสถานะการคืนเงิน (none/pending/refunded) — แจ้งลูกค้าเมื่อคืนเงินสำเร็จ (Phase 3.10)
+export async function setRefundStatus(orderId, refundStatus, order = null) {
+  await updateDoc(doc(db, "orders", orderId), {
+    refundStatus,
+    "payment.updatedAt": serverTimestamp(),
+  });
+  if (refundStatus === "refunded") {
+    const orderNo = order?.orderNo || orderId;
+    notifyCustomer(order?.phone, {
+      type: NOTIF_TYPE.PARTIAL_REFUND, orderId, actionUrl: `/shop/orders/${orderId}`,
+      message: `คืนเงินออเดอร์ ${orderNo} เรียบร้อยแล้ว`,
+    });
+  }
+}
+
 export const PAYMENT_STATUS_LABEL = {
   [PAYMENT_STATUS.UNPAID]: "ชำระเงินสดปลายทาง",
   [PAYMENT_STATUS.PENDING_VERIFICATION]: "รอตรวจสอบสลิป",
