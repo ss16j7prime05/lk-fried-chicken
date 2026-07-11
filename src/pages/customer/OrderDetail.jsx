@@ -5,9 +5,8 @@ import { Phone, MapPin, Navigation, RotateCcw, Check, Bike, Clock, Upload, X, Lo
 import { db } from "../../firebase";
 import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
 import { getStore } from "./getStore";
-import {
-  PAYMENT_STATUS, countdownFrom, expireOrderPayment, submitSlip, uploadSlip,
-} from "../../payment/paymentUtils";
+import { PAYMENT_STATUS, countdownFrom, uploadSlip } from "../../payment/paymentUtils";
+import { paymentTransition } from "../../store/orderEngine";
 import { normalizeStatus } from "../../store/orderStatus";
 import { usePreferences } from "../../context/PreferencesContext";
 import { Card } from "../../components/ui/Card";
@@ -178,7 +177,7 @@ export const OrderDetail = () => {
     if (order?.payment?.status !== PAYMENT_STATUS.WAITING_PAYMENT) return;
     if (!countdownFrom(order.payment.expireAt, nowMs).expired || expiringRef.current) return;
     expiringRef.current = true;
-    expireOrderPayment(order).catch(() => { expiringRef.current = false; });
+    paymentTransition(order, "expire").catch(() => { expiringRef.current = false; });
   }, [order, nowMs]);
 
   const handlePickSlip = (f) => {
@@ -195,7 +194,7 @@ export const OrderDetail = () => {
     setSlipError(null);
     try {
       const url = await uploadSlip(slipFile);
-      await submitSlip(orderId, url, order);
+      await paymentTransition(order, "submit_slip", { slipUrl: url });
       setSlipFile(null);
     } catch {
       setSlipError(t("od.slipUploadErr"));

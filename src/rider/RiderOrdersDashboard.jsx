@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { Bell, History, LogOut, Power, Settings, User, Wallet } from "lucide-react";
 import { db } from "../firebase";
@@ -19,7 +19,7 @@ import {
 } from "./riderStatus";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { useStoreStatus } from "../store/useStoreStatus";
-import { notifyCustomer, notifyStore, NOTIF_TYPE } from "../notifications/notificationUtils";
+import { assignRider, updateOrderStatus, completeOrder } from "../store/orderEngine";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
@@ -111,55 +111,17 @@ export default function RiderOrdersDashboard() {
 
   // รับงาน: บันทึก riderId/riderName + ย้ายสถานะเป็น "picked_up" (ออเดอร์พร้อมส่งอยู่แล้วที่เคาน์เตอร์)
   // ต้องออนไลน์ก่อนถึงรับงานได้ (กันแย่งงานทั้งที่ปิดรับ)
-  const acceptDelivery = async (order) => {
+  // All lifecycle writes go through the Shared Order Engine (Phase 3.8).
+  const acceptDelivery = (order) => {
     if (!user || !isOnline) return;
-    const orderId = order.id;
-    await updateDoc(doc(db, "orders", orderId), {
-      riderId: user.uid,
-      riderName: profile?.name || profile?.riderName || user.email || "ไรเดอร์",
-      riderPhone: profile?.phone || "",
-      status: PICKED_UP_STATUS,
-      acceptedAt: serverTimestamp(),
-      pickedUpAt: serverTimestamp(),
-    });
-    const orderNo = order.orderNo || orderId;
-    notifyCustomer(order.phone, {
-      type: NOTIF_TYPE.RIDER_ASSIGNED, orderId, actionUrl: `/shop/orders/${orderId}`,
-      message: `ไรเดอร์รับงานออเดอร์ ${orderNo} แล้ว`,
-    });
-    notifyStore({
-      type: NOTIF_TYPE.RIDER_ASSIGNED, orderId, actionUrl: "/store/orders",
-      message: `ไรเดอร์รับงานออเดอร์ ${orderNo}`,
+    return assignRider(order, {
+      uid: user.uid,
+      name: profile?.name || profile?.riderName || user.email || "ไรเดอร์",
+      phone: profile?.phone || "",
     });
   };
-
-  const startDelivering = async (order) => {
-    const orderId = order.id;
-    await updateDoc(doc(db, "orders", orderId), {
-      status: DELIVERING_STATUS,
-    });
-    notifyCustomer(order.phone, {
-      type: NOTIF_TYPE.RIDER_DELIVERING, orderId, actionUrl: `/shop/orders/${orderId}`,
-      message: `ไรเดอร์กำลังจัดส่งออเดอร์ ${order.orderNo || orderId}`,
-    });
-  };
-
-  const markDelivered = async (order) => {
-    const orderId = order.id;
-    await updateDoc(doc(db, "orders", orderId), {
-      status: DELIVERED_STATUS,
-      deliveredAt: serverTimestamp(),
-    });
-    const orderNo = order.orderNo || orderId;
-    notifyCustomer(order.phone, {
-      type: NOTIF_TYPE.DELIVERED, orderId, actionUrl: `/shop/orders/${orderId}`,
-      message: `ออเดอร์ ${orderNo} จัดส่งสำเร็จ`,
-    });
-    notifyStore({
-      type: NOTIF_TYPE.RIDER_DELIVERED, orderId, actionUrl: "/store/orders",
-      message: `ไรเดอร์ส่งออเดอร์ ${orderNo} สำเร็จ`,
-    });
-  };
+  const startDelivering = (order) => updateOrderStatus(order, DELIVERING_STATUS, { by: user?.uid });
+  const markDelivered = (order) => completeOrder(order, user?.uid);
 
   // แท็บทั้งหมด: พูลงานว่าง + คิวงานของไรเดอร์ (ใช้ RiderOrderCard ตัวเดิมทุกแท็บ)
   const TABS = [

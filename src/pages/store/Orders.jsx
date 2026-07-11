@@ -53,12 +53,11 @@ import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { fmtMoney, fmtTime, normalizeStatus, toDate } from "../../store/orderStatus";
 import {
-  PAYMENT_STATUS, countdownFrom, expireOrderPayment,
-  approvePayment, rejectPayment, isPaymentSettled,
+  PAYMENT_STATUS, countdownFrom, expireOrderPayment, isPaymentSettled,
 } from "../../payment/paymentUtils";
+import { updateOrderStatus, cancelOrder, paymentTransition } from "../../store/orderEngine";
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
 import OrderEditModal from "./OrderEditModal.jsx";
-import { notifyCustomer, notifyRider, NOTIF_TYPE } from "../../notifications/notificationUtils";
 
 /* ═══════════════════════ constants ═══════════════════════ */
 export const TABS = [
@@ -1800,51 +1799,24 @@ export function Orders() {
 
   const visible = filtered.slice(0, visibleCount);
 
-  /* ─── actions ─── */
-  // Emit a customer notification for a store-driven status change (Phase 3.7G).
-  const notifyStatus = useCallback((id, type, message) => {
-    const o = orders.find((x) => x.id === id);
-    if (!o) return;
-    notifyCustomer(o.phone, { type, orderId: id, actionUrl: `/shop/orders/${id}`,
-      message: message(o.orderNo || id) });
-  }, [orders]);
+  /* ─── actions (route through Shared Order Engine — Phase 3.8) ─── */
+  const findOrder = useCallback((id) => orders.find((x) => x.id === id) || { id }, [orders]);
 
-  const acceptOrderWithETA = useCallback(async (id, estimatedMinutes) => {
+  const acceptOrderWithETA = useCallback((id, estimatedMinutes) => {
     const finishTime = estimatedMinutes > 0 ? new Date(Date.now() + estimatedMinutes * 60000) : null;
-    await updateDoc(doc(db, "orders", id), {
-      status: "accepted",
-      acceptedAt: new Date(),
-      ...(estimatedMinutes > 0 ? { estimatedMinutes, estimatedFinishTime: finishTime } : {}),
+    return updateOrderStatus(findOrder(id), "accepted", {
+      by: "store",
+      patch: estimatedMinutes > 0 ? { estimatedMinutes, estimatedFinishTime: finishTime } : {},
     });
-    notifyStatus(id, NOTIF_TYPE.STORE_ACCEPTED, (no) => `ร้านรับออเดอร์ ${no} แล้ว`);
-  }, [notifyStatus]);
-  const rejectOrder = useCallback(async (id) => {
-    await updateDoc(doc(db, "orders", id), { status: "cancelled" });
-    notifyStatus(id, NOTIF_TYPE.ORDER_CANCELLED, (no) => `ออเดอร์ ${no} ถูกยกเลิกโดยร้าน`);
-    const o = orders.find((x) => x.id === id);
-    if (o?.riderId) notifyRider(o.riderId, {
-      type: NOTIF_TYPE.JOB_CANCELLED, orderId: id, actionUrl: "/rider",
-      message: `งานออเดอร์ ${o.orderNo || id} ถูกยกเลิกโดยร้าน`,
-    });
-  }, [notifyStatus, orders]);
-  const advanceOrder = useCallback(async (id, to) => {
-    await updateDoc(doc(db, "orders", id), { status: to });
-    if (to === "cooking") notifyStatus(id, NOTIF_TYPE.COOKING, (no) => `ร้านกำลังทำอาหารออเดอร์ ${no}`);
-    else if (to === "ready_for_delivery") {
-      notifyStatus(id, NOTIF_TYPE.COOKED, (no) => `ออเดอร์ ${no} ทำอาหารเสร็จแล้ว`);
-      const o = orders.find((x) => x.id === id);
-      notifyRider("", { type: NOTIF_TYPE.NEW_JOB, orderId: id, actionUrl: "/rider",
-        message: `มีงานใหม่ ออเดอร์ ${o?.orderNo || id} พร้อมจัดส่ง` });
-    }
-  }, [notifyStatus, orders]);
+  }, [findOrder]);
+  const rejectOrder = useCallback((id) => cancelOrder(findOrder(id), { by: "store" }), [findOrder]);
+  const advanceOrder = useCallback((id, to) => updateOrderStatus(findOrder(id), to, { by: "store" }), [findOrder]);
   const updateETA = useCallback((id, mins, finishTime) =>
     updateDoc(doc(db, "orders", id), { estimatedMinutes: mins, estimatedFinishTime: finishTime }), []);
-  // Approve → PAID, Reject → REJECTED (+ reason). Records reviewer + timestamps.
   const reviewer = profile?.name || profile?.email || user?.email || STORE_ID;
-  const verifyPayment = useCallback((id, approved, reason) => {
-    const order = orders.find((o) => o.id === id) || null;
-    return approved ? approvePayment(id, reviewer, order) : rejectPayment(id, reviewer, reason, order);
-  }, [reviewer, orders]);
+  const verifyPayment = useCallback((id, approved, reason) =>
+    paymentTransition(findOrder(id), approved ? "approve" : "reject", { reviewer, reason }),
+  [reviewer, findOrder]);
 
   const toggleSelect = useCallback((id) => {
     setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
