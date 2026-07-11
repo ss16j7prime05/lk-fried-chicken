@@ -15,15 +15,12 @@ import { normalizeStatus } from "./orderStatus";
 import { recalcOrder } from "./orderTotals";
 import { saveOrderEdit } from "./orderEdit";
 import {
-  approvePayment, rejectPayment, submitSlip, expireOrderPayment,
-} from "../payment/paymentUtils";
-import {
   notifyCustomer, notifyStore, notifyRider, NOTIF_TYPE,
 } from "../notifications/notificationUtils";
 
 // Canonical status enum (maps onto the existing order.status / payment.status —
 // the data model is unchanged). Delivery-lifecycle values drive transitions;
-// payment-dimension values are handled via paymentTransition().
+// payment-dimension values are handled via paymentService.
 export const ORDER_STATUS = {
   NEW: "pending",
   WAITING_PAYMENT: "waiting_payment",
@@ -125,16 +122,14 @@ export async function cancelOrder(order, { by = "", reason = "" } = {}) {
   notificationTrigger({ ...order, status: "cancelled" }, "cancelled");
 }
 
-// Delegates to the existing payment SSOT (which already emits its own notifications).
-export function paymentTransition(order, action, args = {}) {
-  const id = order?.id || order;
-  switch (action) {
-    case "approve": return approvePayment(id, args.reviewer, order);
-    case "reject": return rejectPayment(id, args.reviewer, args.reason, order);
-    case "submit_slip": return submitSlip(id, args.slipUrl, order);
-    case "expire": return expireOrderPayment(order);
-    default: return Promise.resolve();
-  }
+// Append a timeline + audit entry for a non-status event (e.g. a payment action).
+// Reused by paymentService so payment events feed the same timeline/audit trail.
+export async function recordEvent(orderId, action, by = "", label = null) {
+  if (!orderId) return;
+  await updateDoc(doc(db, "orders", orderId), {
+    timeline: arrayUnion(timelineTrigger(label || action, by)),
+    audit: arrayUnion(auditTrigger(action, by)),
+  });
 }
 
 // Money math (reuse). calculateOrder = pure recompute; applyOrderEdit = persist a store edit.

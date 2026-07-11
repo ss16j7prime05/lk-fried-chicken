@@ -55,7 +55,8 @@ import { fmtMoney, fmtTime, normalizeStatus, toDate } from "../../store/orderSta
 import {
   PAYMENT_STATUS, countdownFrom, expireOrderPayment, isPaymentSettled,
 } from "../../payment/paymentUtils";
-import { updateOrderStatus, cancelOrder, paymentTransition } from "../../store/orderEngine";
+import { updateOrderStatus, cancelOrder } from "../../store/orderEngine";
+import { approve as approvePayment, reject as rejectPayment } from "../../payment/paymentService";
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
 import OrderEditModal from "./OrderEditModal.jsx";
 
@@ -1814,9 +1815,10 @@ export function Orders() {
   const updateETA = useCallback((id, mins, finishTime) =>
     updateDoc(doc(db, "orders", id), { estimatedMinutes: mins, estimatedFinishTime: finishTime }), []);
   const reviewer = profile?.name || profile?.email || user?.email || STORE_ID;
-  const verifyPayment = useCallback((id, approved, reason) =>
-    paymentTransition(findOrder(id), approved ? "approve" : "reject", { reviewer, reason }),
-  [reviewer, findOrder]);
+  const verifyPayment = useCallback((id, approved, reason) => {
+    const order = findOrder(id);
+    return approved ? approvePayment(order, reviewer) : rejectPayment(order, reviewer, reason);
+  }, [reviewer, findOrder]);
 
   const toggleSelect = useCallback((id) => {
     setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
