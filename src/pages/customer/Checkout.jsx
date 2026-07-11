@@ -8,7 +8,7 @@ import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { generateOrderNo } from "../../orderNoUtils";
 import { PAYMENT_STATUS, requiresCountdown, paymentExpireTimestamp, uploadSlip } from "../../payment/paymentUtils";
 import { normalizePayment, enabledMethods, promptPayQrUrl } from "../../payment/paymentSettings";
-import { notifyStore, NOTIF_TYPE } from "../../notifications/notificationUtils";
+import { notifyStore, notifyAdmin, NOTIF_TYPE } from "../../notifications/notificationUtils";
 import PromptPayQR from "../../payment/PromptPayQR.jsx";
 import LocationPicker from "../../location/LocationPicker.jsx";
 import MapButton from "../../location/MapButton.jsx";
@@ -500,6 +500,10 @@ export const Checkout = () => {
       console.error("Failed to place order:", err);
       setSubmitError(t("checkout.errorMsg"));
       setErrorDialogOpen(true);
+      notifyAdmin({
+        type: NOTIF_TYPE.PAYMENT_ERROR, actionUrl: "/admin",
+        message: `สั่งซื้อล้มเหลว: ${err?.code || err?.message || "unknown"}`,
+      });
     } finally {
       setSubmitting(false);
     }

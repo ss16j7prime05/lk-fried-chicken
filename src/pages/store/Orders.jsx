@@ -1821,7 +1821,12 @@ export function Orders() {
   const rejectOrder = useCallback(async (id) => {
     await updateDoc(doc(db, "orders", id), { status: "cancelled" });
     notifyStatus(id, NOTIF_TYPE.ORDER_CANCELLED, (no) => `ออเดอร์ ${no} ถูกยกเลิกโดยร้าน`);
-  }, [notifyStatus]);
+    const o = orders.find((x) => x.id === id);
+    if (o?.riderId) notifyRider(o.riderId, {
+      type: NOTIF_TYPE.JOB_CANCELLED, orderId: id, actionUrl: "/rider",
+      message: `งานออเดอร์ ${o.orderNo || id} ถูกยกเลิกโดยร้าน`,
+    });
+  }, [notifyStatus, orders]);
   const advanceOrder = useCallback(async (id, to) => {
     await updateDoc(doc(db, "orders", id), { status: to });
     if (to === "cooking") notifyStatus(id, NOTIF_TYPE.COOKING, (no) => `ร้านกำลังทำอาหารออเดอร์ ${no}`);

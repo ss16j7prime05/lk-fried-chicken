@@ -17,6 +17,7 @@ import {
   STATUS_LABEL,
 } from "./riderStatus";
 import { formatDate } from "./riderFormat";
+import { notifyCustomer, NOTIF_TYPE } from "../notifications/notificationUtils";
 
 const GPS_UPDATE_INTERVAL_MS = 5000;
 
@@ -211,6 +212,10 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
   const markNear = async () => {
     await updateDoc(doc(db, "orders", order.id), { nearPressed: true });
     setNearPressedLocally(true);
+    notifyCustomer(order.phone, {
+      type: NOTIF_TYPE.RIDER_ARRIVED, orderId: order.id, actionUrl: `/shop/orders/${order.id}`,
+      message: `ไรเดอร์กำลังจะถึง ออเดอร์ ${order.orderNo || order.id}`,
+    });
   };
 
   return (
