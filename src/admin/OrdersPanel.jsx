@@ -5,6 +5,7 @@ import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
 import { adminNormalizeStatus, formatDateTime, toDate } from "./adminUtils";
+import { updateOrderStatus, cancelOrder as engineCancelOrder } from "../store/orderEngine";
 import { input, thA as th, tdA as td } from "./adminStyles";
 
 const STATUS_OPTIONS = [
@@ -50,18 +51,21 @@ export default function OrdersPanel({ orders }) {
     return true;
   });
 
+  const findOrder = (orderId) => orders.find((o) => o.id === orderId) || { id: orderId };
+
   const cancelOrder = async (orderId) => {
     if (!window.confirm("ยกเลิกออเดอร์นี้ใช่ไหม?")) return;
-    await updateDoc(doc(db, "orders", orderId), { status: "cancelled" });
+    await engineCancelOrder(findOrder(orderId), { by: "admin" });
   };
 
+  // refundStatus is a payment/refund field, not a lifecycle status transition.
   const setRefundStatus = async (orderId, refundStatus) => {
     await updateDoc(doc(db, "orders", orderId), { refundStatus });
   };
 
-  const setOrderStatus = async (orderId, status) => {
-    await updateDoc(doc(db, "orders", orderId), { status });
-  };
+  // Admin manual override to any status → force past the transition graph.
+  const setOrderStatus = (orderId, status) =>
+    updateOrderStatus(findOrder(orderId), status, { by: "admin", force: true });
 
   return (
     <div>

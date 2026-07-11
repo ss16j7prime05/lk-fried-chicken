@@ -11,6 +11,7 @@ import { STORE_ID } from "../config";
 import { normalizeStatus } from "../store/orderStatus";
 import { getAlarmAudioCtx, playSound, getEffectiveVolume } from "../store/alarmSounds";
 import { NotificationBell } from "../components/notifications/NotificationBell";
+import { updateOrderStatus, cancelOrder } from "../store/orderEngine";
 
 /* ─── constants ─── */
 const NAV = [
@@ -307,13 +308,11 @@ export function StoreLayout() {
     catch { setIsOpen(!next); }
   };
 
-  /* ── popup actions ── */
-  const popupAccept = async (orderId) => {
-    await updateDoc(doc(db, "orders", orderId), { status: "accepted" });
-  };
-  const popupReject = async (orderId) => {
-    await updateDoc(doc(db, "orders", orderId), { status: "cancelled" });
-  };
+  /* ── popup actions (route through the Shared Order Engine — Phase 3.8B) ── */
+  const popupAccept = (orderId) =>
+    updateOrderStatus(pendingOrders.find((o) => o.id === orderId) || { id: orderId }, "accepted", { by: "store" });
+  const popupReject = (orderId) =>
+    cancelOrder(pendingOrders.find((o) => o.id === orderId) || { id: orderId }, { by: "store" });
 
   const handleLogout = () => { logout(); navigate("/login"); };
 

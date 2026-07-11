@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, doc, onSnapshot, query, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import {
   ArrowLeft,
   BellOff,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { db } from "../../firebase";
+import { updateOrderStatus } from "../../store/orderEngine";
 import { STORE_ID } from "../../config";
 import { KITCHEN_STATUSES, KitchenView, printKitchenTicket } from "./Orders.jsx";
 import { normalizeStatus } from "../../store/orderStatus";
@@ -142,7 +143,8 @@ export function Kitchen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted, volume, autoScroll]);
 
-  const onAdvance = useCallback((id, to) => updateDoc(doc(db, "orders", id), { status: to }), []);
+  const onAdvance = useCallback((id, to) =>
+    updateOrderStatus(orders.find((o) => o.id === id) || { id }, to, { by: "store" }), [orders]);
 
   const onPrint = useCallback((order, size) => printKitchenTicket(order, size || printSize), [printSize]);
 
@@ -150,12 +152,9 @@ export function Kitchen() {
   const batchComplete = useCallback(async () => {
     const readyOrders = orders.filter(o => normalizeStatus(o.status) === "ready_for_delivery");
     if (!readyOrders.length) return;
-    const batch = writeBatch(db);
-    readyOrders.forEach(o => {
-      const next = o.orderType === "pickup" ? "completed" : "picked_up";
-      batch.update(doc(db, "orders", o.id), { status: next });
-    });
-    await batch.commit();
+    // pickup completes directly (no rider); delivery -> picked_up. force: batch override.
+    await Promise.all(readyOrders.map((o) =>
+      updateOrderStatus(o, o.orderType === "pickup" ? "completed" : "picked_up", { by: "store", force: true })));
   }, [orders]);
 
   /* Live stats */

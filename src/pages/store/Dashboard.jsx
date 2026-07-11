@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collection, doc, onSnapshot, query, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp, ShoppingBag, UtensilsCrossed, CheckCircle, Bike,
@@ -9,6 +9,7 @@ import {
 import { db } from "../../firebase";
 import { STORE_ID } from "../../config";
 import { byNewest, fmtMoney, fmtTime, normalizeStatus, STATUS_LABEL, toDate } from "../../store/orderStatus";
+import { updateOrderStatus, cancelOrder } from "../../store/orderEngine";
 
 /* ─── helpers ─── */
 const isToday    = (ts) => { const d = toDate(ts); if (!d) return false; const n = new Date(); return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); };
@@ -383,14 +384,13 @@ export function Dashboard() {
     [orders]
   );
 
-  const acceptOrder = (id) => updateDoc(doc(db,"orders",id),{status:"accepted"});
-  const rejectOrder = (id) => updateDoc(doc(db,"orders",id),{status:"cancelled"});
+  const findOrder = (id) => orders.find((o) => o.id === id) || { id };
+  const acceptOrder = (id) => updateOrderStatus(findOrder(id), "accepted", { by: "store" });
+  const rejectOrder = (id) => cancelOrder(findOrder(id), { by: "store" });
   const acceptAll   = async () => {
     const pending = orders.filter(o=>normalizeStatus(o.status)==="pending");
     if (!pending.length) return;
-    const batch = writeBatch(db);
-    pending.forEach(o=>batch.update(doc(db,"orders",o.id),{status:"accepted"}));
-    await batch.commit();
+    await Promise.all(pending.map((o) => updateOrderStatus(o, "accepted", { by: "store" })));
   };
 
   const nowDate = new Date(now);

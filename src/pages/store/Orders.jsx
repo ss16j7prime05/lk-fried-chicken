@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, doc, onSnapshot, query, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import {
   Search,
   X,
@@ -1713,22 +1713,22 @@ export function Orders() {
       const st = normalizeStatus(activeOrder.status);
       if ((e.key === "a" || e.key === "A") && st === "pending") { setEtaOrder(activeOrder); return; }
       if ((e.key === "r" || e.key === "R") && st === "pending") {
-        updateDoc(doc(db, "orders", activeOrder.id), { status: "cancelled" });
+        cancelOrder(activeOrder, { by: "store" });
         setActiveOrder(null); return;
       }
       if ((e.key === "p" || e.key === "P") && st === "accepted") {
-        updateDoc(doc(db, "orders", activeOrder.id), { status: "cooking" }); return;
+        updateOrderStatus(activeOrder, "cooking", { by: "store" }); return;
       }
       if ((e.key === "f" || e.key === "F") && st === "cooking") {
-        updateDoc(doc(db, "orders", activeOrder.id), { status: "ready_for_delivery" }); return;
+        updateOrderStatus(activeOrder, "ready_for_delivery", { by: "store" }); return;
       }
       if ((e.key === "d" || e.key === "D") && (st === "ready_for_delivery" || st === "picked_up")) {
         const nx = NEXT_ACTION[st];
-        if (nx) updateDoc(doc(db, "orders", activeOrder.id), { status: nx.to });
+        if (nx) updateOrderStatus(activeOrder, nx.to, { by: "store" });
         return;
       }
       if ((e.key === "c" || e.key === "C") && st === "delivering") {
-        updateDoc(doc(db, "orders", activeOrder.id), { status: "completed" }); return;
+        updateOrderStatus(activeOrder, "completed", { by: "store" }); return;
       }
     };
     document.addEventListener("keydown", handler);
@@ -1826,26 +1826,22 @@ export function Orders() {
 
   const selectedOrders = useMemo(() => orders.filter((o) => selected.has(o.id)), [orders, selected]);
 
+  // Bulk actions route each order through the engine (Phase 3.8B) — no batch write.
   const bulkAccept = async () => {
     if (!selected.size) return;
-    const batch = writeBatch(db);
     // Skip orders whose payment isn't settled yet (non-cash awaiting approval).
-    selectedOrders.forEach((o) => { if (isPaymentSettled(o)) batch.update(doc(db, "orders", o.id), { status: "accepted" }); });
-    await batch.commit();
+    await Promise.all(selectedOrders.filter(isPaymentSettled)
+      .map((o) => updateOrderStatus(o, "accepted", { by: "store" })));
     setSelected(new Set());
   };
   const bulkReject = async () => {
     if (!selected.size) return;
-    const batch = writeBatch(db);
-    selected.forEach((id) => batch.update(doc(db, "orders", id), { status: "cancelled" }));
-    await batch.commit();
+    await Promise.all(selectedOrders.map((o) => cancelOrder(o, { by: "store" })));
     setSelected(new Set());
   };
   const bulkChangeStatus = async (to) => {
     if (!selected.size || !to) return;
-    const batch = writeBatch(db);
-    selected.forEach((id) => batch.update(doc(db, "orders", id), { status: to }));
-    await batch.commit();
+    await Promise.all(selectedOrders.map((o) => updateOrderStatus(o, to, { by: "store", force: true })));
     setSelected(new Set());
   };
   const bulkPrint = () => selectedOrders.forEach((o) => printReceipt(o));

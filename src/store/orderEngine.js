@@ -76,9 +76,9 @@ const stampFor = (to) => {
 
 // The ONLY place order.status changes for the delivery lifecycle. One write
 // carries status + milestone timestamp + timeline + audit; notifications fire after.
-export async function updateOrderStatus(order, to, { by = "", patch = {}, event = to } = {}) {
+export async function updateOrderStatus(order, to, { by = "", patch = {}, event = to, force = false } = {}) {
   if (!order?.id) return;
-  if (!validateTransition(order.status, to)) {
+  if (!force && !validateTransition(order.status, to)) {
     console.warn(`orderEngine: invalid transition ${order.status} -> ${to}`);
     return;
   }
