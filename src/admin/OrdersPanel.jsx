@@ -2,6 +2,7 @@ import { useState } from "react";
 import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
+import OrderTimeline from "../components/order/OrderTimeline.jsx";
 import { adminNormalizeStatus, formatDateTime, toDate } from "./adminUtils";
 import { updateOrderStatus, cancelOrder as engineCancelOrder } from "../store/orderEngine";
 import { setRefund } from "../payment/paymentService";
@@ -240,6 +241,12 @@ export default function OrdersPanel({ orders }) {
                 ))}
               </div>
             )}
+
+            {/* Global Timeline (Phase 4.0) — order.timeline event history, shared component */}
+            <div style={{ marginTop: "12px", borderTop: "1px solid #444", paddingTop: "10px" }}>
+              <p style={{ fontWeight: 700, marginBottom: "6px" }}>🕓 ไทม์ไลน์ออเดอร์</p>
+              <OrderTimeline order={selected} dark />
+            </div>
 
             <button
               onClick={() => setSelected(null)}

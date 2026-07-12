@@ -15,6 +15,7 @@ import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
 import TrackingPanel from "../../tracking/TrackingPanel.jsx";
 import MapButton from "../../location/MapButton.jsx";
+import OrderTimeline from "../../components/order/OrderTimeline.jsx";
 
 // Fallback store coordinates, used only until stores/{STORE_ID} loads (matches the
 // same fallback in src/App.jsx / src/TrackOrder.jsx).
@@ -553,6 +554,12 @@ export const OrderDetail = () => {
             })}
           </div>
         )}
+      </Card>
+
+      {/* Global Timeline (Phase 4.0) — full order.timeline event history, shared component */}
+      <Card className="p-6">
+        <SectionTitle>ประวัติออเดอร์</SectionTitle>
+        <OrderTimeline order={order} />
       </Card>
 
       {/* Rider — shown once a rider has accepted this delivery */}

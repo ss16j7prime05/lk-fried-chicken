@@ -59,6 +59,7 @@ import { updateOrderStatus, cancelOrder } from "../../store/orderEngine";
 import { approve as approvePayment, reject as rejectPayment } from "../../payment/paymentService";
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
 import OrderEditModal from "./OrderEditModal.jsx";
+import OrderTimeline from "../../components/order/OrderTimeline.jsx";
 
 /* ═══════════════════════ constants ═══════════════════════ */
 export const TABS = [
@@ -1150,6 +1151,11 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
                 </div>
               )}
             </div>
+          </Section>
+
+          {/* Global Timeline (Phase 4.0) — order.timeline event history, shared component */}
+          <Section title="History" defaultOpen={false}>
+            <OrderTimeline order={order} />
           </Section>
         </div>
 
