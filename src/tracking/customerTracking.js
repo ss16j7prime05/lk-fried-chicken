@@ -10,6 +10,7 @@ import { db } from "../firebase";
 import { calculateDistance, calculateETA } from "../location/mapsService";
 import { subscribeRiderLocation } from "../rider/riderLocationService";
 import { useFeatureFlags } from "../featureFlags";
+import { logError } from "../errorCenter";
 
 // Subscribe to an order's live rider location (reuses the existing order listener
 // pattern). cb gets { riderLocation, riderId, estimatedArrival, remainingDistance }.
@@ -28,7 +29,7 @@ export function subscribeOrderLocation(orderId, cb) {
       estimatedArrival: rl?.estimatedArrival ?? null,
       remainingDistance: rl?.remainingDistance ?? null,
     });
-  });
+  }, (e) => logError(e, "subscribeOrderLocation"));
 }
 
 // Straight-line remaining distance (km). Reuses mapsService (haversine SSOT).

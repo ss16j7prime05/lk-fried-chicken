@@ -9,6 +9,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { getAnalytics } from "../analytics";
 import { useFeatureFlags } from "../featureFlags";
+import { logError } from "../errorCenter";
 
 const riderLoc = (u) => (u?.currentLocation?.lat != null
   ? { lat: u.currentLocation.lat, lng: u.currentLocation.lng }
@@ -18,19 +19,19 @@ const riderLoc = (u) => (u?.currentLocation?.lat != null
 export function subscribeRiders(cb) {
   return onSnapshot(collection(db, "users"), (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => u.role === "rider"));
-  });
+  }, (e) => logError(e, "subscribeRiders"));
 }
 
 export function subscribeStores(cb) {
   return onSnapshot(collection(db, "stores"), (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, (e) => logError(e, "subscribeStores"));
 }
 
 export function subscribeOrders(cb) {
   return onSnapshot(collection(db, "orders"), (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, (e) => logError(e, "subscribeOrders"));
 }
 
 // Combine all three into one fleet subscription. Returns a cleanup that stops all.

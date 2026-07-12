@@ -14,6 +14,7 @@ import { normalizeStatus } from "../store/orderStatus";
 import { subscribeRiderLocation } from "../rider/riderLocationService";
 import { calculateRemainingDistance } from "./customerTracking";
 import { useFeatureFlags } from "../featureFlags";
+import { logError } from "../errorCenter";
 
 // Rider is actively en route for these statuses.
 const ACTIVE = new Set(["picked_up", "delivering"]);
@@ -39,7 +40,7 @@ export function subscribeAssignedOrders(cb) {
   const q = query(collection(db, "orders"), where("storeId", "==", STORE_ID));
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isAssignedActive));
-  });
+  }, (e) => logError(e, "subscribeAssignedOrders"));
 }
 
 // Fan-out to each assigned rider's live location. Reuses riderLocationService
@@ -57,7 +58,7 @@ export function subscribeCustomerLocation(orderId, cb) {
   if (!orderId) return () => {};
   return onSnapshot(doc(db, "orders", orderId), (snap) => {
     cb(snap.exists() ? customerDest(snap.data()) : null);
-  });
+  }, (e) => logError(e, "subscribeCustomerLocation"));
 }
 
 // Pure view model for the map. Reuses customerTracking distance (-> mapsService).

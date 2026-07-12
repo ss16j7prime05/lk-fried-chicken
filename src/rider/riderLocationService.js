@@ -9,6 +9,7 @@ import { doc, updateDoc, onSnapshot, serverTimestamp } from "firebase/firestore"
 import { db } from "../firebase";
 import { watchLocation, stopWatching } from "../location/mapsService";
 import { useFeatureFlags } from "../featureFlags";
+import { logError } from "../errorCenter";
 
 const riderRef = (riderId) => doc(db, "users", riderId);
 
@@ -51,7 +52,7 @@ export function subscribeRiderLocation(riderId, cb) {
       accuracy: d.accuracy ?? null,
       updatedAt: d.updatedAt || null,
     } : null);
-  });
+  }, (e) => logError(e, "subscribeRiderLocation"));
 }
 
 // Hook: read a rider's live location, and optionally broadcast this device's GPS.
