@@ -60,6 +60,7 @@ import { approve as approvePayment, reject as rejectPayment } from "../../paymen
 import { PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, STORE_ID } from "../../config";
 import OrderEditModal from "./OrderEditModal.jsx";
 import OrderTimeline from "../../components/order/OrderTimeline.jsx";
+import AuditLog from "../../components/order/AuditLog.jsx";
 
 /* ═══════════════════════ constants ═══════════════════════ */
 export const TABS = [
@@ -1156,6 +1157,11 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
           {/* Global Timeline (Phase 4.0) — order.timeline event history, shared component */}
           <Section title="History" defaultOpen={false}>
             <OrderTimeline order={order} />
+          </Section>
+
+          {/* Audit Log (Phase 4.1) — read-only order.audit trail, shared component */}
+          <Section title="Audit Log" defaultOpen={false}>
+            <AuditLog order={order} />
           </Section>
         </div>
 

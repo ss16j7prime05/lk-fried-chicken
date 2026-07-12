@@ -16,6 +16,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import TrackingPanel from "../../tracking/TrackingPanel.jsx";
 import MapButton from "../../location/MapButton.jsx";
 import OrderTimeline from "../../components/order/OrderTimeline.jsx";
+import AuditLog from "../../components/order/AuditLog.jsx";
 
 // Fallback store coordinates, used only until stores/{STORE_ID} loads (matches the
 // same fallback in src/App.jsx / src/TrackOrder.jsx).
@@ -560,6 +561,12 @@ export const OrderDetail = () => {
       <Card className="p-6">
         <SectionTitle>ประวัติออเดอร์</SectionTitle>
         <OrderTimeline order={order} />
+      </Card>
+
+      {/* Audit Log (Phase 4.1) — read-only order.audit trail, shared component */}
+      <Card className="p-6">
+        <SectionTitle>บันทึกการตรวจสอบ</SectionTitle>
+        <AuditLog order={order} />
       </Card>
 
       {/* Rider — shown once a rider has accepted this delivery */}

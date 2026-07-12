@@ -3,6 +3,7 @@ import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import PaymentStatusBadge from "../payment/PaymentStatusBadge.jsx";
 import OrderTimeline from "../components/order/OrderTimeline.jsx";
+import AuditLog from "../components/order/AuditLog.jsx";
 import { adminNormalizeStatus, formatDateTime, toDate } from "./adminUtils";
 import { updateOrderStatus, cancelOrder as engineCancelOrder } from "../store/orderEngine";
 import { setRefund } from "../payment/paymentService";
@@ -246,6 +247,12 @@ export default function OrdersPanel({ orders }) {
             <div style={{ marginTop: "12px", borderTop: "1px solid #444", paddingTop: "10px" }}>
               <p style={{ fontWeight: 700, marginBottom: "6px" }}>🕓 ไทม์ไลน์ออเดอร์</p>
               <OrderTimeline order={selected} dark />
+            </div>
+
+            {/* Audit Log (Phase 4.1) — read-only order.audit trail, shared component */}
+            <div style={{ marginTop: "12px", borderTop: "1px solid #444", paddingTop: "10px" }}>
+              <p style={{ fontWeight: 700, marginBottom: "6px" }}>🔎 บันทึกการตรวจสอบ</p>
+              <AuditLog order={selected} dark />
             </div>
 
             <button

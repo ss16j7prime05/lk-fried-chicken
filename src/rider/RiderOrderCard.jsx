@@ -19,6 +19,7 @@ import {
 import { formatDate } from "./riderFormat";
 import { notifyCustomer, NOTIF_TYPE } from "../notifications/notificationUtils";
 import OrderTimeline from "../components/order/OrderTimeline.jsx";
+import AuditLog from "../components/order/AuditLog.jsx";
 
 const GPS_UPDATE_INTERVAL_MS = 5000;
 
@@ -302,6 +303,14 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         <div className="mt-3 pt-3 border-t border-gray-100">
           <p className="text-xs font-black text-gray-400 mb-2">History</p>
           <OrderTimeline order={order} />
+        </div>
+      )}
+
+      {/* Audit Log (Phase 4.1) — read-only order.audit trail, shared component */}
+      {Array.isArray(order.audit) && order.audit.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-xs font-black text-gray-400 mb-2">Audit Log</p>
+          <AuditLog order={order} />
         </div>
       )}
 
