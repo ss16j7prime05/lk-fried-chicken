@@ -19,6 +19,7 @@ export const DEFAULT_FLAGS = {
   enableMaintenance: false,
   enableStoreRegister: true,
   enableRiderRegister: true,
+  enableAutoDispatch: false,
 };
 
 // Merge defaults <- config.features. Single resolver reused by both the async check
