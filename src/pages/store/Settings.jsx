@@ -81,15 +81,15 @@ const PAYMENT_METHODS = [
 // with Customer Checkout). PAYMENT_METHODS below only adds the editor's icons/labels.
 
 const DAY_LABELS = {
-  mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
-  fri: "Friday", sat: "Saturday", sun: "Sunday",
+  mon: "ss.dayMon", tue: "ss.dayTue", wed: "ss.dayWed", thu: "ss.dayThu",
+  fri: "ss.dayFri", sat: "ss.daySat", sun: "ss.daySun",
 };
 const DEFAULT_RANGE = { open: "10:00", close: "21:00" };
 
 const STATUS_META = {
-  open:         { label: "Open",         cls: "bg-green-100 text-green-700" },
-  closing_soon: { label: "Closing Soon", cls: "bg-amber-100 text-amber-700" },
-  closed:       { label: "Closed",       cls: "bg-red-100 text-red-600" },
+  open:         { labelKey: "ss.statusOpen",         cls: "bg-green-100 text-green-700" },
+  closing_soon: { labelKey: "ss.statusClosingSoon", cls: "bg-amber-100 text-amber-700" },
+  closed:       { labelKey: "ss.statusClosed",       cls: "bg-red-100 text-red-600" },
 };
 
 // LINE MAN-style grouped settings menu. Each item routes to a section within this same
@@ -385,7 +385,7 @@ function ImageUpload({ label, value, previewClass, uploading, error, onSelect, o
 }
 
 /* ─── Time-range row (one open–close slot) ─── */
-function TimeRangeRow({ range, onChange, onRemove }) {
+function TimeRangeRow({ range, onChange, onRemove, t }) {
   const timeCls =
     "px-3 py-2.5 min-h-[44px] rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all";
   return (
@@ -396,7 +396,7 @@ function TimeRangeRow({ range, onChange, onRemove }) {
       <button
         type="button"
         onClick={onRemove}
-        aria-label="Remove time slot"
+        aria-label={t("ss.removeSlot")}
         className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
       >
         <Trash2 size={16} />
@@ -406,7 +406,7 @@ function TimeRangeRow({ range, onChange, onRemove }) {
 }
 
 /* ─── Weekly hours editor (per-day, multiple slots) ─── */
-function DayHoursEditor({ hours, onChange }) {
+function DayHoursEditor({ hours, onChange, t }) {
   const setDay = (day, ranges) => onChange({ ...hours, [day]: ranges });
   return (
     <div className="space-y-3">
@@ -416,10 +416,10 @@ function DayHoursEditor({ hours, onChange }) {
         return (
           <div key={day} className="pb-3 border-b border-gray-50 last:border-0 last:pb-0">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-bold text-gray-800">{DAY_LABELS[day]}</span>
+              <span className="text-sm font-bold text-gray-800">{t(DAY_LABELS[day])}</span>
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-bold ${dayOpen ? "text-gray-400" : "text-red-400"}`}>
-                  {dayOpen ? "Open" : "Closed"}
+                  {dayOpen ? t("ss.dayOpen") : t("ss.dayClosed")}
                 </span>
                 <Toggle value={dayOpen} onChange={(v) => setDay(day, v ? [{ ...DEFAULT_RANGE }] : [])} />
               </div>
@@ -432,6 +432,7 @@ function DayHoursEditor({ hours, onChange }) {
                     range={r}
                     onChange={(nr) => setDay(day, ranges.map((x, j) => (j === i ? nr : x)))}
                     onRemove={() => setDay(day, ranges.filter((_, j) => j !== i))}
+                    t={t}
                   />
                 ))}
                 <button
@@ -439,7 +440,7 @@ function DayHoursEditor({ hours, onChange }) {
                   onClick={() => setDay(day, [...ranges, { ...DEFAULT_RANGE }])}
                   className="flex items-center gap-1.5 text-xs font-black text-primary hover:text-primary-dark transition-colors"
                 >
-                  <Plus size={14} /> Add time slot
+                  <Plus size={14} /> {t("ss.addSlot")}
                 </button>
               </div>
             )}
@@ -451,7 +452,7 @@ function DayHoursEditor({ hours, onChange }) {
 }
 
 /* ─── Holidays editor (add single/multi-day, list, remove) ─── */
-function HolidaysEditor({ holidays, onChange }) {
+function HolidaysEditor({ holidays, onChange, t }) {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [name, setName] = useState("");
@@ -474,7 +475,7 @@ function HolidaysEditor({ holidays, onChange }) {
           {holidays.map((h) => (
             <div key={h.id} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-gray-50 border border-gray-100">
               <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-800 truncate">{h.name || "Holiday"}</p>
+                <p className="text-sm font-bold text-gray-800 truncate">{h.name || t("ss.holiday")}</p>
                 <p className="text-xs text-gray-400 font-medium">
                   {h.start}{h.end && h.end !== h.start ? ` → ${h.end}` : ""}
                 </p>
@@ -482,7 +483,7 @@ function HolidaysEditor({ holidays, onChange }) {
               <button
                 type="button"
                 onClick={() => remove(h.id)}
-                aria-label="Remove holiday"
+                aria-label={t("ss.removeHoliday")}
                 className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
               >
                 <Trash2 size={16} />
@@ -494,22 +495,22 @@ function HolidaysEditor({ holidays, onChange }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">From</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("ss.from")}</label>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={`mt-1.5 ${dateCls}`} />
         </div>
         <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">To (optional)</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("ss.toOptional")}</label>
           <input type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} className={`mt-1.5 ${dateCls}`} />
         </div>
       </div>
-      <FieldInput value={name} onChange={setName} placeholder="Holiday name (e.g. Songkran)" />
+      <FieldInput value={name} onChange={setName} placeholder={t("ss.holidayNamePh")} />
       <button
         type="button"
         onClick={add}
         disabled={!start}
         className="flex items-center justify-center gap-2 w-full py-3 min-h-[44px] rounded-xl border-2 border-primary text-primary font-black hover:bg-primary/5 disabled:opacity-40 transition-colors text-sm"
       >
-        <Plus size={16} /> Add Holiday
+        <Plus size={16} /> {t("ss.addHoliday")}
       </button>
     </div>
   );
@@ -682,7 +683,7 @@ export function Settings() {
     setIsOpen(v);
     try {
       await updateDoc(doc(db, "stores", STORE_ID), { isOpen: v });
-    } catch { alert("Save failed. Please try again."); }
+    } catch { alert(t("ss.saveFailed")); }
   };
 
   /* ── opening-hours save (hours + delivery + holidays) ── */
@@ -692,7 +693,7 @@ export function Settings() {
       await updateDoc(doc(db, "stores", STORE_ID), { storeHours, deliveryHours, holidays });
       setSavedHours(true);
       setTimeout(() => setSavedHours(false), 2500);
-    } catch { alert("Save failed. Please try again."); }
+    } catch { alert(t("ss.saveFailed")); }
     finally { setSavingHours(false); }
   };
 
@@ -824,7 +825,7 @@ export function Settings() {
       await updateDoc(doc(db, "stores", STORE_ID), patch);
       setSavedStore(true);
       setTimeout(() => setSavedStore(false), 2500);
-    } catch { alert("Save failed. Please try again."); }
+    } catch { alert(t("ss.saveFailed")); }
     finally { setSavingStore(false); }
   };
 
@@ -835,7 +836,7 @@ export function Settings() {
       await updateDoc(doc(db, "stores", STORE_ID), { notificationSettings: notif });
       setSavedNotif(true);
       setTimeout(() => setSavedNotif(false), 2500);
-    } catch { alert("Save failed. Please try again."); }
+    } catch { alert(t("ss.saveFailed")); }
     finally { setSavingNotif(false); }
   };
 
@@ -884,7 +885,7 @@ export function Settings() {
       await updateDoc(doc(db, "stores", STORE_ID), { paymentSettings: clean });
       setSavedPay(true);
       setTimeout(() => setSavedPay(false), 2500);
-    } catch { alert("Save failed. Please try again."); }
+    } catch { alert(t("ss.saveFailed")); }
     finally { setSavingPay(false); }
   };
 
@@ -1284,13 +1285,13 @@ export function Settings() {
 
       {/* ── Open / Close Store (master switch) ── */}
       {sec === "open-close" && (
-      <SettingSection icon={Power} title="Store Status" description="Master switch — pauses new orders instantly when closed">
+      <SettingSection icon={Power} title={t("ss.storeStatus")} description={t("ss.storeStatusDesc")}>
         <SettingRow
-          label={isOpen ? "Store is Open" : "Store is Closed"}
-          description={isOpen ? "Accepting new orders" : "Customers can't order; riders get no new jobs"}
+          label={isOpen ? t("ss.storeIsOpen") : t("ss.storeIsClosed")}
+          description={isOpen ? t("ss.acceptingOrders") : t("ss.notAcceptingOrders")}
         >
           <div className="flex items-center gap-3">
-            <span className={`text-xs font-black px-3 py-1.5 rounded-full ${statusMeta.cls}`}>{statusMeta.label}</span>
+            <span className={`text-xs font-black px-3 py-1.5 rounded-full ${statusMeta.cls}`}>{t(statusMeta.labelKey)}</span>
             <Toggle value={isOpen} onChange={handleToggleOpen} />
           </div>
         </SettingRow>
@@ -1299,18 +1300,18 @@ export function Settings() {
 
       {/* ── Opening Hours (store + delivery + holidays) ── */}
       {sec === "hours" && (<>
-      <SettingSection icon={Clock} title="Store Hours" description="Weekly storefront hours — add several slots per day (e.g. break for lunch)">
-        <DayHoursEditor hours={storeHours} onChange={setStoreHours} />
+      <SettingSection icon={Clock} title={t("ss.storeHoursTitle")} description={t("ss.storeHoursDesc")}>
+        <DayHoursEditor hours={storeHours} onChange={setStoreHours} t={t} />
       </SettingSection>
 
       {/* ── Delivery Hours ── */}
-      <SettingSection icon={Truck} title="Delivery Hours" description="When customers can place delivery orders — set separately from store hours">
-        <DayHoursEditor hours={deliveryHours} onChange={setDeliveryHours} />
+      <SettingSection icon={Truck} title={t("ss.deliveryHoursTitle")} description={t("ss.deliveryHoursDesc")}>
+        <DayHoursEditor hours={deliveryHours} onChange={setDeliveryHours} t={t} />
       </SettingSection>
 
       {/* ── Special Holidays ── */}
-      <SettingSection icon={CalendarX} title="Special Holidays" description="Close on specific dates — single day or a range; remove to reopen">
-        <HolidaysEditor holidays={holidays} onChange={setHolidays} />
+      <SettingSection icon={CalendarX} title={t("ss.specialHolidays")} description={t("ss.specialHolidaysDesc")}>
+        <HolidaysEditor holidays={holidays} onChange={setHolidays} t={t} />
       </SettingSection>
 
       {/* Save all opening-hours settings */}
@@ -1319,15 +1320,15 @@ export function Settings() {
         disabled={savingHours}
         className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm"
       >
-        {savingHours ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedHours ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Opening Hours</>}
+        {savingHours ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedHours ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("ss.saveOpeningHours")}</>}
       </button>
       </>)}
 
       {/* ── Notifications (sound + night mode + receipt) ── */}
       {sec === "notifications" && (<>
-      <SettingSection icon={Bell} title="Notification Sound" description="Order alert alarm — saved to cloud, applies to all devices">
+      <SettingSection icon={Bell} title={t("ss.notifSound")} description={t("ss.notifSoundDesc")}>
         {/* Master enable */}
-        <SettingRow label="Enable Order Alert" description="Play alarm when a new order arrives">
+        <SettingRow label={t("ss.enableAlert")} description={t("ss.enableAlertDesc")}>
           <Toggle value={notif.enabled} onChange={(v) => setN("enabled", v)} />
         </SettingRow>
 
@@ -1335,13 +1336,13 @@ export function Settings() {
           <>
             {/* Volume */}
             <div className="pt-4 border-t border-gray-50">
-              <p className="text-sm font-bold text-gray-800 mb-3">Alert Volume</p>
+              <p className="text-sm font-bold text-gray-800 mb-3">{t("ss.alertVolume")}</p>
               <VolumePicker value={notif.volume} onChange={(v) => setN("volume", v)} />
             </div>
 
             {/* Sound type */}
             <div className="pt-4 border-t border-gray-50">
-              <p className="text-sm font-bold text-gray-800 mb-3">Alarm Sound</p>
+              <p className="text-sm font-bold text-gray-800 mb-3">{t("ss.alarmSound")}</p>
               <SoundSelector value={notif.sound} onChange={(v) => setN("sound", v)} />
             </div>
 
@@ -1352,7 +1353,7 @@ export function Settings() {
               className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl border-2 border-primary text-primary font-black hover:bg-primary/5 disabled:opacity-50 transition-colors text-sm"
             >
               <Play size={16} />
-              {testingSound ? "Playing…" : "Test Sound"}
+              {testingSound ? t("ss.playing") : t("ss.testSound")}
             </button>
           </>
         )}
@@ -1363,13 +1364,13 @@ export function Settings() {
           disabled={savingNotif}
           className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm"
         >
-          {savingNotif ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedNotif ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Sound Settings</>}
+          {savingNotif ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedNotif ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("ss.saveSoundSettings")}</>}
         </button>
       </SettingSection>
 
       {/* ── Night Mode ── */}
-      <SettingSection icon={Moon} title="Night Mode" description="Automatically reduce alarm volume during late hours">
-        <SettingRow label="Enable Night Mode" description="Lower volume between set times">
+      <SettingSection icon={Moon} title={t("ss.nightMode")} description={t("ss.nightModeDesc")}>
+        <SettingRow label={t("ss.enableNightMode")} description={t("ss.enableNightModeDesc")}>
           <Toggle value={notif.nightMode?.enabled ?? false} onChange={(v) => setNM("enabled", v)} />
         </SettingRow>
 
@@ -1377,7 +1378,7 @@ export function Settings() {
           <>
             <div className="pt-4 border-t border-gray-50 grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Start Time</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("ss.startTime")}</label>
                 <input
                   type="time"
                   value={notif.nightMode?.startTime || "22:00"}
@@ -1386,7 +1387,7 @@ export function Settings() {
                 />
               </div>
               <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">End Time</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("ss.endTime")}</label>
                 <input
                   type="time"
                   value={notif.nightMode?.endTime || "07:00"}
@@ -1397,7 +1398,7 @@ export function Settings() {
             </div>
 
             <div className="pt-4 border-t border-gray-50">
-              <p className="text-sm font-bold text-gray-800 mb-3">Night Volume</p>
+              <p className="text-sm font-bold text-gray-800 mb-3">{t("ss.nightVolume")}</p>
               <VolumePicker value={notif.nightMode?.volume ?? 30} onChange={(v) => setNM("volume", v)} />
             </div>
           </>
@@ -1408,22 +1409,22 @@ export function Settings() {
           disabled={savingNotif}
           className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 transition-colors text-sm"
         >
-          {savingNotif ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : savedNotif ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Night Mode</>}
+          {savingNotif ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedNotif ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("ss.saveNightMode")}</>}
         </button>
       </SettingSection>
 
       {/* ── Printing ── */}
-      <SettingSection icon={Printer} title="Receipt Printing" description="Configure receipt size and auto-print behavior">
-        <SettingRow label="Auto-print on Accept" description="Automatically print receipt when accepting an order">
+      <SettingSection icon={Printer} title={t("ss.receiptPrinting")} description={t("ss.receiptPrintingDesc")}>
+        <SettingRow label={t("ss.autoPrint")} description={t("ss.autoPrintDesc")}>
           <Toggle value={autoPrint} onChange={handleAutoPrint} />
         </SettingRow>
         <div className="pt-2 border-t border-gray-50">
-          <SettingRow label="Auto-scroll to New Orders" description="Scroll order list to newest items">
+          <SettingRow label={t("ss.autoScroll")} description={t("ss.autoScrollDesc")}>
             <Toggle value={autoScroll} onChange={handleAutoScroll} />
           </SettingRow>
         </div>
         <div className="pt-2 border-t border-gray-50">
-          <SettingRow label="Default Receipt Size" description="Paper size for thermal printer">
+          <SettingRow label={t("ss.defaultReceiptSize")} description={t("ss.defaultReceiptSizeDesc")}>
             <select
               value={printSize}
               onChange={(e) => handlePrintSize(e.target.value)}
@@ -1431,7 +1432,7 @@ export function Settings() {
             >
               <option value="58mm">58mm</option>
               <option value="80mm">80mm</option>
-              <option value="a4">A4 Invoice</option>
+              <option value="a4">{t("ss.a4Invoice")}</option>
             </select>
           </SettingRow>
         </div>
@@ -1440,17 +1441,17 @@ export function Settings() {
 
       {/* ── Account ── */}
       {sec === "account" && (
-      <SettingSection icon={User} title="My Account" description="Your store manager account">
-        <SettingRow label="Email" description="Login email address">
+      <SettingSection icon={User} title={t("ss.myAccountTitle")} description={t("ss.myAccountDesc")}>
+        <SettingRow label={t("ss.emailLabel")} description={t("ss.emailDesc")}>
           <span className="text-sm font-bold text-gray-500">{profile?.email || "—"}</span>
         </SettingRow>
         <div className="pt-2 border-t border-gray-50">
-          <SettingRow label="Role" description="Account role in the system">
-            <span className="text-xs font-bold px-3 py-1.5 bg-primary/10 text-primary rounded-full">Store Manager</span>
+          <SettingRow label={t("ss.roleLabel")} description={t("ss.roleDesc")}>
+            <span className="text-xs font-bold px-3 py-1.5 bg-primary/10 text-primary rounded-full">{t("ss.storeManager")}</span>
           </SettingRow>
         </div>
         <div className="pt-2 border-t border-gray-50">
-          <SettingRow label="Store ID" description="Firestore document ID">
+          <SettingRow label={t("ss.storeIdLabel")} description={t("ss.storeIdDesc")}>
             <span className="text-xs font-mono text-gray-400">{STORE_ID}</span>
           </SettingRow>
         </div>
