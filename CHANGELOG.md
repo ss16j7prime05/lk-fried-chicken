@@ -1,0 +1,34 @@
+# CHANGELOG — LK Fried Chicken
+
+> บันทึกการเปลี่ยนแปลงสำคัญ เรียงจากใหม่ไปเก่า (รูปแบบอิง [Keep a Changelog])
+> อัปเดตทุกครั้งหลังจบงาน (ดูกฎใน `CLAUDE.md`)
+
+## [Unreleased]
+
+### Added
+- `CLAUDE.md` — กฎหลักและ Single Source of Truth ของโปรเจกต์
+- `TODO.md` — ระบบติดตามงานค้าง
+- `CHANGELOG.md` — บันทึกการเปลี่ยนแปลง
+- i18n keys ใหม่: `sm.*` (Menu), `so.*` (Orders + Kitchen cards), `soe.*` (Order Edit modal) ครบทั้ง EN/TH
+
+### Changed (i18n — Store)
+- **Orders page** (`src/pages/store/Orders.jsx`): แปลข้อความ hardcoded English ทั้งหมดเป็น i18n
+  รวมถึง KitchenView/KitchenCard ที่ Kitchen page ใช้ร่วม (`so.*`)
+- **Menu page** (`src/pages/store/Menu.jsx`): แปลทั้งหน้าเป็น i18n (`sm.*`)
+- **Order Edit modal** (`src/pages/store/OrderEditModal.jsx`): แปลทั้ง modal (`soe.*`, reuse `oe.reason.*`)
+- คงข้อความอังกฤษไว้เฉพาะเอกสารสำหรับพิมพ์ (ใบเสร็จ/ใบครัว thermal) และ CSV export ตามเจตนาเดิม
+
+### Notes
+- Build ผ่าน, ESLint = 0 new errors (baseline 64 problems เท่าเดิมก่อน/หลังแก้)
+- QA อัตโนมัติ: ตรวจแล้วทุก key ที่ใช้ (325 keys) มีครบทั้ง EN และ TH — ไม่มี fallback เป็นอังกฤษเมื่อเลือกภาษาไทย
+
+---
+
+## ประวัติก่อนหน้า (จาก Git history)
+- `f57dbed` Production update
+- `bced975` i18n(store): translate all remaining hardcoded English in Settings
+- `6f9a9e2` fix(store): single Social section under Basic Info; consolidate settings persistence
+- `ca141e6` fix(store,rider): upload UX, theme selector, remove facilities, mobile responsive
+- `7af247f` feat(notifications): Phase 6.0D LINE Rich Menu helper (SSOT)
+
+[Keep a Changelog]: https://keepachangelog.com/
