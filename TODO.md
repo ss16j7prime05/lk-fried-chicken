@@ -9,6 +9,8 @@
 - _(ยังไม่มี — เพิ่มรายการเมื่อพบงาน)_
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-14 แก้ Store Settings save regression: `updateDoc`→`setDoc(merge)` (5 จุด) + แก้ storage path
+  โลโก้/แบนเนอร์เป็น 2 ส่วนให้ผ่าน Storage rules — build ผ่าน, 0 new ESLint
 - 2026-07-14 สร้าง `CLAUDE.md`, `TODO.md`, `CHANGELOG.md` เป็นกฎหลักและระบบติดตามงานของโปรเจกต์
 - 2026-07-14 i18n Store: แปล Orders, Menu, Order Edit modal (+ Kitchen cards ที่ใช้ร่วม) เป็นภาษาไทยครบ
   โดยใช้ระบบ i18n เดิม (translations.js + usePreferences) — build ผ่าน, 0 new ESLint errors

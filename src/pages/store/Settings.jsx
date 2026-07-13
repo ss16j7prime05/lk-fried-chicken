@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import {
   Store, Bell, Printer, Shield, CheckCircle2, Save, Loader2,
@@ -682,7 +682,7 @@ export function Settings() {
   const handleToggleOpen = async (v) => {
     setIsOpen(v);
     try {
-      await updateDoc(doc(db, "stores", STORE_ID), { isOpen: v });
+      await setDoc(doc(db, "stores", STORE_ID), { isOpen: v }, { merge: true });
     } catch { alert(t("ss.saveFailed")); }
   };
 
@@ -690,7 +690,7 @@ export function Settings() {
   const handleSaveHours = async () => {
     setSavingHours(true);
     try {
-      await updateDoc(doc(db, "stores", STORE_ID), { storeHours, deliveryHours, holidays });
+      await setDoc(doc(db, "stores", STORE_ID), { storeHours, deliveryHours, holidays }, { merge: true });
       setSavedHours(true);
       setTimeout(() => setSavedHours(false), 2500);
     } catch { alert(t("ss.saveFailed")); }
@@ -699,7 +699,10 @@ export function Settings() {
 
   /* ── upload a file/blob to storage and return its URL ── */
   const uploadTo = async (data, kind, name) => {
-    const r = ref(storage, `stores/${STORE_ID}/${kind}_${Date.now()}_${name}`);
+    // Keep a two-segment object path (folder/file) so it matches the authenticated
+    // `/{folder}/{file}` Storage rule — same shape the Menu image upload uses. A
+    // three-segment path (stores/{id}/file) is denied by the rules and broke uploads.
+    const r = ref(storage, `stores/${STORE_ID}_${kind}_${Date.now()}_${name}`);
     await uploadBytes(r, data);
     return getDownloadURL(r);
   };
@@ -822,7 +825,7 @@ export function Settings() {
       // store location Customer/Rider depend on.
       if (Number.isFinite(latNum)) patch.lat = latNum;
       if (Number.isFinite(lngNum)) patch.lng = lngNum;
-      await updateDoc(doc(db, "stores", STORE_ID), patch);
+      await setDoc(doc(db, "stores", STORE_ID), patch, { merge: true });
       setSavedStore(true);
       setTimeout(() => setSavedStore(false), 2500);
     } catch { alert(t("ss.saveFailed")); }
@@ -833,7 +836,7 @@ export function Settings() {
   const handleSaveNotif = async () => {
     setSavingNotif(true);
     try {
-      await updateDoc(doc(db, "stores", STORE_ID), { notificationSettings: notif });
+      await setDoc(doc(db, "stores", STORE_ID), { notificationSettings: notif }, { merge: true });
       setSavedNotif(true);
       setTimeout(() => setSavedNotif(false), 2500);
     } catch { alert(t("ss.saveFailed")); }
@@ -882,7 +885,7 @@ export function Settings() {
           accountNumber: paySettings.bankTransfer.accountNumber.replace(/\D/g, ""),
         },
       });
-      await updateDoc(doc(db, "stores", STORE_ID), { paymentSettings: clean });
+      await setDoc(doc(db, "stores", STORE_ID), { paymentSettings: clean }, { merge: true });
       setSavedPay(true);
       setTimeout(() => setSavedPay(false), 2500);
     } catch { alert(t("ss.saveFailed")); }

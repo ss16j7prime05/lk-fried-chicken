@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### Fixed (Store Settings — save regression)
+- **Firestore save / Store status / Business Hours / Notif / E-Payment**: เปลี่ยนจาก `updateDoc`
+  เป็น `setDoc(..., { merge: true })` บน `stores/{STORE_ID}` — `updateDoc` โยน error เมื่อเอกสารร้าน
+  ยังไม่ถูกสร้าง ทำให้ทุกการบันทึกล้มเหลว (ตอนนี้ create-or-merge เหมือน StoresPanel/StoreDashboard)
+- **Image upload (โลโก้/แบนเนอร์)**: แก้ path ที่อัปโหลดจาก `stores/{id}/{file}` (3 ส่วน ซึ่งโดน
+  Storage rules ปฏิเสธ) เป็น `stores/{id}_{kind}_{ts}_{name}` (2 ส่วน folder/file) ให้ตรงกับ rule
+  `/{folder}/{file}` แบบเดียวกับการอัปโหลดรูปเมนู — ไม่ต้องแก้/deploy rules
+- ผลลัพธ์: ทุกส่วนของ Settings บันทึกได้ครบ (Profile / Images / Contact / Social / Location / Tax /
+  E-Payment / Business Hours / Open-Close)
+
 ### Added
 - `CLAUDE.md` — กฎหลักและ Single Source of Truth ของโปรเจกต์
 - `TODO.md` — ระบบติดตามงานค้าง
