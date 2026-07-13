@@ -10,7 +10,7 @@ import {
   ChevronRight, ChevronLeft, Wrench, AlertCircle,
   Link2, MessageCircle, AtSign, Music2, Copy, Check,
   Receipt,
-  Mail, ExternalLink, PhoneCall,
+  Mail, PhoneCall,
   Banknote, QrCode, Landmark,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
@@ -36,7 +36,6 @@ const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n <= hi;
 /* ─── contact action links (pure helpers) ─── */
 const telHref = (v) => { const s = String(v || "").replace(/[\s-]/g, ""); return s ? `tel:${s}` : ""; };
 const mailHref = (v) => { const s = String(v || "").trim(); return s ? `mailto:${s}` : ""; };
-const urlHref = (v) => { const s = String(v || "").trim(); return s ? (/^https?:\/\//i.test(s) ? s : `https://${s}`) : ""; };
 // LINE: accept a full URL, an @id, or a bare id → deep link to the LINE profile.
 const lineHref = (v) => {
   const s = String(v || "").trim();
@@ -50,12 +49,13 @@ const lineHref = (v) => {
 const EMPTY_SOCIAL = { facebook: "", line: "", instagram: "", tiktok: "", website: "" };
 const EMPTY_TAX = { taxId: "", companyName: "", branch: "" };
 
+// Single social source. LINE OA lives in Contact (richer open-LINE action) and is
+// edited via the same social.line field, so it is intentionally not repeated here.
 const SOCIAL_FIELDS = [
+  { key: "website",   icon: Globe,          labelKey: "si.website",   ph: "https://…" },
   { key: "facebook",  icon: Link2,          labelKey: "si.facebook",  ph: "https://facebook.com/…" },
-  { key: "line",      icon: MessageCircle,  labelKey: "si.line",      ph: "@yourlineid" },
   { key: "instagram", icon: AtSign,         labelKey: "si.instagram", ph: "@yourhandle" },
   { key: "tiktok",    icon: Music2,         labelKey: "si.tiktok",    ph: "@yourhandle" },
-  { key: "website",   icon: Globe,          labelKey: "si.website",   ph: "https://…" },
 ];
 
 /* ─── default settings ─── */
@@ -998,6 +998,27 @@ export function Settings() {
         </LabeledField>
       </SettingSection>
 
+      {/* Social Media (single social section — placed directly under Basic Information) */}
+      <SettingSection icon={Link2} title={t("si.secSocial")} description={t("si.secSocialDesc")}>
+        <div className="space-y-3">
+          {SOCIAL_FIELDS.map(({ key, icon: Icon, labelKey, ph }) => (
+            <div key={key} className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Icon size={16} className="text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <FieldInput
+                  value={social[key]}
+                  onChange={(v) => setSocial((p) => ({ ...p, [key]: v }))}
+                  placeholder={`${t(labelKey)} · ${ph}`}
+                  type="url"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </SettingSection>
+
       {/* Contact & Location */}
       <SettingSection icon={MapPin} title={t("si.secContact")} description={t("si.secContactDesc")}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1087,27 +1108,6 @@ export function Settings() {
               </button>
             ))}
           </div>
-        </div>
-      </SettingSection>
-
-      {/* Social Media */}
-      <SettingSection icon={Link2} title={t("si.secSocial")} description={t("si.secSocialDesc")}>
-        <div className="space-y-3">
-          {SOCIAL_FIELDS.map(({ key, icon: Icon, labelKey, ph }) => (
-            <div key={key} className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Icon size={16} className="text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <FieldInput
-                  value={social[key]}
-                  onChange={(v) => setSocial((p) => ({ ...p, [key]: v }))}
-                  placeholder={`${t(labelKey)} · ${ph}`}
-                  type="url"
-                />
-              </div>
-            </div>
-          ))}
         </div>
       </SettingSection>
 
@@ -1240,28 +1240,6 @@ export function Settings() {
             <LinkIconButton href={lineHref(social.line)} icon={MessageCircle} label={t("sc.openLine")} />
           </div>
         </LabeledField>
-      </SettingSection>
-
-      {/* Web & Social */}
-      <SettingSection icon={Globe} title={t("sc.secWeb")} description={t("sc.secWebDesc")}>
-        {[
-          { key: "website",   icon: Globe,     labelKey: "si.website",   ph: "https://…",              open: urlHref },
-          { key: "facebook",  icon: Link2,     labelKey: "si.facebook",  ph: "https://facebook.com/…", open: urlHref },
-          { key: "instagram", icon: AtSign,    labelKey: "si.instagram", ph: "@yourhandle",            open: urlHref },
-          { key: "tiktok",    icon: Music2,    labelKey: "si.tiktok",    ph: "@yourhandle",            open: urlHref },
-        ].map(({ key, icon: Icon, labelKey, ph, open }) => (
-          <LabeledField key={key} label={t(labelKey)}>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <FieldInput value={social[key]} onChange={(v) => setSocial((p) => ({ ...p, [key]: v }))} placeholder={ph} type="url" />
-              </div>
-              <LinkIconButton href={open(social[key])} icon={ExternalLink} label={t("sc.open")} />
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Icon size={16} className="text-primary" />
-              </div>
-            </div>
-          </LabeledField>
-        ))}
       </SettingSection>
 
       {Object.keys(errors).length > 0 && (
