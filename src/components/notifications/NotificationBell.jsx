@@ -9,6 +9,7 @@ import {
 import { usePreferences } from "../../context/PreferencesContext";
 import { toDate } from "../../store/orderStatus";
 import { useNotifications } from "../../hooks/useNotifications";
+import { ensurePushPermission, pushNew } from "../../notifications/pushNotifications";
 import { getAlarmAudioCtx, playSound } from "../../store/alarmSounds";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -98,10 +99,16 @@ export function NotificationBell({ className = "" }) {
   const [soundOn, setSoundOn] = useState(loadSound);
   const sentinelRef = useRef(null);
 
-  // Play the existing alarm on genuinely-new notifications (after first load).
+  // Ask once for OS push permission (Phase 6.0A); gated internally, safe to repeat.
+  useEffect(() => { ensurePushPermission(); }, []);
+
+  // On genuinely-new notifications (after first load): existing alarm + native push.
   const handleNew = (added) => {
-    if (!loadSound() || !added.length) return;
-    try { playSound("lineman", getAlarmAudioCtx(), 0.6); } catch { /* autoplay blocked */ }
+    if (!added.length) return;
+    if (loadSound()) {
+      try { playSound("lineman", getAlarmAudioCtx(), 0.6); } catch { /* autoplay blocked */ }
+    }
+    pushNew(added); // native OS/browser push — FeatureFlags-gated inside
   };
   const { notifications, unreadCount, markRead, markAllRead, remove, clearAll } =
     useNotifications({ onNew: handleNew });
