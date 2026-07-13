@@ -3,13 +3,13 @@ import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import {
   Store, Bell, Printer, Shield, CheckCircle2, Save, Loader2,
-  Volume2, VolumeX, Moon, Play,
+  Volume2, VolumeX, Moon, Sun, Monitor, Play,
   Upload, Image as ImageIcon, MapPin, Clock,
   Power, Truck, CalendarX, Plus, Trash2,
   Phone, CreditCard, User, Users, Globe, HelpCircle, FileText, LogOut,
   ChevronRight, ChevronLeft, Wrench, AlertCircle,
   Link2, MessageCircle, AtSign, Music2, Copy, Check,
-  Wifi, ParkingCircle, PawPrint, Snowflake, Receipt,
+  Receipt,
   Mail, ExternalLink, PhoneCall,
   Banknote, QrCode, Landmark,
 } from "lucide-react";
@@ -48,7 +48,6 @@ const lineHref = (v) => {
 // Blank sub-objects — mirror the Firestore field shape so a missing doc field
 // never throws. Stored under stores/{STORE_ID} (no new collection).
 const EMPTY_SOCIAL = { facebook: "", line: "", instagram: "", tiktok: "", website: "" };
-const EMPTY_FACILITIES = { wifi: false, parking: false, petFriendly: false, airCondition: false };
 const EMPTY_TAX = { taxId: "", companyName: "", branch: "" };
 
 const SOCIAL_FIELDS = [
@@ -57,13 +56,6 @@ const SOCIAL_FIELDS = [
   { key: "instagram", icon: AtSign,         labelKey: "si.instagram", ph: "@yourhandle" },
   { key: "tiktok",    icon: Music2,         labelKey: "si.tiktok",    ph: "@yourhandle" },
   { key: "website",   icon: Globe,          labelKey: "si.website",   ph: "https://…" },
-];
-
-const FACILITY_FIELDS = [
-  { key: "wifi",         icon: Wifi,          labelKey: "si.wifi" },
-  { key: "parking",      icon: ParkingCircle, labelKey: "si.parking" },
-  { key: "petFriendly",  icon: PawPrint,      labelKey: "si.petFriendly" },
-  { key: "airCondition", icon: Snowflake,     labelKey: "si.airCondition" },
 ];
 
 /* ─── default settings ─── */
@@ -124,6 +116,7 @@ const MENU_GROUPS = [
   {
     titleKey: "ss.groupApp",
     items: [
+      { key: "appearance", icon: Moon,     labelKey: "settings.appearance" },
       { key: "language", icon: Globe,      labelKey: "ss.language" },
       { key: "help",     icon: HelpCircle, labelKey: "ss.help" },
       { key: "privacy",  icon: Shield,     labelKey: "ss.privacy" },
@@ -333,7 +326,27 @@ function LinkIconButton({ href, icon: Icon, label, external = true }) {
 }
 
 /* ─── Image upload (logo / banner) with preview, replace + delete ─── */
-function ImageUpload({ label, value, previewClass, uploading, onSelect, onDelete, t }) {
+/* ─── Inline upload error + retry (shared by logo & banner) ─── */
+function UploadError({ error, onRetry, t }) {
+  if (!error) return null;
+  return (
+    <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-xs font-bold text-red-600">
+      <AlertCircle size={14} className="flex-shrink-0" />
+      <span className="flex-1 min-w-0">{error}</span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex items-center gap-1 px-2.5 py-1.5 min-h-[32px] rounded-lg border border-red-200 text-red-600 hover:bg-red-100 transition-colors flex-shrink-0"
+        >
+          {t("si.retry")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ImageUpload({ label, value, previewClass, uploading, error, onSelect, onDelete, onRetry, t }) {
   return (
     <LabeledField label={label}>
       <div className="flex items-center gap-3">
@@ -343,7 +356,7 @@ function ImageUpload({ label, value, previewClass, uploading, onSelect, onDelete
             : <ImageIcon size={20} className="text-gray-300" />}
         </div>
         <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 px-4 py-2.5 min-h-[40px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
+          <label className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
             {uploading ? t("si.uploading") : value ? t("si.replace") : t("si.upload")}
             <input
@@ -359,13 +372,14 @@ function ImageUpload({ label, value, previewClass, uploading, onSelect, onDelete
               type="button"
               onClick={onDelete}
               disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2.5 min-h-[40px] rounded-xl border-2 border-gray-200 hover:border-red-400 text-gray-500 hover:text-red-500 text-sm font-bold transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-red-400 text-gray-500 hover:text-red-500 text-sm font-bold transition-colors disabled:opacity-50"
             >
               <Trash2 size={16} /> {t("si.delete")}
             </button>
           )}
         </div>
       </div>
+      <UploadError error={error} onRetry={onRetry} t={t} />
     </LabeledField>
   );
 }
@@ -552,7 +566,7 @@ function SoundSelector({ value, onChange }) {
 /* ─── Settings ─── */
 export function Settings() {
   const { profile, logout } = useAuth();
-  const { t, language, setLanguage } = usePreferences();
+  const { t, language, setLanguage, theme, setTheme } = usePreferences();
 
   // Which menu section is open (null = the grouped menu itself). Stays on the existing
   // /store/settings route — no new router routes.
@@ -575,10 +589,17 @@ export function Settings() {
   const [deliveryRadius, setDeliveryRadius] = useState(String(MAX_DELIVERY_RADIUS_KM));
   const [prepMinutes, setPrepMinutes] = useState(EST_PREP_MINUTES);
   const [social, setSocial] = useState(EMPTY_SOCIAL);
-  const [facilities, setFacilities] = useState(EMPTY_FACILITIES);
   const [tax, setTax] = useState(EMPTY_TAX);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  // Immediate local preview (object URL) shown while uploading; separate from the
+  // saved URL so an in-progress/failed upload never gets written to Firestore.
+  const [logoPreview, setLogoPreview] = useState("");
+  const [bannerPreview, setBannerPreview] = useState("");
+  const [logoErr, setLogoErr] = useState("");
+  const [bannerErr, setBannerErr] = useState("");
+  const [lastLogoFile, setLastLogoFile] = useState(null);
+  const [lastBannerBlob, setLastBannerBlob] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [cropFile, setCropFile] = useState(null);   // banner file awaiting crop
   const [errors, setErrors] = useState({});
@@ -633,7 +654,6 @@ export function Settings() {
       setDeliveryRadius(d.deliveryRadius != null ? String(d.deliveryRadius) : String(MAX_DELIVERY_RADIUS_KM));
       setPrepMinutes(d.prepMinutes != null ? d.prepMinutes : EST_PREP_MINUTES);
       setSocial({ ...EMPTY_SOCIAL, ...(d.social || {}) });
-      setFacilities({ ...EMPTY_FACILITIES, ...(d.facilities || {}) });
       setTax({ ...EMPTY_TAX, ...(d.tax || {}) });
       setIsOpen(d.isOpen !== false);
       setStoreHours(d.storeHours || {});
@@ -683,14 +703,22 @@ export function Settings() {
     return getDownloadURL(r);
   };
 
-  /* ── logo: upload directly ── */
+  /* ── logo: preview immediately, upload, keep preview + retry on failure ── */
   const handleUploadLogo = async (file) => {
     if (!file) return;
+    setLogoErr("");
+    setLastLogoFile(file);
+    setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
     setUploadingLogo(true);
     try {
-      setStoreLogo(await uploadTo(file, "logo", file.name));
-    } catch { alert("Upload failed. Please try again."); }
-    finally { setUploadingLogo(false); }
+      const url = await uploadTo(file, "logo", file.name);
+      setStoreLogo(url);
+      setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
+    } catch {
+      setLogoErr(t("si.uploadError"));
+    } finally {
+      setUploadingLogo(false); // always clears the "กำลังอัปโหลด" state
+    }
   };
 
   /* ── logo: delete (best-effort remove from storage + clear field) ── */
@@ -704,14 +732,23 @@ export function Settings() {
     } catch { /* file may be gone / not a storage URL — clearing the field is enough */ }
   };
 
-  /* ── banner: crop first, then upload the cropped blob ── */
+  /* ── banner: crop, preview immediately, upload, keep preview + retry on failure ── */
   const handleBannerCropped = async (blob) => {
+    if (!blob) return;
     setCropFile(null);
+    setBannerErr("");
+    setLastBannerBlob(blob);
+    setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
     setUploadingBanner(true);
     try {
-      setStoreBanner(await uploadTo(blob, "banner", "banner.jpg"));
-    } catch { alert("Upload failed. Please try again."); }
-    finally { setUploadingBanner(false); }
+      const url = await uploadTo(blob, "banner", "banner.jpg");
+      setStoreBanner(url);
+      setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
+    } catch {
+      setBannerErr(t("si.uploadError"));
+    } finally {
+      setUploadingBanner(false); // always clears the "กำลังอัปโหลด" state
+    }
   };
 
   /* ── map picker confirm ── */
@@ -750,7 +787,7 @@ export function Settings() {
       const radiusNum = parseFloat(deliveryRadius);
       // lat/lng/storeName/phone/address are the exact fields Customer (Checkout) and
       // Rider already read from stores/{STORE_ID} — kept identical so nothing breaks.
-      // description/social/facilities/tax are new fields on the same doc (no new collection).
+      // description/social/tax are new fields on the same doc (no new collection).
       const patch = {
         storeName:   storeName.trim() || "LK Fried Chicken",
         category:    storeCategory.trim(),
@@ -774,7 +811,6 @@ export function Settings() {
           tiktok:    social.tiktok.trim(),
           website:   social.website.trim(),
         },
-        facilities,
         tax: {
           taxId:       tax.taxId.replace(/[\s-]/g, ""),
           companyName: tax.companyName.trim(),
@@ -912,19 +948,21 @@ export function Settings() {
       <SettingSection icon={ImageIcon} title={t("si.secMedia")} description={t("si.secMediaDesc")}>
         <ImageUpload
           label={t("si.logo")}
-          value={storeLogo}
+          value={logoPreview || storeLogo}
           previewClass="w-16 h-16"
           uploading={uploadingLogo}
+          error={logoErr}
           onSelect={handleUploadLogo}
           onDelete={handleDeleteLogo}
+          onRetry={() => handleUploadLogo(lastLogoFile)}
           t={t}
         />
         {/* Banner: full-width preview + crop-on-select */}
         <LabeledField label={t("si.banner")}>
           <div className="space-y-3">
             <div className="w-full aspect-[2/1] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
-              {storeBanner
-                ? <img src={storeBanner} alt={t("si.banner")} className="w-full h-full object-cover" />
+              {(bannerPreview || storeBanner)
+                ? <img src={bannerPreview || storeBanner} alt={t("si.banner")} className="w-full h-full object-cover" />
                 : <ImageIcon size={24} className="text-gray-300" />}
             </div>
             <div className="flex gap-2">
@@ -940,6 +978,7 @@ export function Settings() {
                 />
               </label>
             </div>
+            <UploadError error={bannerErr} onRetry={() => lastBannerBlob && handleBannerCropped(lastBannerBlob)} t={t} />
           </div>
         </LabeledField>
       </SettingSection>
@@ -1069,34 +1108,6 @@ export function Settings() {
               </div>
             </div>
           ))}
-        </div>
-      </SettingSection>
-
-      {/* Facilities */}
-      <SettingSection icon={Wifi} title={t("si.secFacilities")} description={t("si.secFacilitiesDesc")}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {FACILITY_FIELDS.map(({ key, icon: Icon, labelKey }) => {
-            const on = !!facilities[key];
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setFacilities((p) => ({ ...p, [key]: !p[key] }))}
-                className={`flex items-center gap-3 p-4 min-h-[56px] rounded-xl border-2 text-left transition-colors
-                  ${on ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300 bg-white"}`}
-              >
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${on ? "bg-primary text-white" : "bg-gray-100 text-gray-400"}`}>
-                  <Icon size={16} />
-                </div>
-                <span className={`flex-1 text-sm font-bold ${on ? "text-primary" : "text-gray-700"}`}>{t(labelKey)}</span>
-                {/* presentational toggle (the whole row is the button — no nested button) */}
-                <span className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${on ? "bg-primary" : "bg-gray-300"}`}>
-                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? "translate-x-7" : "translate-x-1"}`} />
-                </span>
-              </button>
-            );
-          })}
         </div>
       </SettingSection>
 
@@ -1266,6 +1277,32 @@ export function Settings() {
         {savingStore ? <><Loader2 size={16} className="animate-spin" /> {t("si.saving")}</> : savedStore ? <><CheckCircle2 size={16} /> {t("si.saved")}</> : <><Save size={16} /> {t("si.save")}</>}
       </button>
       </>)}
+
+      {/* ── Appearance (Theme selector — reuses PreferencesContext setTheme, which
+             persists to localStorage + users/{uid}, so no new storage/schema) ── */}
+      {sec === "appearance" && (
+      <SettingSection icon={Moon} title={t("settings.theme")} description={t("settings.themeDesc")}>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { key: "light",  icon: Sun },
+            { key: "dark",   icon: Moon },
+            { key: "system", icon: Monitor },
+          ].map(({ key, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTheme(key)}
+              aria-pressed={theme === key}
+              className={`flex flex-col items-center justify-center gap-2 p-4 min-h-[72px] rounded-xl border-2 transition-colors
+                ${theme === key ? "border-primary bg-primary/5 text-primary" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+            >
+              <Icon size={20} />
+              <span className="text-sm font-bold">{t(`settings.${key}`)}</span>
+            </button>
+          ))}
+        </div>
+      </SettingSection>
+      )}
 
       {/* ── Open / Close Store (master switch) ── */}
       {sec === "open-close" && (

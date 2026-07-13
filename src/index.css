@@ -6,6 +6,19 @@
   body {
     @apply bg-surface text-gray-900 antialiased font-sans;
   }
+
+  /* Mobile safety: no horizontal overflow at any width, and disable the iOS
+     double-tap / pinch text-size adjust so layouts stay stable on all phones. */
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 }
 
 ::-webkit-scrollbar {
