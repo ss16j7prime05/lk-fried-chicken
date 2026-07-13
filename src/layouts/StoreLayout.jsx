@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext";
+import { usePreferences } from "../context/PreferencesContext";
 import { STORE_ID } from "../config";
 import { normalizeStatus } from "../store/orderStatus";
 import { getAlarmAudioCtx, playSound, getEffectiveVolume } from "../store/alarmSounds";
@@ -15,12 +16,12 @@ import { updateOrderStatus, cancelOrder } from "../store/orderEngine";
 
 /* ─── constants ─── */
 const NAV = [
-  { icon: LayoutDashboard, label: "Dashboard",     path: "/store" },
-  { icon: ClipboardList,   label: "Orders",        path: "/store/orders"        },
-  { icon: ChefHat,         label: "Kitchen",       path: "/store/kitchen"       },
-  { icon: UtensilsCrossed, label: "Menu",          path: "/store/menu"          },
-  { icon: Bell,            label: "Notifications", path: "/store/notifications" },
-  { icon: Settings,        label: "Settings",      path: "/store/settings"      },
+  { icon: LayoutDashboard, labelKey: "sb.dashboard",     path: "/store" },
+  { icon: ClipboardList,   labelKey: "sb.orders",        path: "/store/orders"        },
+  { icon: ChefHat,         labelKey: "sb.kitchen",       path: "/store/kitchen"       },
+  { icon: UtensilsCrossed, labelKey: "sb.menu",          path: "/store/menu"          },
+  { icon: Bell,            labelKey: "sb.notifications", path: "/store/notifications" },
+  { icon: Settings,        labelKey: "sb.settings",      path: "/store/settings"      },
 ];
 
 const DEFAULT_NOTIF = {
@@ -56,7 +57,7 @@ function LiveClock() {
 }
 
 /* ─── NewOrderPopup ─── */
-function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
+function NewOrderPopup({ order, onAccept, onReject, queueLength, t }) {
   const [accepting, setAccepting] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const itemCount = (order.items || []).reduce((s, i) => s + (i.qty || 1), 0);
@@ -73,10 +74,10 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-200 opacity-75" />
             <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
           </div>
-          <p className="text-white font-black flex-1 tracking-wide">NEW ORDER</p>
+          <p className="text-white font-black flex-1 tracking-wide">{t("sb.newOrder")}</p>
           {queueLength > 1 && (
             <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-              +{queueLength - 1} more
+              {t("sb.more", { n: queueLength - 1 })}
             </span>
           )}
         </div>
@@ -88,7 +89,7 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
             <p className="text-sm text-gray-400 font-medium mt-0.5">{fmtTime(order.createdAt)}</p>
           </div>
           <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${order.paymentMethod === "promptpay" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
-            {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
+            {order.paymentMethod === "promptpay" ? "PromptPay" : t("sb.cash")}
           </span>
         </div>
 
@@ -96,7 +97,7 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
         <div className="px-5 py-3 space-y-2 border-t border-gray-50">
           <div className="flex items-center gap-2 text-sm text-gray-700">
             <Users size={15} className="text-gray-400 flex-shrink-0" />
-            <span className="font-bold">{order.customerName || "—"}</span>
+            <span className="font-bold">{order.customerName || t("sb.customer")}</span>
           </div>
           {order.phone && (
             <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -121,7 +122,7 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-gray-900 truncate">{item.qty || 1}× {item.name}</p>
                   {opts && <p className="text-xs text-gray-400 truncate">{opts}</p>}
-                  {item.note && <p className="text-xs text-primary truncate">Note: {item.note}</p>}
+                  {item.note && <p className="text-xs text-primary truncate">{t("sb.note")}: {item.note}</p>}
                 </div>
                 <p className="text-sm font-bold text-gray-700 whitespace-nowrap">฿{fmtMoney((item.price || 0) * (item.qty || 1))}</p>
               </div>
@@ -133,7 +134,7 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
         <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
             <ShoppingBag size={13} />
-            {itemCount} item{itemCount !== 1 ? "s" : ""}
+            {itemCount} {itemCount !== 1 ? t("sb.items") : t("sb.item")}
           </div>
           <p className="text-2xl font-black text-gray-900">฿{fmtMoney(order.grandTotal ?? order.subtotal)}</p>
         </div>
@@ -145,14 +146,14 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
             disabled={rejecting || accepting}
             className="flex-1 py-4 rounded-2xl border-2 border-gray-200 font-black text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
           >
-            {rejecting ? "Rejecting…" : "✕ Reject"}
+            {rejecting ? t("sb.rejecting") : `✕ ${t("sb.reject")}`}
           </button>
           <button
             onClick={handleAccept}
             disabled={accepting || rejecting}
             className="flex-[2] py-4 rounded-2xl bg-primary text-white font-black hover:bg-primary-dark active:scale-[0.97] transition-all duration-150 disabled:opacity-50 text-lg shadow-sm shadow-primary/30"
           >
-            {accepting ? "Accepting…" : "✓ Accept Order"}
+            {accepting ? t("sb.accepting") : `✓ ${t("sb.acceptOrder")}`}
           </button>
         </div>
       </div>
@@ -170,6 +171,7 @@ function NewOrderPopup({ order, onAccept, onReject, queueLength }) {
 /* ─── StoreLayout ─── */
 export function StoreLayout() {
   const { logout, profile } = useAuth();
+  const { t } = usePreferences();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -201,7 +203,7 @@ export function StoreLayout() {
       try {
         const ctx = getAlarmAudioCtx();
         if (ctx.state === "suspended") ctx.resume().catch(() => {});
-      } catch {}
+      } catch { /* ignore */ }
     };
     document.addEventListener("touchstart", unlock, { once: true });
     document.addEventListener("click",      unlock, { once: true });
@@ -219,7 +221,7 @@ export function StoreLayout() {
       if (d.isOpen !== undefined) setIsOpen(d.isOpen);
       if (d.storeName)            setStoreName(d.storeName);
       if (d.notificationSettings) {
-        setNotifSettings((prev) => ({ ...DEFAULT_NOTIF, ...d.notificationSettings,
+        setNotifSettings(() => ({ ...DEFAULT_NOTIF, ...d.notificationSettings,
           nightMode: { ...DEFAULT_NOTIF.nightMode, ...(d.notificationSettings.nightMode || {}) } }));
       }
     });
@@ -248,6 +250,7 @@ export function StoreLayout() {
         if (normalizeStatus(order.status) !== "pending") return;
         if (notifiedIdsRef.current.has(order.id)) return;
         notifiedIdsRef.current.add(order.id);
+        // eslint-disable-next-line react-hooks/immutability -- runtime-safe: effect runs after mount, fn is defined below
         sendBrowserNotification(order);
       });
     });
@@ -272,7 +275,7 @@ export function StoreLayout() {
         const ctx = getAlarmAudioCtx();
         if (ctx.state === "suspended") { ctx.resume().catch(() => {}); return; }
         playSound(s.sound || "classic", ctx, getEffectiveVolume(s));
-      } catch {}
+      } catch { /* ignore */ }
     };
 
     tick(); // play immediately on first trigger
@@ -291,13 +294,13 @@ export function StoreLayout() {
   const sendBrowserNotification = (order) => {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
-      const notif = new Notification("🔔 New Order!", {
-        body:              `${order.customerName || "Customer"} · ฿${fmtMoney(order.grandTotal ?? order.subtotal)}`,
+      const notif = new Notification(`🔔 ${t("sb.newOrderTitle")}`, {
+        body:              `${order.customerName || t("sb.customer")} · ฿${fmtMoney(order.grandTotal ?? order.subtotal)}`,
         tag:               "lk-new-order",
         requireInteraction: true,
       });
       notif.onclick = () => window.focus();
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   /* ── store toggle ── */
@@ -335,9 +338,9 @@ export function StoreLayout() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black text-gray-900 truncate">{storeName}</p>
-            <p className="text-xs text-gray-400 font-medium">Store Portal</p>
+            <p className="text-xs text-gray-400 font-medium">{t("sb.storePortal")}</p>
           </div>
-          <button className="md:hidden min-h-[44px] min-w-[44px] -mr-2 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
+          <button className="md:hidden min-h-[44px] min-w-[44px] -mr-2 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setSidebarOpen(false)} aria-label={t("sb.closeMenu")}>
             <X size={18} />
           </button>
         </div>
@@ -346,9 +349,9 @@ export function StoreLayout() {
         <div className="mx-4 my-3 p-4 rounded-2xl bg-gray-50 border border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Store Status</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t("ss.storeStatus")}</p>
               <p className={`text-sm font-black mt-0.5 ${isOpen ? "text-primary" : "text-gray-400"}`}>
-                {isOpen ? "Open for orders" : "Closed"}
+                {isOpen ? t("sb.openForOrders") : t("ss.statusClosed")}
               </p>
             </div>
             <button
@@ -362,7 +365,7 @@ export function StoreLayout() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-          {NAV.map(({ icon: Icon, label, path }) => (
+          {NAV.map(({ icon: Icon, labelKey, path }) => (
             <NavLink
               key={path}
               to={path}
@@ -381,8 +384,8 @@ export function StoreLayout() {
                     <span className="absolute left-0 top-1/4 bottom-1/4 w-[3px] bg-primary rounded-r-full" />
                   )}
                   <Icon size={20} className={`flex-shrink-0 transition-colors duration-150 ${isActive ? "text-primary" : "text-gray-400 group-hover:text-gray-600"}`} />
-                  <span className="flex-1 text-sm">{label}</span>
-                  {(label === "Orders" || label === "Notifications") && pendingOrders.length > 0 && (
+                  <span className="flex-1 text-sm">{t(labelKey)}</span>
+                  {(path === "/store/orders" || path === "/store/notifications") && pendingOrders.length > 0 && (
                     <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
                       {pendingOrders.length > 9 ? "9+" : pendingOrders.length}
                     </span>
@@ -397,14 +400,14 @@ export function StoreLayout() {
         {/* Footer */}
         <div className="p-4 border-t border-gray-100 flex-shrink-0">
           <p className="text-xs text-gray-400 font-medium mb-3 truncate">
-            {profile?.name || profile?.email || "Store Manager"}
+            {profile?.name || profile?.email || t("ss.storeManager")}
           </p>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] transition-all duration-150"
           >
             <LogOut size={16} />
-            Sign Out
+            {t("sb.signOut")}
           </button>
         </div>
       </aside>
@@ -413,7 +416,7 @@ export function StoreLayout() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
         <header className="flex-shrink-0 h-14 bg-white border-b border-gray-100 flex items-center px-4 gap-3">
-          <button className="md:hidden min-h-[44px] min-w-[44px] -ml-1 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+          <button className="md:hidden min-h-[44px] min-w-[44px] -ml-1 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setSidebarOpen(true)} aria-label={t("sb.openMenu")}>
             <Menu size={20} />
           </button>
 
@@ -424,7 +427,7 @@ export function StoreLayout() {
             <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500 rounded-full shadow-sm shadow-red-200 animate-pulse">
               <span className="w-2 h-2 rounded-full bg-white" />
               <span className="text-xs font-black text-white uppercase tracking-wide hidden sm:block">
-                {pendingOrders.length} New Order{pendingOrders.length !== 1 ? "s" : ""}
+                {t("sb.newOrders", { n: pendingOrders.length })}
               </span>
               <span className="text-xs font-black text-white sm:hidden">{pendingOrders.length}</span>
             </div>
@@ -439,7 +442,7 @@ export function StoreLayout() {
               ${isOpen ? "bg-primary-light text-primary hover:bg-primary/20" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? "bg-primary animate-pulse" : "bg-gray-400"}`} />
-            {isOpen ? "Open" : "Closed"}
+            {isOpen ? t("ss.statusOpen") : t("ss.statusClosed")}
           </button>
 
           {/* Notification Center (Phase 3.7G) */}
@@ -449,7 +452,7 @@ export function StoreLayout() {
           <button
             onClick={() => navigate("/store/notifications")}
             className="relative min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Notifications"
+            aria-label={t("sb.notifications")}
           >
             <Bell size={20} className={pendingOrders.length > 0 ? "text-red-500" : ""} />
             {pendingOrders.length > 0 && (
@@ -476,6 +479,7 @@ export function StoreLayout() {
           onAccept={popupAccept}
           onReject={popupReject}
           queueLength={pendingOrders.length}
+          t={t}
         />
       )}
     </div>

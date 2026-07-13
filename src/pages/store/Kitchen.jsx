@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { db } from "../../firebase";
+import { usePreferences } from "../../context/PreferencesContext";
 import { updateOrderStatus } from "../../store/orderEngine";
 import { STORE_ID } from "../../config";
 import { KITCHEN_STATUSES, KitchenView, printKitchenTicket } from "./Orders.jsx";
@@ -40,6 +41,7 @@ const playKitchenChime = (volume = 0.5) => {
 };
 
 export function Kitchen() {
+  const { t } = usePreferences();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -191,7 +193,7 @@ export function Kitchen() {
             <Link
               to="/store/orders"
               className="p-2.5 rounded-xl bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              aria-label="Back to orders"
+              aria-label={t("sk.backToOrders")}
             >
               <ArrowLeft size={18} />
             </Link>
@@ -200,11 +202,11 @@ export function Kitchen() {
             <ChefHat size={20} className="text-primary" />
           </div>
           <div>
-            <h1 className="text-base font-black text-white leading-tight">Kitchen Display</h1>
+            <h1 className="text-base font-black text-white leading-tight">{t("sk.kitchenDisplay")}</h1>
             <div className="flex items-center gap-2 mt-0.5">
               {preparingCount > 0 && (
                 <span className="text-[11px] font-bold text-orange-400">
-                  {preparingCount} Preparing
+                  {preparingCount} {t("sk.preparing")}
                 </span>
               )}
               {preparingCount > 0 && readyCount > 0 && (
@@ -212,11 +214,11 @@ export function Kitchen() {
               )}
               {readyCount > 0 && (
                 <span className="text-[11px] font-bold text-blue-400">
-                  {readyCount} Ready
+                  {readyCount} {t("sk.ready")}
                 </span>
               )}
               {preparingCount === 0 && readyCount === 0 && (
-                <span className="text-[11px] font-bold text-gray-500">All clear</span>
+                <span className="text-[11px] font-bold text-gray-500">{t("sk.allClear")}</span>
               )}
             </div>
           </div>
@@ -230,10 +232,10 @@ export function Kitchen() {
             <button
               onClick={batchComplete}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-black transition-colors"
-              aria-label={`Complete all ${readyCount} ready orders`}
+              aria-label={t("sk.completeAllAria", { n: readyCount })}
             >
               <CheckCheck size={16} />
-              <span className="hidden sm:inline">Complete All ({readyCount})</span>
+              <span className="hidden sm:inline">{t("sk.completeAll")} ({readyCount})</span>
               <span className="sm:hidden">{readyCount}</span>
             </button>
           )}
@@ -245,8 +247,8 @@ export function Kitchen() {
               ${autoScroll
                 ? "border-primary/40 bg-primary/20 text-primary"
                 : "border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700"}`}
-            aria-label={autoScroll ? "Disable auto-scroll" : "Enable auto-scroll"}
-            title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
+            aria-label={autoScroll ? t("sk.disableAutoScroll") : t("sk.enableAutoScroll")}
+            title={autoScroll ? t("sk.autoScrollOn") : t("sk.autoScrollOff")}
           >
             <RefreshCw size={16} />
           </button>
@@ -263,7 +265,7 @@ export function Kitchen() {
                 value={volume}
                 onChange={handleVolume}
                 className="w-20 accent-primary"
-                aria-label="Kitchen sound volume"
+                aria-label={t("sk.soundVolume")}
               />
             </div>
           )}
@@ -273,7 +275,7 @@ export function Kitchen() {
             onClick={handleMute}
             className={`p-2.5 rounded-xl border text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
               ${muted ? "border-orange-400/40 bg-orange-400/20 text-orange-400" : "border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700"}`}
-            aria-label={muted ? "Unmute" : "Mute"}
+            aria-label={muted ? t("sk.unmute") : t("sk.mute")}
           >
             {muted ? <VolumeX size={18} /> : <Bell size={18} />}
           </button>
@@ -282,14 +284,14 @@ export function Kitchen() {
           <button
             onClick={toggleFullscreen}
             className="p-2.5 rounded-xl border border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            aria-label={fullscreen ? t("sk.exitFullscreen") : t("sk.enterFullscreen")}
           >
             {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
           </button>
 
           {muted && (
             <span className="hidden sm:flex items-center gap-1 text-xs font-bold text-orange-400 bg-orange-400/10 border border-orange-400/20 px-2.5 py-1.5 rounded-xl">
-              <BellOff size={12} /> Muted
+              <BellOff size={12} /> {t("sk.muted")}
             </span>
           )}
         </div>
@@ -303,7 +305,7 @@ export function Kitchen() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-gray-600">
             <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-4" />
-            <p className="font-bold">Loading kitchen orders…</p>
+            <p className="font-bold">{t("sk.loadingOrders")}</p>
           </div>
         ) : (
           <KitchenView orders={orders} onAdvance={onAdvance} onPrint={onPrint} printSize={printSize} />

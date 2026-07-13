@@ -3,10 +3,11 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp, ShoppingBag, UtensilsCrossed, CheckCircle, Bike,
-  Clock, Users, Timer, CheckCheck, X, Phone, Bell, AlertCircle,
+  Clock, Users, CheckCheck, X, Phone, Bell, AlertCircle,
   ArrowRight, Package, BarChart2, Star, Zap, Calendar, ChefHat,
 } from "lucide-react";
 import { db } from "../../firebase";
+import { usePreferences } from "../../context/PreferencesContext";
 import { STORE_ID } from "../../config";
 import { byNewest, fmtMoney, fmtTime, normalizeStatus, STATUS_LABEL, toDate } from "../../store/orderStatus";
 import { updateOrderStatus, cancelOrder } from "../../store/orderEngine";
@@ -81,7 +82,7 @@ function RevCard({ label, icon:Icon, iconBg, iconColor, value, sub }) {
 }
 
 /* ─── Hourly bar chart (pure SVG, no library) ─── */
-function HourlyChart({ todayOrders }) {
+function HourlyChart({ todayOrders, t }) {
   const [mode, setMode] = useState("revenue");
   const currentHour = new Date().getHours();
 
@@ -109,17 +110,17 @@ function HourlyChart({ todayOrders }) {
     <div className="bg-white rounded-2xl border border-gray-100 p-4 md:p-5">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-black text-gray-800">Hourly Activity</h3>
-          <p className="text-[11px] text-gray-400 font-medium mt-0.5">Today by hour of day</p>
+          <h3 className="text-sm font-black text-gray-800">{t("sd.hourlyActivity")}</h3>
+          <p className="text-[11px] text-gray-400 font-medium mt-0.5">{t("sd.todayByHour")}</p>
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          <button onClick={()=>setMode("revenue")} className={`px-3 py-1 text-xs font-black rounded-lg transition-colors ${mode==="revenue"?"bg-white shadow-sm text-gray-900":"text-gray-400 hover:text-gray-600"}`}>Revenue</button>
-          <button onClick={()=>setMode("orders")}  className={`px-3 py-1 text-xs font-black rounded-lg transition-colors ${mode==="orders" ?"bg-white shadow-sm text-gray-900":"text-gray-400 hover:text-gray-600"}`}>Orders</button>
+          <button onClick={()=>setMode("revenue")} className={`px-3 py-1 text-xs font-black rounded-lg transition-colors ${mode==="revenue"?"bg-white shadow-sm text-gray-900":"text-gray-400 hover:text-gray-600"}`}>{t("sd.revenue")}</button>
+          <button onClick={()=>setMode("orders")}  className={`px-3 py-1 text-xs font-black rounded-lg transition-colors ${mode==="orders" ?"bg-white shadow-sm text-gray-900":"text-gray-400 hover:text-gray-600"}`}>{t("sd.orders")}</button>
         </div>
       </div>
 
       <div className="text-right mb-1">
-        <span className="text-[10px] font-medium text-gray-300">max {mode==="revenue"?fmtMoneyK(max):`${max} orders`}</span>
+        <span className="text-[10px] font-medium text-gray-300">{t("sd.max")} {mode==="revenue"?fmtMoneyK(max):t("sd.maxOrders",{n:max})}</span>
       </div>
 
       <svg width="100%" viewBox={`0 0 ${CW} ${CH+LH}`} preserveAspectRatio="none" style={{height:100}}>
@@ -145,20 +146,20 @@ function HourlyChart({ todayOrders }) {
       </svg>
 
       <div className="flex items-center gap-4 mt-2 text-[10px] font-bold text-gray-300">
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-[#f97316] opacity-75" />Orders</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-red-500" />Now</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-gray-200" />Empty</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-[#f97316] opacity-75" />{t("sd.orders")}</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-red-500" />{t("sd.now")}</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-gray-200" />{t("sd.empty")}</span>
       </div>
     </div>
   );
 }
 
 /* ─── Weekly bar chart (last 7 days) ─── */
-function WeeklyChart({ orders }) {
+function WeeklyChart({ orders, t, loc }) {
   const buckets = useMemo(() => {
     const days = Array.from({length:7},(_,i) => {
       const d = new Date(); d.setDate(d.getDate()-(6-i)); d.setHours(0,0,0,0);
-      return { date:d, revenue:0, count:0, label:d.toLocaleDateString("en-GB",{weekday:"short"}) };
+      return { date:d, revenue:0, count:0, label:d.toLocaleDateString(loc,{weekday:"short"}) };
     });
     orders.forEach(o => {
       const d = toDate(o.createdAt); if (!d) return;
@@ -169,7 +170,7 @@ function WeeklyChart({ orders }) {
         days[idx].revenue += Number(o.grandTotal??o.subtotal??0);
     });
     return days;
-  }, [orders]);
+  }, [orders, loc]);
 
   const max    = Math.max(...buckets.map(b=>b.revenue), 1);
   const BAR_W  = 28, GAP = 10;
@@ -180,10 +181,10 @@ function WeeklyChart({ orders }) {
     <div className="bg-white rounded-2xl border border-gray-100 p-4 md:p-5">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-black text-gray-800">Weekly Revenue</h3>
-          <p className="text-[11px] text-gray-400 font-medium mt-0.5">Last 7 days · completed orders</p>
+          <h3 className="text-sm font-black text-gray-800">{t("sd.weeklyRevenue")}</h3>
+          <p className="text-[11px] text-gray-400 font-medium mt-0.5">{t("sd.last7days")}</p>
         </div>
-        <span className="text-[10px] font-medium text-gray-300">max {fmtMoneyK(max)}</span>
+        <span className="text-[10px] font-medium text-gray-300">{t("sd.max")} {fmtMoneyK(max)}</span>
       </div>
       <svg width="100%" viewBox={`0 0 ${CW} ${CH+LH+12}`} style={{height:96}}>
         {buckets.map((b,i) => {
@@ -233,7 +234,7 @@ function InsightRow({ icon:Icon, iconBg, iconColor, label, value, sub }) {
 }
 
 /* ─── Order Card ─── */
-function OrderCard({ order, onAccept, onReject }) {
+function OrderCard({ order, onAccept, onReject, t }) {
   const status    = normalizeStatus(order.status);
   const itemCount = (order.items||[]).reduce((s,i)=>s+(i.qty||1),0);
   const isPending = status==="pending";
@@ -247,11 +248,11 @@ function OrderCard({ order, onAccept, onReject }) {
             <p className="text-sm font-black text-gray-900 whitespace-nowrap">฿{fmtMoney(order.grandTotal??order.subtotal)}</p>
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <p className="text-xs font-medium text-gray-500 truncate">{order.customerName||"—"}</p>
+            <p className="text-xs font-medium text-gray-500 truncate">{order.customerName||"—"}</p>{/* dash placeholder */}
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${BADGE[status]||"bg-gray-100 text-gray-500"}`}>{STATUS_LABEL[status]||status}</span>
           </div>
           <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400 font-medium">
-            <span>{itemCount} item{itemCount!==1?"s":""}</span>
+            <span>{itemCount} {itemCount!==1?t("sd.items"):t("sd.item")}</span>
             <span>·</span>
             <span>{fmtTime(order.createdAt)}</span>
             {order.phone && (<><span>·</span><a href={`tel:${order.phone}`} className="flex items-center gap-1 text-primary hover:underline"><Phone size={10}/>{order.phone}</a></>)}
@@ -260,8 +261,8 @@ function OrderCard({ order, onAccept, onReject }) {
       </div>
       {isPending && (
         <div className="flex gap-2 px-4 pb-4 pt-1">
-          <button onClick={()=>onReject(order.id)} className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-sm font-black text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors">Reject</button>
-          <button onClick={()=>onAccept(order.id)} className="flex-[2] py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark transition-colors">✓ Accept</button>
+          <button onClick={()=>onReject(order.id)} className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-sm font-black text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors">{t("sd.reject")}</button>
+          <button onClick={()=>onAccept(order.id)} className="flex-[2] py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark transition-colors">✓ {t("sd.accept")}</button>
         </div>
       )}
     </div>
@@ -290,11 +291,13 @@ function ActivityItem({ item }) {
 
 /* ─── Dashboard ─── */
 export function Dashboard() {
+  const { t, language } = usePreferences();
+  const loc = language === "th" ? "th-TH" : "en-GB";
   const navigate = useNavigate();
   const [orders, setOrders]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [activities, setActivities] = useState([]);
-  const [now, setNow]           = useState(Date.now());
+  const [now, setNow]           = useState(() => Date.now());
   const initialized             = useRef(false);
 
   /* live clock for date display */
@@ -346,9 +349,9 @@ export function Dashboard() {
     todayOrders.forEach(o => { const d=toDate(o.createdAt); if(d) b[d.getHours()]++; });
     const mx = Math.max(...b); if(mx===0) return null;
     const h  = b.indexOf(mx);
-    const lbl = h===0?"12:00 AM":h<12?`${h}:00 AM`:h===12?"12:00 PM":`${h-12}:00 PM`;
+    const lbl = new Date(2000,0,1,h).toLocaleTimeString(loc,{hour:"numeric",hour12:language!=="th"});
     return { label:lbl, count:mx };
-  }, [todayOrders]);
+  }, [todayOrders, loc, language]);
 
   /* best seller */
   const bestSeller = useMemo(() => {
@@ -444,7 +447,7 @@ export function Dashboard() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl md:text-2xl font-black text-gray-900">Dashboard</h1>
+            <h1 className="text-xl md:text-2xl font-black text-gray-900">{t("sd.dashboard")}</h1>
             {stats.pending>0 && (
               <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"/>
@@ -453,17 +456,17 @@ export function Dashboard() {
             )}
           </div>
           <p className="text-sm text-gray-400 font-medium mt-0.5">
-            {nowDate.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})} · {stats.waiting} in progress · Live
+            {nowDate.toLocaleDateString(loc,{weekday:"long",day:"numeric",month:"long"})} · {t("sd.inProgress",{n:stats.waiting})} · {t("sd.live")}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {stats.pending>0 && (
             <button onClick={acceptAll} className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-black rounded-xl hover:bg-primary-dark transition-colors shadow-sm text-sm">
-              <CheckCheck size={16}/> Accept All ({stats.pending})
+              <CheckCheck size={16}/> {t("sd.acceptAll")} ({stats.pending})
             </button>
           )}
           <button onClick={()=>navigate("/store/orders")} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-sm font-bold text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
-            All Orders <ArrowRight size={14}/>
+            {t("sd.allOrders")} <ArrowRight size={14}/>
           </button>
         </div>
       </div>
@@ -472,22 +475,22 @@ export function Dashboard() {
       <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-4 md:p-5 text-white shadow-lg">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-bold text-white/70 uppercase tracking-wider">Today's Revenue</p>
+            <p className="text-xs font-bold text-white/70 uppercase tracking-wider">{t("sd.todaysRevenue")}</p>
             <p className="text-3xl md:text-4xl font-black mt-1 tabular-nums">฿{fmtMoney(todayRev)}</p>
-            <p className="text-xs text-white/50 mt-1 font-medium">{stats.completed} completed · {todayOrders.length} total orders</p>
+            <p className="text-xs text-white/50 mt-1 font-medium">{t("sd.completedTotal",{c:stats.completed,n:todayOrders.length})}</p>
           </div>
           <div className="flex items-center gap-4 flex-shrink-0">
             <div className="text-center">
               <p className="text-2xl font-black tabular-nums">{stats.pending}</p>
-              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">New</p>
+              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">{t("sd.new")}</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-black tabular-nums">{stats.preparing}</p>
-              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">Prep</p>
+              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">{t("sd.prep")}</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-black tabular-nums">{stats.delivering}</p>
-              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">Ride</p>
+              <p className="text-[10px] text-white/60 font-bold uppercase tracking-wide">{t("sd.ride")}</p>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
               <TrendingUp size={22} className="text-white"/>
@@ -498,79 +501,79 @@ export function Dashboard() {
 
       {/* ── Revenue period cards (Today / Week / Month) ── */}
       <div className="flex gap-3 md:gap-4">
-        <RevCard label="Today"      icon={Zap}       iconBg="bg-orange-50" iconColor="text-orange-500" value={todayRev}  sub={`${stats.completed} completed · ${todayOrders.length} orders`} />
-        <RevCard label="This Week"  icon={Calendar}  iconBg="bg-blue-50"   iconColor="text-blue-500"   value={weekRev}   sub={`${weekOrders.filter(o=>normalizeStatus(o.status)==="completed").length} completed · ${weekOrders.length} orders`} />
-        <RevCard label="This Month" icon={TrendingUp} iconBg="bg-green-50" iconColor="text-green-600"  value={monthRev}  sub={`${monthOrders.filter(o=>normalizeStatus(o.status)==="completed").length} completed · ${monthOrders.length} orders`} />
+        <RevCard label={t("sd.today")}      icon={Zap}       iconBg="bg-orange-50" iconColor="text-orange-500" value={todayRev}  sub={t("sd.completedOrders",{c:stats.completed,n:todayOrders.length})} />
+        <RevCard label={t("sd.thisWeek")}  icon={Calendar}  iconBg="bg-blue-50"   iconColor="text-blue-500"   value={weekRev}   sub={t("sd.completedOrders",{c:weekOrders.filter(o=>normalizeStatus(o.status)==="completed").length,n:weekOrders.length})} />
+        <RevCard label={t("sd.thisMonth")} icon={TrendingUp} iconBg="bg-green-50" iconColor="text-green-600"  value={monthRev}  sub={t("sd.completedOrders",{c:monthOrders.filter(o=>normalizeStatus(o.status)==="completed").length,n:monthOrders.length})} />
       </div>
 
       {/* ── KPI live status grid ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        <StatCard icon={ShoppingBag}     iconBg="bg-red-50"    iconColor="text-red-500"    label="New Orders"  value={stats.pending}    accent={stats.pending>0} pulse={stats.pending>0} onClick={()=>navigate("/store/orders")}/>
-        <StatCard icon={UtensilsCrossed} iconBg="bg-orange-50" iconColor="text-orange-500" label="Preparing"   value={stats.preparing}  onClick={()=>navigate("/store/orders")}/>
-        <StatCard icon={Clock}           iconBg="bg-blue-50"   iconColor="text-blue-500"   label="Ready"       value={stats.ready}      onClick={()=>navigate("/store/orders")}/>
-        <StatCard icon={Bike}            iconBg="bg-purple-50" iconColor="text-purple-500" label="Delivering"  value={stats.delivering} onClick={()=>navigate("/store/orders")}/>
-        <StatCard icon={CheckCircle}     iconBg="bg-green-50"  iconColor="text-green-600"  label="Completed"   value={stats.completed}  onClick={()=>navigate("/store/orders")}/>
-        <StatCard icon={Users}           iconBg="bg-indigo-50" iconColor="text-indigo-500" label="In Progress" value={stats.waiting}    onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={ShoppingBag}     iconBg="bg-red-50"    iconColor="text-red-500"    label={t("sd.newOrders")}  value={stats.pending}    accent={stats.pending>0} pulse={stats.pending>0} onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={UtensilsCrossed} iconBg="bg-orange-50" iconColor="text-orange-500" label={t("sd.preparing")}   value={stats.preparing}  onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={Clock}           iconBg="bg-blue-50"   iconColor="text-blue-500"   label={t("sd.ready")}       value={stats.ready}      onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={Bike}            iconBg="bg-purple-50" iconColor="text-purple-500" label={t("sd.delivering")}  value={stats.delivering} onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={CheckCircle}     iconBg="bg-green-50"  iconColor="text-green-600"  label={t("sd.completed")}   value={stats.completed}  onClick={()=>navigate("/store/orders")}/>
+        <StatCard icon={Users}           iconBg="bg-indigo-50" iconColor="text-indigo-500" label={t("sd.inProgressLabel")} value={stats.waiting}    onClick={()=>navigate("/store/orders")}/>
       </div>
 
       {/* ── Charts + Insights panel ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <HourlyChart todayOrders={todayOrders}/>
+        <HourlyChart todayOrders={todayOrders} t={t}/>
 
         {/* Insights */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4 md:p-5">
-          <h3 className="text-sm font-black text-gray-800">Today's Insights</h3>
-          <p className="text-[11px] text-gray-400 font-medium mt-0.5 mb-1">Performance analytics · live</p>
+          <h3 className="text-sm font-black text-gray-800">{t("sd.todaysInsights")}</h3>
+          <p className="text-[11px] text-gray-400 font-medium mt-0.5 mb-1">{t("sd.perfAnalytics")}</p>
 
           {peakHour ? (
-            <InsightRow icon={Zap}     iconBg="bg-yellow-50" iconColor="text-yellow-500" label="Peak Hour"    value={peakHour.label}   sub={`${peakHour.count} orders`}/>
+            <InsightRow icon={Zap}     iconBg="bg-yellow-50" iconColor="text-yellow-500" label={t("sd.peakHour")}    value={peakHour.label}   sub={t("sd.maxOrders",{n:peakHour.count})}/>
           ) : null}
           {bestSeller ? (
-            <InsightRow icon={Star}    iconBg="bg-orange-50" iconColor="text-orange-500" label="Best Seller"  value={bestSeller.name}  sub={`${bestSeller.qty}× sold`}/>
+            <InsightRow icon={Star}    iconBg="bg-orange-50" iconColor="text-orange-500" label={t("sd.bestSeller")}  value={bestSeller.name}  sub={t("sd.sold",{n:bestSeller.qty})}/>
           ) : null}
           {stats.avgPrep != null ? (
-            <InsightRow icon={ChefHat} iconBg="bg-amber-50"  iconColor="text-amber-500"  label="Avg Cook Time" value={`${stats.avgPrep} min`}/>
+            <InsightRow icon={ChefHat} iconBg="bg-amber-50"  iconColor="text-amber-500"  label={t("sd.avgCookTime")} value={t("sd.min",{n:stats.avgPrep})}/>
           ) : null}
           {avgDeliveryTime != null ? (
-            <InsightRow icon={Bike}    iconBg="bg-purple-50" iconColor="text-purple-500" label="Avg Delivery Time" value={`~${avgDeliveryTime} min`} sub="order to door"/>
+            <InsightRow icon={Bike}    iconBg="bg-purple-50" iconColor="text-purple-500" label={t("sd.avgDeliveryTime")} value={t("sd.approxMin",{n:avgDeliveryTime})} sub={t("sd.orderToDoor")}/>
           ) : null}
           <InsightRow
             icon={Package} iconBg="bg-indigo-50" iconColor="text-indigo-500"
-            label="Order Split"
-            value={todayOrders.length===0 ? "No orders yet" : `${pickupCount} Pickup  ·  ${deliveryCount} Delivery`}
+            label={t("sd.orderSplit")}
+            value={todayOrders.length===0 ? t("sd.noOrdersYet") : t("sd.pickupDelivery",{p:pickupCount,d:deliveryCount})}
           />
           {todayOrders.length===0 && !peakHour && (
             <div className="flex flex-col items-center justify-center py-8 text-gray-200 mt-2">
               <BarChart2 size={32} className="mb-2"/>
-              <p className="text-xs font-medium text-gray-300">Waiting for today's orders…</p>
+              <p className="text-xs font-medium text-gray-300">{t("sd.waitingOrders")}</p>
             </div>
           )}
         </div>
       </div>
 
       {/* ── Weekly trend chart ── */}
-      <WeeklyChart orders={orders}/>
+      <WeeklyChart orders={orders} t={t} loc={loc}/>
 
       {/* ── Recent orders + Live activity ── */}
       <div className="flex gap-5 items-start">
         <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-100">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-gray-700 uppercase tracking-wider">Recent Orders</h2>
-              {stats.pending>0 && <span className="bg-red-500 text-white text-xs font-black px-2.5 py-0.5 rounded-full">{stats.pending} new</span>}
+              <h2 className="text-sm font-black text-gray-700 uppercase tracking-wider">{t("sd.recentOrders")}</h2>
+              {stats.pending>0 && <span className="bg-red-500 text-white text-xs font-black px-2.5 py-0.5 rounded-full">{t("sd.newCount",{n:stats.pending})}</span>}
             </div>
             <button onClick={()=>navigate("/store/orders")} className="flex items-center gap-1 text-xs font-bold text-primary hover:underline">
-              View all <ArrowRight size={12}/>
+              {t("sd.viewAll")} <ArrowRight size={12}/>
             </button>
           </div>
           {recentOrders.length===0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-300">
               <ShoppingBag size={40} className="mb-3"/>
-              <p className="text-sm font-medium">No orders yet</p>
+              <p className="text-sm font-medium">{t("sd.noOrdersYet")}</p>
             </div>
           ) : (
             <div className="p-3 space-y-2">
-              {recentOrders.map(o=><OrderCard key={o.id} order={o} onAccept={acceptOrder} onReject={rejectOrder}/>)}
+              {recentOrders.map(o=><OrderCard key={o.id} order={o} onAccept={acceptOrder} onReject={rejectOrder} t={t}/>)}
             </div>
           )}
         </div>
@@ -580,19 +583,19 @@ export function Dashboard() {
           <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 flex-shrink-0">
             <div className="flex items-center gap-2">
               <Bell size={15} className="text-gray-400"/>
-              <h2 className="text-sm font-black text-gray-700 uppercase tracking-wider">Live Activity</h2>
+              <h2 className="text-sm font-black text-gray-700 uppercase tracking-wider">{t("sd.liveActivity")}</h2>
               {activities.length>0 && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>}
             </div>
             {activities.length>0 && (
-              <button onClick={()=>setActivities([])} className="text-[10px] font-bold text-gray-400 hover:text-gray-600">Clear</button>
+              <button onClick={()=>setActivities([])} className="text-[10px] font-bold text-gray-400 hover:text-gray-600">{t("sd.clear")}</button>
             )}
           </div>
           <div className="flex-1 overflow-y-auto max-h-[600px] px-4">
             {activities.length===0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-gray-300">
                 <AlertCircle size={28} className="mb-2"/>
-                <p className="text-xs font-medium">No activity yet</p>
-                <p className="text-[10px] text-gray-200 mt-1">Updates appear here in real-time</p>
+                <p className="text-xs font-medium">{t("sd.noActivity")}</p>
+                <p className="text-[10px] text-gray-200 mt-1">{t("sd.updatesRealtime")}</p>
               </div>
             ) : (
               activities.map(item=><ActivityItem key={item.id} item={item}/>)
