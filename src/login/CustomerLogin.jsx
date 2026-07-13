@@ -3,6 +3,7 @@ import { auth, db } from "../firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { isLineLoginEnabled, startLineLogin, getLineProfile } from "./lineAuth";
 
 const wrap = {
   minHeight: "100vh",
@@ -43,6 +44,7 @@ const button = {
   fontSize: "16px",
   cursor: "pointer",
 };
+const lineButton = { ...button, background: "#06C755", marginBottom: "12px" };
 
 // 0xxxxxxxxx -> +66xxxxxxxxx
 const toE164 = (phone) => {
@@ -59,8 +61,18 @@ export default function CustomerLogin() {
   const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lineEnabled, setLineEnabled] = useState(false);
   const recaptchaRef = useRef(null);
   const navigate = useNavigate();
+
+  // LINE Login (Phase 6.0B): show the button only when configured+enabled, and
+  // auto-fill lineUserId from an existing LIFF profile after a LINE redirect.
+  useEffect(() => {
+    let alive = true;
+    isLineLoginEnabled().then((on) => { if (alive) setLineEnabled(on); }).catch(() => {});
+    getLineProfile().then((p) => { if (alive && p?.lineUserId) setLineUserId(p.lineUserId); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!window.recaptchaVerifier) {
@@ -126,6 +138,11 @@ export default function CustomerLogin() {
 
         {!confirmation ? (
           <>
+            {lineEnabled && (
+              <button onClick={startLineLogin} disabled={loading} style={lineButton}>
+                เข้าสู่ระบบด้วย LINE
+              </button>
+            )}
             <input
               type="tel"
               placeholder="เบอร์โทร (เช่น 0812345678)"
