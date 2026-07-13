@@ -17,6 +17,7 @@ import { saveOrderEdit } from "./orderEdit";
 import {
   notifyCustomer, notifyStore, notifyRider, NOTIF_TYPE,
 } from "../notifications/notificationUtils";
+import { sendOrderFlex } from "../notifications/flexMessage";
 
 // Canonical status enum (maps onto the existing order.status / payment.status —
 // the data model is unchanged). Delivery-lifecycle values drive transitions;
@@ -142,6 +143,9 @@ export function notificationTrigger(order, event) {
   const id = order.id;
   const no = order.orderNo || id;
   const custUrl = `/shop/orders/${id}`;
+  // Additive LINE Flex for the customer lifecycle (Phase 6.0C) — flag-gated + fail-soft
+  // inside sendOrderFlex, so with enableLineOA OFF this is a no-op (backward compatible).
+  sendOrderFlex({ ...order, actionUrl: custUrl }, event);
   switch (event) {
     case "accepted":
       notifyCustomer(order.phone, { type: NOTIF_TYPE.STORE_ACCEPTED, orderId: id, actionUrl: custUrl, message: `ร้านรับออเดอร์ ${no} แล้ว` });
