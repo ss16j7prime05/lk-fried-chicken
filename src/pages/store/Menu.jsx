@@ -38,6 +38,7 @@ import {
   Tag,
 } from "lucide-react";
 import { db, storage } from "../../firebase";
+import { usePreferences } from "../../context/PreferencesContext";
 import { STORE_ID } from "../../config";
 
 /* ═══════════════════════ constants ═══════════════════════ */
@@ -51,13 +52,13 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const SORT_OPTIONS = [
-  { key: "displayOrder", label: "Display Order" },
-  { key: "name_asc",    label: "Name A→Z"      },
-  { key: "name_desc",   label: "Name Z→A"      },
-  { key: "price_asc",   label: "Price Low→High" },
-  { key: "price_desc",  label: "Price High→Low" },
-  { key: "newest",      label: "Newest First"  },
-  { key: "oldest",      label: "Oldest First"  },
+  { key: "displayOrder", labelKey: "sm.sort.displayOrder" },
+  { key: "name_asc",    labelKey: "sm.sort.nameAsc"      },
+  { key: "name_desc",   labelKey: "sm.sort.nameDesc"     },
+  { key: "price_asc",   labelKey: "sm.sort.priceAsc"     },
+  { key: "price_desc",  labelKey: "sm.sort.priceDesc"    },
+  { key: "newest",      labelKey: "sm.sort.newest"       },
+  { key: "oldest",      labelKey: "sm.sort.oldest"       },
 ];
 
 const EMPTY_FORM = {
@@ -122,6 +123,7 @@ function MenuSkeleton({ grid }) {
 
 /* ═══════════════════════ Availability switch ═══════════════════════ */
 function AvailabilitySwitch({ available, onChange }) {
+  const { t } = usePreferences();
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onChange(!available); }}
@@ -133,13 +135,14 @@ function AvailabilitySwitch({ available, onChange }) {
       <span
         className={`w-2 h-2 rounded-full flex-shrink-0 ${available ? "bg-green-500 animate-pulse" : "bg-red-400"}`}
       />
-      {available ? "Selling" : "Sold Out"}
+      {available ? t("sm.availSelling") : t("sm.availSoldOut")}
     </button>
   );
 }
 
 /* ═══════════════════════ Category pill tabs ═══════════════════════ */
 function CategoryTabs({ categories, catCounts, totalCount, value, onChange }) {
+  const { t } = usePreferences();
   const scrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -166,7 +169,7 @@ function CategoryTabs({ categories, catCounts, totalCount, value, onChange }) {
   };
 
   const allTabs = [
-    { key: "all", label: "All", count: totalCount },
+    { key: "all", label: t("sm.all"), count: totalCount },
     ...categories.map((c) => ({ key: c, label: c, count: catCounts[c] || 0 })),
   ];
 
@@ -219,6 +222,7 @@ function CategoryTabs({ categories, catCounts, totalCount, value, onChange }) {
 
 /* ═══════════════════════ Delete Confirmation ═══════════════════════ */
 function DeleteDialog({ item, onConfirm, onCancel }) {
+  const { t } = usePreferences();
   if (!item) return null;
   return (
     <div
@@ -234,8 +238,8 @@ function DeleteDialog({ item, onConfirm, onCancel }) {
             <Trash2 size={20} className="text-red-500" />
           </div>
           <div>
-            <p className="font-black text-gray-900">Delete Menu Item?</p>
-            <p className="text-xs text-gray-400 mt-0.5">This cannot be undone.</p>
+            <p className="font-black text-gray-900">{t("sm.deleteTitle")}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{t("sm.deleteDesc")}</p>
           </div>
         </div>
         <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 font-bold truncate mb-5">
@@ -246,13 +250,13 @@ function DeleteDialog({ item, onConfirm, onCancel }) {
             onClick={onCancel}
             className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-700 font-black hover:bg-gray-200 text-sm"
           >
-            Cancel
+            {t("sm.cancel")}
           </button>
           <button
             onClick={() => onConfirm(item.id)}
             className="flex-1 py-3.5 rounded-xl bg-red-500 text-white font-black hover:bg-red-600 text-sm"
           >
-            Delete
+            {t("sm.delete")}
           </button>
         </div>
       </div>
@@ -262,6 +266,7 @@ function DeleteDialog({ item, onConfirm, onCancel }) {
 
 /* ═══════════════════════ Image upload field ═══════════════════════ */
 function ImageField({ value, onChange }) {
+  const { t } = usePreferences();
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
@@ -273,7 +278,7 @@ function ImageField({ value, onChange }) {
       const url = await uploadMenuImage(file);
       onChange(url);
     } catch {
-      alert("Image upload failed. Please try again.");
+      alert(t("sm.uploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -282,13 +287,13 @@ function ImageField({ value, onChange }) {
   return (
     <div className="space-y-2">
       <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-        Image
+        {t("sm.imageLabel")}
       </label>
       <div className="flex gap-2">
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Paste image URL…"
+          placeholder={t("sm.imageUrlPlaceholder")}
           className="flex-1 px-3 py-3 rounded-xl border border-gray-200 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
         <button
@@ -302,7 +307,7 @@ function ImageField({ value, onChange }) {
           ) : (
             <Image size={16} />
           )}
-          Upload
+          {t("sm.upload")}
         </button>
         <input
           ref={fileRef}
@@ -333,6 +338,7 @@ function ImageField({ value, onChange }) {
 
 /* ═══════════════════════ Menu Drawer (Add / Edit) ═══════════════════════ */
 function MenuDrawer({ menu, categories, onClose, onSave }) {
+  const { t } = usePreferences();
   const isEdit = !!menu?.id;
   const [form, setForm] = useState(() =>
     menu
@@ -364,9 +370,9 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim()) e.name = "Required";
-    if (!form.price || Number(form.price) <= 0) e.price = "Must be > 0";
-    if (!form.category) e.category = "Required";
+    if (!form.name.trim()) e.name = t("sm.errRequired");
+    if (!form.price || Number(form.price) <= 0) e.price = t("sm.errPricePositive");
+    if (!form.category) e.category = t("sm.errRequired");
     return e;
   };
 
@@ -381,7 +387,7 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
       await onSave(form, menu?.id);
       onClose();
     } catch {
-      alert("Save failed. Please try again.");
+      alert(t("sm.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -421,10 +427,10 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
           <div>
             <p className="text-lg font-black text-gray-900">
-              {isEdit ? "Edit Menu Item" : "Add Menu Item"}
+              {isEdit ? t("sm.drawerEditTitle") : t("sm.drawerAddTitle")}
             </p>
             <p className="text-xs text-gray-400 mt-0.5">
-              {isEdit ? "Update item details" : "Fill in the details below"}
+              {isEdit ? t("sm.drawerEditSub") : t("sm.drawerAddSub")}
             </p>
           </div>
           <button
@@ -437,28 +443,28 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          <Field label="Menu Name *" error={errors.name}>
+          <Field label={t("sm.fieldName")} error={errors.name}>
             <input
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
-              placeholder="e.g. Crispy Fried Chicken"
+              placeholder={t("sm.namePlaceholder")}
               className={inputCls(errors.name)}
               autoFocus
             />
           </Field>
 
-          <Field label="Description">
+          <Field label={t("sm.fieldDescription")}>
             <textarea
               value={form.description}
               onChange={(e) => set("description", e.target.value)}
-              placeholder="Short description (optional)…"
+              placeholder={t("sm.descPlaceholder")}
               rows={2}
               className={`${inputCls(false)} resize-none`}
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Category *" error={errors.category}>
+            <Field label={t("sm.fieldCategory")} error={errors.category}>
               <select
                 value={form.category}
                 onChange={(e) => set("category", e.target.value)}
@@ -471,7 +477,7 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
                 ))}
               </select>
             </Field>
-            <Field label="Display Order">
+            <Field label={t("sm.fieldDisplayOrder")}>
               <input
                 type="number"
                 value={form.displayOrder}
@@ -484,7 +490,7 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Price (฿) *" error={errors.price}>
+            <Field label={t("sm.fieldPrice")} error={errors.price}>
               <input
                 type="number"
                 value={form.price}
@@ -495,7 +501,7 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
                 className={inputCls(errors.price)}
               />
             </Field>
-            <Field label="Cost (฿)">
+            <Field label={t("sm.fieldCost")}>
               <input
                 type="number"
                 value={form.cost}
@@ -507,12 +513,12 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
             </Field>
           </div>
 
-          <Field label="Cooking Time (min)">
+          <Field label={t("sm.fieldCookingTime")}>
             <input
               type="number"
               value={form.cookingTime}
               onChange={(e) => set("cookingTime", e.target.value)}
-              placeholder="e.g. 15"
+              placeholder={t("sm.cookingTimePlaceholder")}
               min={1}
               className={inputCls(false)}
             />
@@ -523,11 +529,11 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-gray-50 rounded-2xl p-4">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">
-                Availability
+                {t("sm.availability")}
               </p>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-gray-700">
-                  {form.available ? "Selling" : "Sold Out"}
+                  {form.available ? t("sm.availSelling") : t("sm.availSoldOut")}
                 </span>
                 <button
                   onClick={() => set("available", !form.available)}
@@ -545,11 +551,11 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
             </div>
             <div className="bg-gray-50 rounded-2xl p-4">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">
-                Popular Item
+                {t("sm.popularItem")}
               </p>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-gray-700">
-                  {form.popular ? "Yes" : "No"}
+                  {form.popular ? t("sm.yes") : t("sm.no")}
                 </span>
                 <button
                   onClick={() => set("popular", !form.popular)}
@@ -574,7 +580,7 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
             onClick={onClose}
             className="flex-1 py-4 rounded-xl bg-gray-100 text-gray-700 font-black hover:bg-gray-200 text-sm"
           >
-            Cancel
+            {t("sm.cancel")}
           </button>
           <button
             onClick={handleSave}
@@ -582,7 +588,7 @@ function MenuDrawer({ menu, categories, onClose, onSave }) {
             className="flex-1 py-4 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
           >
             {saving && <Loader2 size={16} className="animate-spin" />}
-            {isEdit ? "Save Changes" : "Add Menu Item"}
+            {isEdit ? t("sm.saveChanges") : t("sm.drawerAddTitle")}
           </button>
         </div>
       </div>
@@ -604,6 +610,7 @@ export const MenuCard = memo(function MenuCard({
   onToggleAvail,
   onPreview,
 }) {
+  const { t } = usePreferences();
   const isAvail = menu.available !== false;
   return (
     <div
@@ -634,12 +641,12 @@ export const MenuCard = memo(function MenuCard({
         <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap">
           {menu.popular && (
             <span className="flex items-center gap-1 bg-amber-400 text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-sm">
-              <Star size={10} /> Popular
+              <Star size={10} /> {t("sm.popular")}
             </span>
           )}
           {!isAvail && (
             <span className="bg-red-500 text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-sm">
-              Sold Out
+              {t("sm.soldOut")}
             </span>
           )}
         </div>
@@ -680,7 +687,7 @@ export const MenuCard = memo(function MenuCard({
         {menu.cookingTime && (
           <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-1">
             <Clock size={11} />
-            {menu.cookingTime} min
+            {t("sm.min", { count: menu.cookingTime })}
           </p>
         )}
       </div>
@@ -689,28 +696,28 @@ export const MenuCard = memo(function MenuCard({
       <div className="flex items-center border-t border-gray-50 mt-1">
         <button
           onClick={() => onPreview(menu)}
-          title="Preview"
+          title={t("sm.preview")}
           className="flex-1 flex items-center justify-center py-3 text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <Eye size={17} />
         </button>
         <button
           onClick={() => onEdit(menu)}
-          title="Edit"
+          title={t("sm.edit")}
           className="flex-1 flex items-center justify-center py-3 text-gray-400 hover:bg-primary/5 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <Pencil size={17} />
         </button>
         <button
           onClick={() => onDuplicate(menu)}
-          title="Duplicate"
+          title={t("sm.duplicate")}
           className="flex-1 flex items-center justify-center py-3 text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <Copy size={17} />
         </button>
         <button
           onClick={() => onDelete(menu)}
-          title="Delete"
+          title={t("sm.delete")}
           className="flex-1 flex items-center justify-center py-3 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
         >
           <Trash2 size={17} />
@@ -731,6 +738,7 @@ export const MenuRow = memo(function MenuRow({
   onToggleAvail,
   onPreview,
 }) {
+  const { t } = usePreferences();
   const isAvail = menu.available !== false;
   return (
     <div
@@ -770,7 +778,7 @@ export const MenuRow = memo(function MenuRow({
           </p>
           {menu.popular && (
             <span className="flex items-center gap-0.5 text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex-shrink-0">
-              <Star size={9} /> Popular
+              <Star size={9} /> {t("sm.popular")}
             </span>
           )}
         </div>
@@ -799,28 +807,28 @@ export const MenuRow = memo(function MenuRow({
         <button
           onClick={() => onPreview(menu)}
           className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          title="Preview"
+          title={t("sm.preview")}
         >
           <Eye size={17} />
         </button>
         <button
           onClick={() => onEdit(menu)}
           className="p-2.5 rounded-xl text-gray-400 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          title="Edit"
+          title={t("sm.edit")}
         >
           <Pencil size={17} />
         </button>
         <button
           onClick={() => onDuplicate(menu)}
           className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          title="Duplicate"
+          title={t("sm.duplicate")}
         >
           <Copy size={17} />
         </button>
         <button
           onClick={() => onDelete(menu)}
           className="p-2.5 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-          title="Delete"
+          title={t("sm.delete")}
         >
           <Trash2 size={17} />
         </button>
@@ -831,15 +839,16 @@ export const MenuRow = memo(function MenuRow({
 
 /* ═══════════════════════ Desktop Detail Panel ═══════════════════════ */
 function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClose }) {
+  const { t } = usePreferences();
   if (!menu) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
         <div className="w-20 h-20 rounded-3xl bg-gray-100 flex items-center justify-center mb-4">
           <UtensilsCrossed size={32} className="text-gray-300" />
         </div>
-        <p className="text-base font-black text-gray-400">No item selected</p>
+        <p className="text-base font-black text-gray-400">{t("sm.noSelection")}</p>
         <p className="text-sm text-gray-300 mt-1">
-          Tap any menu item to preview details
+          {t("sm.noSelectionHint")}
         </p>
       </div>
     );
@@ -871,12 +880,12 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
         <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
           {menu.popular && (
             <span className="flex items-center gap-1 bg-amber-400 text-white text-xs font-black px-2.5 py-1 rounded-full">
-              <Star size={11} /> Popular
+              <Star size={11} /> {t("sm.popular")}
             </span>
           )}
           {!isAvail && (
             <span className="bg-red-500 text-white text-xs font-black px-2.5 py-1 rounded-full">
-              Sold Out
+              {t("sm.soldOut")}
             </span>
           )}
         </div>
@@ -903,7 +912,7 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-50 rounded-xl p-3">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-              Price
+              {t("sm.price")}
             </p>
             <p className="text-xl font-black text-primary mt-0.5">
               ฿{fmtMoney(menu.price)}
@@ -912,7 +921,7 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
           {menu.cost > 0 && (
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                Cost
+                {t("sm.cost")}
               </p>
               <p className="text-xl font-black text-gray-700 mt-0.5">
                 ฿{fmtMoney(menu.cost)}
@@ -922,7 +931,7 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
           {menu.cookingTime && (
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                Cook Time
+                {t("sm.cookTime")}
               </p>
               <p className="text-xl font-black text-gray-700 mt-0.5 flex items-center gap-1">
                 <Clock size={16} className="text-gray-400" />
@@ -932,7 +941,7 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
           )}
           <div className="bg-gray-50 rounded-xl p-3">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-              Status
+              {t("sm.status")}
             </p>
             <div className="mt-1.5">
               <AvailabilitySwitch
@@ -945,7 +954,7 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
 
         {(menu.updatedAt || menu.createdAt) && (
           <p className="text-xs text-gray-300">
-            Updated {fmtDate(menu.updatedAt || menu.createdAt)}
+            {t("sm.updatedAt", { date: fmtDate(menu.updatedAt || menu.createdAt) })}
           </p>
         )}
       </div>
@@ -956,20 +965,20 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
           onClick={() => onEdit(menu)}
           className="w-full py-3.5 rounded-xl bg-primary text-white font-black hover:bg-primary-dark text-sm flex items-center justify-center gap-2"
         >
-          <Pencil size={16} /> Edit Item
+          <Pencil size={16} /> {t("sm.editItem")}
         </button>
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => onDuplicate(menu)}
             className="py-3 rounded-xl bg-gray-100 text-gray-700 font-black hover:bg-gray-200 text-sm flex items-center justify-center gap-1.5"
           >
-            <Copy size={14} /> Duplicate
+            <Copy size={14} /> {t("sm.duplicate")}
           </button>
           <button
             onClick={() => onDelete(menu)}
             className="py-3 rounded-xl bg-red-50 text-red-500 font-black hover:bg-red-100 text-sm flex items-center justify-center gap-1.5"
           >
-            <Trash2 size={14} /> Delete
+            <Trash2 size={14} /> {t("sm.delete")}
           </button>
         </div>
       </div>
@@ -979,12 +988,13 @@ function DetailPanel({ menu, onEdit, onDuplicate, onDelete, onToggleAvail, onClo
 
 /* ═══════════════════════ Empty / Offline / Error states ═══════════════════════ */
 function PageState({ type, onAdd }) {
+  const { t } = usePreferences();
   const cfg = {
-    empty:   { icon: UtensilsCrossed, title: "No menu items yet",    sub: "Add your first menu item to get started." },
-    search:  { icon: Search,          title: "No items match",       sub: "Try a different search or filter."        },
-    offline: { icon: WifiOff,         title: "You're offline",       sub: "Reconnect to manage your menu."          },
-    error:   { icon: AlertTriangle,   title: "Something went wrong", sub: "Refresh the page and try again."         },
-  }[type] || { icon: UtensilsCrossed, title: "Nothing here", sub: "" };
+    empty:   { icon: UtensilsCrossed, title: t("sm.emptyTitle"),       sub: t("sm.emptyDesc")       },
+    search:  { icon: Search,          title: t("sm.searchEmptyTitle"), sub: t("sm.searchEmptyDesc") },
+    offline: { icon: WifiOff,         title: t("sm.offlineTitle"),     sub: t("sm.offlineDesc")     },
+    error:   { icon: AlertTriangle,   title: t("sm.errorTitle"),       sub: t("sm.errorDesc")       },
+  }[type] || { icon: UtensilsCrossed, title: t("sm.nothingHere"), sub: "" };
   const Icon = cfg.icon;
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-2xl border border-gray-100">
@@ -998,7 +1008,7 @@ function PageState({ type, onAdd }) {
           onClick={onAdd}
           className="mt-6 flex items-center gap-2 px-6 py-3.5 rounded-xl bg-primary text-white font-black hover:bg-primary-dark"
         >
-          <Plus size={18} /> Add First Item
+          <Plus size={18} /> {t("sm.addFirstItem")}
         </button>
       )}
     </div>
@@ -1007,6 +1017,7 @@ function PageState({ type, onAdd }) {
 
 /* ═══════════════════════ Main Menu page ═══════════════════════ */
 export function Menu() {
+  const { t } = usePreferences();
   const [menus, setMenus]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
@@ -1132,13 +1143,13 @@ export function Menu() {
     const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = menu;
     await addDoc(collection(db, "menus"), {
       ...rest,
-      name:         `${menu.name} (Copy)`,
+      name:         `${menu.name} ${t("sm.copySuffix")}`,
       createdAt:    serverTimestamp(),
       updatedAt:    serverTimestamp(),
       displayOrder: Number(menu.displayOrder || 999) + 1,
     });
     setDetailItem(null);
-  }, []);
+  }, [t]);
 
   const deleteMenu = useCallback(async (id) => {
     await deleteDoc(doc(db, "menus", id));
@@ -1188,7 +1199,7 @@ export function Menu() {
   };
 
   const bulkDelete = async () => {
-    if (!window.confirm(`Delete ${selected.size} item(s)? This cannot be undone.`)) return;
+    if (!window.confirm(t("sm.bulkDeleteConfirm", { count: selected.size }))) return;
     const batch = writeBatch(db);
     selected.forEach((id) => batch.delete(doc(db, "menus", id)));
     await batch.commit();
@@ -1244,11 +1255,11 @@ export function Menu() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h1 className="text-xl md:text-2xl font-black text-gray-900">
-                Menu Management
+                {t("sm.title")}
               </h1>
               {!loading && (
                 <p className="text-sm text-gray-400 mt-0.5">
-                  {menus.length} items · {menus.filter((m) => m.available !== false).length} selling
+                  {t("sm.summary", { total: menus.length, selling: menus.filter((m) => m.available !== false).length })}
                 </p>
               )}
             </div>
@@ -1257,8 +1268,8 @@ export function Menu() {
               className="flex items-center gap-2 px-5 py-3 md:py-3.5 rounded-xl bg-primary text-white font-black hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary text-sm whitespace-nowrap"
             >
               <Plus size={18} />
-              <span className="hidden sm:inline">Add Item</span>
-              <span className="sm:hidden">Add</span>
+              <span className="hidden sm:inline">{t("sm.addItem")}</span>
+              <span className="sm:hidden">{t("sm.add")}</span>
             </button>
           </div>
 
@@ -1270,7 +1281,7 @@ export function Menu() {
                   {menus.length}
                 </p>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">
-                  Total Items
+                  {t("sm.totalItems")}
                 </p>
               </div>
               <div className="w-px h-10 bg-gray-100 flex-shrink-0" />
@@ -1279,7 +1290,7 @@ export function Menu() {
                   {menus.filter((m) => m.available !== false).length}
                 </p>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">
-                  Selling
+                  {t("sm.selling")}
                 </p>
               </div>
               <div className="w-px h-10 bg-gray-100 flex-shrink-0" />
@@ -1288,7 +1299,7 @@ export function Menu() {
                   {menus.filter((m) => m.available === false).length}
                 </p>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">
-                  Sold Out
+                  {t("sm.soldOut")}
                 </p>
               </div>
               <div className="w-px h-10 bg-gray-100 flex-shrink-0" />
@@ -1297,7 +1308,7 @@ export function Menu() {
                   {menus.filter((m) => m.popular).length}
                 </p>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">
-                  Popular
+                  {t("sm.popular")}
                 </p>
               </div>
               <div className="w-px h-10 bg-gray-100 flex-shrink-0" />
@@ -1306,7 +1317,7 @@ export function Menu() {
                   {categories.length}
                 </p>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">
-                  Categories
+                  {t("sm.categories")}
                 </p>
               </div>
             </div>
@@ -1332,7 +1343,7 @@ export function Menu() {
               <input
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setVisibleCount(PAGE_SIZE); }}
-                placeholder="Search menu items…"
+                placeholder={t("sm.searchPlaceholder")}
                 className="w-full pl-10 pr-3 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               {search && (
@@ -1358,7 +1369,7 @@ export function Menu() {
               >
                 {SORT_OPTIONS.map((s) => (
                   <option key={s.key} value={s.key}>
-                    {s.label}
+                    {t(s.labelKey)}
                   </option>
                 ))}
               </select>
@@ -1373,14 +1384,14 @@ export function Menu() {
               <button
                 onClick={() => { setViewMode("grid"); localStorage.setItem("menu_view", "grid"); }}
                 className={`p-2.5 rounded-lg transition-colors ${viewMode === "grid" ? "bg-white shadow-sm text-gray-800" : "text-gray-400 hover:text-gray-600"}`}
-                title="Grid view"
+                title={t("sm.gridView")}
               >
                 <Grid3x3 size={17} />
               </button>
               <button
                 onClick={() => { setViewMode("list"); localStorage.setItem("menu_view", "list"); }}
                 className={`p-2.5 rounded-lg transition-colors ${viewMode === "list" ? "bg-white shadow-sm text-gray-800" : "text-gray-400 hover:text-gray-600"}`}
-                title="List view"
+                title={t("sm.listView")}
               >
                 <LayoutList size={17} />
               </button>
@@ -1394,18 +1405,18 @@ export function Menu() {
                 onClick={selectAll}
                 className="flex items-center gap-1.5 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded px-1 py-0.5"
               >
-                <CheckSquare size={15} /> Select All ({filtered.length})
+                <CheckSquare size={15} /> {t("sm.selectAll", { count: filtered.length })}
               </button>
               {selected.size > 0 && (
                 <button
                   onClick={clearSel}
                   className="flex items-center gap-1.5 hover:text-gray-700"
                 >
-                  <Square size={15} /> Clear ({selected.size})
+                  <Square size={15} /> {t("sm.clear", { count: selected.size })}
                 </button>
               )}
               <span className="ml-auto text-gray-300 text-xs">
-                {filtered.length} of {menus.length} items
+                {t("sm.ofItems", { shown: filtered.length, total: menus.length })}
               </span>
             </div>
           )}
@@ -1453,7 +1464,7 @@ export function Menu() {
                     onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
                     className="px-6 py-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50"
                   >
-                    Load more ({filtered.length - visibleCount} remaining)
+                    {t("sm.loadMore", { count: filtered.length - visibleCount })}
                   </button>
                 </div>
               )}
@@ -1481,7 +1492,7 @@ export function Menu() {
                     onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
                     className="px-6 py-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50"
                   >
-                    Load more ({filtered.length - visibleCount} remaining)
+                    {t("sm.loadMore", { count: filtered.length - visibleCount })}
                   </button>
                 </div>
               )}
@@ -1510,26 +1521,26 @@ export function Menu() {
       {selected.size > 0 && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-2xl px-5 py-3.5 shadow-2xl max-w-[95vw]">
           <p className="text-sm font-black whitespace-nowrap">
-            {selected.size} selected
+            {t("sm.selected", { count: selected.size })}
           </p>
           <div className="w-px h-5 bg-white/20" />
           <button
             onClick={bulkOpen}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-600 text-sm font-bold hover:bg-green-700"
           >
-            <CheckCheck size={15} /> Open
+            <CheckCheck size={15} /> {t("sm.bulkOpen")}
           </button>
           <button
             onClick={bulkClose}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 text-sm font-bold hover:bg-white/20"
           >
-            <XCircle size={15} /> Close
+            <XCircle size={15} /> {t("sm.bulkClose")}
           </button>
           <button
             onClick={bulkDelete}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500 text-sm font-bold hover:bg-red-600"
           >
-            <Trash2 size={15} /> Delete
+            <Trash2 size={15} /> {t("sm.bulkDelete")}
           </button>
           <button
             onClick={clearSel}

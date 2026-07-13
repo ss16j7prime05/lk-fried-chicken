@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { fmtMoney, fmtTime, normalizeStatus, toDate } from "../../store/orderStatus";
 import {
   PAYMENT_STATUS, countdownFrom, expireOrderPayment, isPaymentSettled,
@@ -64,21 +65,25 @@ import AuditLog from "../../components/order/AuditLog.jsx";
 
 /* ═══════════════════════ constants ═══════════════════════ */
 export const TABS = [
-  { key: "pending",            label: "New"        },
-  { key: "accepted",           label: "Accepted"   },
-  { key: "cooking",            label: "Preparing"  },
-  { key: "ready_for_delivery", label: "Ready"      },
-  { key: "picked_up",          label: "Picked Up"  },
-  { key: "delivering",         label: "Delivering" },
-  { key: "completed",          label: "Completed"  },
-  { key: "cancelled",          label: "Cancelled"  },
+  { key: "pending",            labelKey: "so.status.pending"            },
+  { key: "accepted",           labelKey: "so.status.accepted"           },
+  { key: "cooking",            labelKey: "so.status.cooking"            },
+  { key: "ready_for_delivery", labelKey: "so.status.ready_for_delivery" },
+  { key: "picked_up",          labelKey: "so.status.picked_up"          },
+  { key: "delivering",         labelKey: "so.status.delivering"         },
+  { key: "completed",          labelKey: "so.status.completed"          },
+  { key: "cancelled",          labelKey: "so.status.cancelled"          },
 ];
 
+// English status labels — used only for the English CSV export & thermal print documents.
 export const STATUS_LABEL_EN = {
   pending: "New", accepted: "Accepted", cooking: "Preparing",
   ready_for_delivery: "Ready", picked_up: "Picked Up", delivering: "Delivering",
   completed: "Completed", cancelled: "Cancelled",
 };
+
+// Translated status label for on-screen UI. t comes from usePreferences().
+const statusLabel = (t, status) => t(`so.status.${status}`) || status;
 
 const STATUS_DOT = {
   pending: "bg-red-500", accepted: "bg-yellow-500", cooking: "bg-orange-500",
@@ -94,21 +99,21 @@ const STATUS_BADGE = {
 };
 
 const NEXT_ACTION = {
-  accepted:           { to: "cooking",            label: "Start Preparing"  },
-  cooking:            { to: "ready_for_delivery",  label: "Mark Ready"       },
-  ready_for_delivery: { to: "picked_up",           label: "Rider Picked Up"  },
-  picked_up:          { to: "delivering",          label: "Start Delivering" },
-  delivering:         { to: "completed",           label: "Mark Completed"   },
+  accepted:           { to: "cooking",             labelKey: "so.next.cooking"            },
+  cooking:            { to: "ready_for_delivery",  labelKey: "so.next.ready_for_delivery" },
+  ready_for_delivery: { to: "picked_up",           labelKey: "so.next.picked_up"          },
+  picked_up:          { to: "delivering",          labelKey: "so.next.delivering"         },
+  delivering:         { to: "completed",           labelKey: "so.next.completed"          },
 };
 
 const TIMELINE_STEPS = [
-  { key: "pending",            label: "Order Created", ts: (o) => o.createdAt,  who: "Customer", icon: Inbox,        color: "blue"   },
-  { key: "accepted",           label: "Accepted",      ts: (o) => o.acceptedAt, who: "Store",    icon: CheckCircle2, color: "green"  },
-  { key: "cooking",            label: "Preparing",     ts: () => null,          who: "Store",    icon: ChefHat,      color: "orange" },
-  { key: "ready_for_delivery", label: "Ready",         ts: () => null,          who: "Store",    icon: Package,      color: "blue"   },
-  { key: "picked_up",          label: "Picked Up",     ts: (o) => o.pickedUpAt, who: "Rider",    icon: Bike,         color: "indigo" },
-  { key: "delivering",         label: "Delivering",    ts: () => null,          who: "Rider",    icon: Truck,        color: "purple" },
-  { key: "completed",          label: "Completed",     ts: (o) => o.deliveredAt, who: "Rider",   icon: CheckCheck,   color: "green"  },
+  { key: "pending",            labelKey: "so.step.pending",              ts: (o) => o.createdAt,  whoKey: "so.who.customer", icon: Inbox,        color: "blue"   },
+  { key: "accepted",           labelKey: "so.status.accepted",           ts: (o) => o.acceptedAt, whoKey: "so.who.store",    icon: CheckCircle2, color: "green"  },
+  { key: "cooking",            labelKey: "so.status.cooking",            ts: () => null,          whoKey: "so.who.store",    icon: ChefHat,      color: "orange" },
+  { key: "ready_for_delivery", labelKey: "so.status.ready_for_delivery", ts: () => null,          whoKey: "so.who.store",    icon: Package,      color: "blue"   },
+  { key: "picked_up",          labelKey: "so.status.picked_up",          ts: (o) => o.pickedUpAt, whoKey: "so.who.rider",    icon: Bike,         color: "indigo" },
+  { key: "delivering",         labelKey: "so.status.delivering",         ts: () => null,          whoKey: "so.who.rider",    icon: Truck,        color: "purple" },
+  { key: "completed",          labelKey: "so.status.completed",          ts: (o) => o.deliveredAt, whoKey: "so.who.rider",   icon: CheckCheck,   color: "green"  },
 ];
 const STATUS_ORDER = TIMELINE_STEPS.map((s) => s.key);
 
@@ -321,6 +326,7 @@ function BigTimer({ createdAt, size = "sm" }) {
 }
 
 function OverflowMenu({ order, onOpen }) {
+  const { t } = usePreferences();
   const [open, setOpen] = useState(false);
   const mapsUrl = googleMapsUrl(order);
   return (
@@ -338,16 +344,16 @@ function OverflowMenu({ order, onOpen }) {
               </a>
             )}
             <button onClick={() => { copyText(order.deliveryAddress || order.address); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50 font-bold">
-              <Copy size={14} /> Copy Address
+              <Copy size={14} /> {t("so.copyAddress")}
             </button>
             <button onClick={() => { printReceipt(order); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50 font-bold">
-              <Printer size={14} /> Print Receipt
+              <Printer size={14} /> {t("so.printReceipt")}
             </button>
             <button onClick={() => { onOpen(order); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50 font-bold">
-              <Eye size={14} /> View Detail
+              <Eye size={14} /> {t("so.viewDetail")}
             </button>
             <button disabled className="w-full flex items-center gap-2 px-3 py-2 text-gray-300 font-bold cursor-not-allowed">
-              <MessageCircle size={14} /> Chat (soon)
+              <MessageCircle size={14} /> {t("so.chatSoon")}
             </button>
           </div>
         </>
@@ -358,6 +364,7 @@ function OverflowMenu({ order, onOpen }) {
 
 /* ═══════════════════════ Order Card (scan-friendly, 3 display sizes) ═══════════════════════ */
 export const OrderCard = memo(function OrderCard({ order, status, selected, selectable, onSelect, onAcceptETA, onReject, onAdvance, onOpen, now, displaySize = "medium" }) {
+  const { t } = usePreferences();
   const next = NEXT_ACTION[status];
   const mins = elapsedMinutes(order.createdAt, now);
   const p = getPriority(mins);
@@ -384,14 +391,14 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[status]} ${status === "pending" ? "animate-pulse" : ""}`} />
         <span className="font-black text-gray-900 text-sm w-20 flex-shrink-0 truncate">{order.orderNo || order.id?.slice(0, 8)}</span>
         <span className="text-sm font-bold text-gray-600 flex-1 truncate">{order.customerName || "—"}</span>
-        <span className="text-[10px] text-gray-400 flex-shrink-0">{order.orderType === "pickup" ? "Pickup" : "Del."}</span>
+        <span className="text-[10px] text-gray-400 flex-shrink-0">{order.orderType === "pickup" ? t("so.pickupShort") : t("so.deliveryShort")}</span>
         {!isDone ? <BigTimer createdAt={order.createdAt} size="sm" /> : <span className="text-[10px] text-gray-300">{fmtTime(order.createdAt)}</span>}
         <span className="font-black text-gray-900 text-sm flex-shrink-0">฿{fmtMoney(order.grandTotal ?? order.subtotal)}</span>
         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           {status === "pending" && (paymentBlocked
-            ? <span className="px-2.5 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-black">Awaiting payment</span>
-            : <button onClick={() => onAcceptETA(order)} className="px-2.5 py-1.5 rounded-lg bg-primary text-white text-[10px] font-black hover:bg-primary-dark">Accept</button>)}
-          {next && <button onClick={() => onAdvance(order.id, next.to)} className="px-2.5 py-1.5 rounded-lg bg-gray-800 text-white text-[10px] font-black hover:bg-gray-700">{next.label}</button>}
+            ? <span className="px-2.5 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-black">{t("so.awaitingPayment")}</span>
+            : <button onClick={() => onAcceptETA(order)} className="px-2.5 py-1.5 rounded-lg bg-primary text-white text-[10px] font-black hover:bg-primary-dark">{t("so.accept")}</button>)}
+          {next && <button onClick={() => onAdvance(order.id, next.to)} className="px-2.5 py-1.5 rounded-lg bg-gray-800 text-white text-[10px] font-black hover:bg-gray-700">{t(next.labelKey)}</button>}
         </div>
       </div>
     );
@@ -433,7 +440,7 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
         </div>
         <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
           {!isDone ? <BigTimer createdAt={order.createdAt} size={isLarge ? "lg" : "md"} /> : <span className="text-[10px] font-bold text-gray-300">{fmtTime(order.createdAt)}</span>}
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE[status]}`}>{STATUS_LABEL_EN[status]}</span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE[status]}`}>{statusLabel(t, status)}</span>
         </div>
       </div>
 
@@ -441,20 +448,20 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
       <div className="flex items-center gap-1.5 px-4 mt-3 flex-wrap">
         <span className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-50 text-gray-600 border border-gray-100">
           {order.orderType === "pickup" ? <Package size={11} /> : <Bike size={11} />}
-          {order.orderType === "pickup" ? "Pickup" : "Delivery"}
+          {order.orderType === "pickup" ? t("so.pickup") : t("so.delivery")}
         </span>
         <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${order.paymentMethod === "promptpay" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-gray-50 text-gray-500 border-gray-100"}`}>
-          {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
+          {order.paymentMethod === "promptpay" ? t("so.promptpay") : t("so.cash")}
         </span>
-        <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-100">{itemCount(order)} item{itemCount(order) !== 1 ? "s" : ""}</span>
+        <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-100">{itemCount(order)} {itemCount(order) !== 1 ? t("so.items") : t("so.item")}</span>
         {order.estimatedMinutes && !isDone && (
-          <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">{order.estimatedMinutes}m ETA</span>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">{t("so.etaBadge", { count: order.estimatedMinutes })}</span>
         )}
       </div>
 
       {/* total */}
       <div className="flex items-center justify-between px-4 mt-3">
-        <p className="text-xs text-gray-400 font-bold uppercase tracking-wide">Total</p>
+        <p className="text-xs text-gray-400 font-bold uppercase tracking-wide">{t("so.total")}</p>
         <p className={`font-black text-gray-900 ${isLarge ? "text-2xl" : "text-xl"}`}>฿{fmtMoney(order.grandTotal ?? order.subtotal)}</p>
       </div>
 
@@ -462,18 +469,18 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
       <div className="flex items-center gap-2 px-4 py-3.5 mt-2 border-t border-gray-50" onClick={(e) => e.stopPropagation()}>
         {status === "pending" && (
           <>
-            <button onClick={() => onReject(order.id)} className="px-3.5 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-red-50 hover:text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">Reject</button>
+            <button onClick={() => onReject(order.id)} className="px-3.5 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-red-50 hover:text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">{t("so.reject")}</button>
             {paymentBlocked
-              ? <span className="flex-1 py-3 rounded-xl bg-amber-100 text-amber-700 text-sm font-black text-center">Awaiting payment</span>
-              : <button onClick={() => onAcceptETA(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">✓ Accept</button>}
+              ? <span className="flex-1 py-3 rounded-xl bg-amber-100 text-amber-700 text-sm font-black text-center">{t("so.awaitingPayment")}</span>
+              : <button onClick={() => onAcceptETA(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{t("so.acceptCheck")}</button>}
           </>
         )}
         {next && (
-          <button onClick={() => onAdvance(order.id, next.to)} className="flex-1 py-3 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700">{next.label} →</button>
+          <button onClick={() => onAdvance(order.id, next.to)} className="flex-1 py-3 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700">{t(next.labelKey)} →</button>
         )}
-        {isDone && <span className="flex-1 text-xs font-bold text-gray-300 text-center">{STATUS_LABEL_EN[status]}</span>}
+        {isDone && <span className="flex-1 text-xs font-bold text-gray-300 text-center">{statusLabel(t, status)}</span>}
         {order.phone && (
-          <a href={`tel:${order.phone}`} onClick={(e) => e.stopPropagation()} className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Call Customer">
+          <a href={`tel:${order.phone}`} onClick={(e) => e.stopPropagation()} className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={t("so.callCustomer")}>
             <Phone size={15} />
           </a>
         )}
@@ -508,6 +515,7 @@ export const KITCHEN_STATUSES = ["accepted", "cooking", "ready_for_delivery"];
 
 /* Tracks whether a kitchen ticket was printed this session (per order id) */
 function KitchenPrintButton({ order, onPrint, printSize }) {
+  const { t } = usePreferences();
   const key = `kprinted_${order.id}`;
   const [printed, setPrinted] = useState(() => sessionStorage.getItem(key) === "1");
 
@@ -526,13 +534,14 @@ function KitchenPrintButton({ order, onPrint, printSize }) {
           : "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"}`}
     >
       <Printer size={16} />
-      {printed ? "Reprint Ticket" : "Print Ticket"}
+      {printed ? t("so.reprintTicket") : t("so.printTicket")}
       <span className="text-[10px] font-bold opacity-60">{printSize || "80mm"}</span>
     </button>
   );
 }
 
 export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance, onPrint, printSize }) {
+  const { t } = usePreferences();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -556,17 +565,17 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
       const diffMin  = Math.ceil((finishMs - now) / 60000);
       remaining      = diffMin;
       isLate         = diffMin < 0;
-      remainingLabel = isLate ? `${Math.abs(diffMin)}m LATE` : `${diffMin}m left`;
+      remainingLabel = isLate ? t("so.minsLate", { count: Math.abs(diffMin) }) : t("so.minsLeft", { count: diffMin });
     }
   }
   const isOverdue = isLate || mins >= 15;
 
   /* ── action ── */
   let actionLabel = null, actionTo = null;
-  if (status === "accepted")           { actionLabel = "Start Cooking";  actionTo = "cooking";            }
-  else if (status === "cooking")       { actionLabel = "Mark Ready";     actionTo = "ready_for_delivery"; }
+  if (status === "accepted")           { actionLabel = t("so.startCooking");  actionTo = "cooking";            }
+  else if (status === "cooking")       { actionLabel = t("so.markReady");     actionTo = "ready_for_delivery"; }
   else if (status === "ready_for_delivery" && order.orderType === "pickup") {
-    actionLabel = "Complete Order";  actionTo = "completed";
+    actionLabel = t("so.completeOrder");  actionTo = "completed";
   }
 
   const actionBtnCls =
@@ -576,11 +585,11 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
 
   /* ── status strip config ── */
   const STRIP = {
-    accepted:           { bg: "bg-yellow-400",  label: "Waiting to Cook" },
-    cooking:            { bg: "bg-orange-500",  label: "Cooking Now"     },
-    ready_for_delivery: { bg: "bg-blue-500",    label: "Ready for Pickup / Delivery" },
+    accepted:           { bg: "bg-yellow-400",  label: t("so.stripWaitingCook") },
+    cooking:            { bg: "bg-orange-500",  label: t("so.stripCookingNow")  },
+    ready_for_delivery: { bg: "bg-blue-500",    label: t("so.stripReady") },
   };
-  const strip = STRIP[status] || { bg: "bg-gray-400", label: status };
+  const strip = STRIP[status] || { bg: "bg-gray-400", label: statusLabel(t, status) };
 
   return (
     <div className={`rounded-3xl border-2 flex flex-col overflow-hidden shadow-lg transition-all
@@ -592,7 +601,7 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
         <span className="text-white font-black text-sm uppercase tracking-wider">{strip.label}</span>
         {isLate && (
           <span className="flex items-center gap-1 bg-white/25 text-white text-xs font-black px-2.5 py-0.5 rounded-full animate-pulse">
-            <AlertTriangle size={11} /> LATE
+            <AlertTriangle size={11} /> {t("so.late")}
           </span>
         )}
       </div>
@@ -608,7 +617,7 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
             </p>
             <p className="text-xl md:text-2xl font-black text-gray-700 mt-1 truncate">{order.customerName || "—"}</p>
             <p className="text-xs font-bold text-gray-400 mt-1">
-              {order.orderType === "pickup" ? "Pickup" : "Delivery"} · {order.paymentMethod === "promptpay" ? "PromptPay" : "Cash"}
+              {order.orderType === "pickup" ? t("so.pickup") : t("so.delivery")} · {order.paymentMethod === "promptpay" ? t("so.promptpay") : t("so.cash")}
             </p>
           </div>
           {/* Large elapsed clock */}
@@ -617,7 +626,7 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
               <Clock size={32} className="flex-shrink-0 mt-1.5" />
               {mm}:{String(ss).padStart(2, "0")}
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-widest mt-1.5 opacity-60">elapsed</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest mt-1.5 opacity-60">{t("so.elapsed")}</span>
           </div>
         </div>
 
@@ -632,8 +641,8 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
           >
             <div className="flex items-center gap-2">
               <Clock size={14} className={isLate ? "text-red-500" : "text-gray-400"} />
-              <span className="text-xs font-bold text-gray-600">Est. cook time</span>
-              <span className="text-sm font-black text-gray-800">{order.estimatedMinutes} min</span>
+              <span className="text-xs font-bold text-gray-600">{t("so.estCookTime")}</span>
+              <span className="text-sm font-black text-gray-800">{t("so.min", { count: order.estimatedMinutes })}</span>
             </div>
             {remainingLabel && (
               <span className={`text-sm font-black px-3 py-1 rounded-full ${
@@ -684,7 +693,7 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
           </button>
         ) : (
           <div className="w-full py-5 rounded-2xl bg-white/60 text-gray-400 text-lg font-black text-center border-2 border-dashed border-gray-200">
-            Waiting for Rider
+            {t("so.waitingRider")}
           </div>
         )}
 
@@ -698,6 +707,7 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
 });
 
 export function KitchenView({ orders, onAdvance, onPrint, printSize }) {
+  const { t } = usePreferences();
   const cards = useMemo(() =>
     orders
       .map((o) => ({ ...o, _status: normalizeStatus(o.status) }))
@@ -710,7 +720,7 @@ export function KitchenView({ orders, onAdvance, onPrint, printSize }) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-gray-300 bg-white rounded-3xl border border-gray-100">
         <ChefHat size={48} className="mb-3" />
-        <p className="text-lg font-bold">No active kitchen orders</p>
+        <p className="text-lg font-bold">{t("so.noKitchenOrders")}</p>
       </div>
     );
   }
@@ -726,11 +736,12 @@ export function KitchenView({ orders, onAdvance, onPrint, printSize }) {
 
 /* ═══════════════════════ Rider info block ═══════════════════════ */
 function RiderInfo({ order }) {
+  const { t } = usePreferences();
   if (!order.riderId) {
     return (
       <div className="bg-gray-50 rounded-2xl p-4 flex items-center gap-3 text-gray-400">
         <Bike size={18} />
-        <p className="text-sm font-bold">Waiting for Rider</p>
+        <p className="text-sm font-bold">{t("so.waitingRider")}</p>
       </div>
     );
   }
@@ -742,23 +753,23 @@ function RiderInfo({ order }) {
           <User size={20} className="text-indigo-500" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-black text-gray-900 truncate">{order.riderName || "Rider"}</p>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[status]}`}>{STATUS_LABEL_EN[status]}</span>
+          <p className="text-sm font-black text-gray-900 truncate">{order.riderName || t("so.riderFallback")}</p>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[status]}`}>{statusLabel(t, status)}</span>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="flex items-center gap-1.5 text-gray-500"><Phone size={12} />{order.riderPhone || "—"}</div>
         <div className="flex items-center gap-1.5 text-gray-500"><Truck size={12} />{order.riderVehicle || "—"}</div>
-        <div className="flex items-center gap-1.5 text-gray-500 col-span-2"><Clock size={12} />Picked up: {fmtTime(order.pickedUpAt)}</div>
+        <div className="flex items-center gap-1.5 text-gray-500 col-span-2"><Clock size={12} />{t("so.pickedUpAt", { time: fmtTime(order.pickedUpAt) })}</div>
       </div>
       <div className="flex gap-2">
         {order.riderPhone && (
           <a href={`tel:${order.riderPhone}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-100">
-            <Phone size={13} /> Call Rider
+            <Phone size={13} /> {t("so.callRider")}
           </a>
         )}
         <button onClick={() => copyText(order.riderPhone)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-100">
-          <Copy size={13} /> Copy Phone
+          <Copy size={13} /> {t("so.copyPhone")}
         </button>
       </div>
     </div>
@@ -767,6 +778,7 @@ function RiderInfo({ order }) {
 
 /* ═══════════════════════ Customer info block ═══════════════════════ */
 function CustomerInfo({ order, allOrders }) {
+  const { t } = usePreferences();
   const stats = useMemo(() => {
     if (!order.phone) return null;
     const history = allOrders.filter((o) => o.phone === order.phone && normalizeStatus(o.status) !== "cancelled");
@@ -782,12 +794,12 @@ function CustomerInfo({ order, allOrders }) {
   }, [order.phone, allOrders]);
 
   if (!stats) {
-    return <div className="bg-gray-50 rounded-2xl p-4 text-xs text-gray-400 font-bold">Customer history unavailable</div>;
+    return <div className="bg-gray-50 rounded-2xl p-4 text-xs text-gray-400 font-bold">{t("so.custHistoryUnavailable")}</div>;
   }
 
-  const tier = stats.count >= 5 ? { label: "VIP", cls: "bg-amber-100 text-amber-700", icon: Star }
-    : stats.count >= 2 ? { label: "Returning", cls: "bg-blue-100 text-blue-600", icon: Repeat }
-    : { label: "New Customer", cls: "bg-green-100 text-green-700", icon: User };
+  const tier = stats.count >= 5 ? { label: t("so.tierVip"), cls: "bg-amber-100 text-amber-700", icon: Star }
+    : stats.count >= 2 ? { label: t("so.tierReturning"), cls: "bg-blue-100 text-blue-600", icon: Repeat }
+    : { label: t("so.tierNew"), cls: "bg-green-100 text-green-700", icon: User };
   const Icon = tier.icon;
 
   return (
@@ -797,25 +809,25 @@ function CustomerInfo({ order, allOrders }) {
       </span>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase">Orders</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">{t("so.orders")}</p>
           <p className="text-lg font-black text-gray-900">{stats.count}</p>
         </div>
         <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase">Total Spent</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">{t("so.totalSpent")}</p>
           <p className="text-lg font-black text-gray-900">฿{fmtMoney(stats.total)}</p>
         </div>
         <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase">Avg Order</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">{t("so.avgOrder")}</p>
           <p className="text-sm font-black text-gray-800">฿{fmtMoney(stats.avgSpend)}</p>
         </div>
         <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase">Last Order</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">{t("so.lastOrder")}</p>
           <p className="text-xs font-black text-gray-800">{fmtDateTime(stats.last)}</p>
         </div>
       </div>
       {stats.favorite && (
         <div className="border-t border-gray-100 pt-2">
-          <p className="text-[10px] font-bold text-gray-400 uppercase">Favorite Menu</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">{t("so.favoriteMenu")}</p>
           <p className="text-sm font-black text-gray-800 truncate">{stats.favorite}</p>
         </div>
       )}
@@ -825,6 +837,7 @@ function CustomerInfo({ order, allOrders }) {
 
 /* ═══════════════════════ Delivery info block ═══════════════════════ */
 function DeliveryInfo({ order }) {
+  const { t } = usePreferences();
   const mapsUrl = googleMapsUrl(order);
   const distance = order.distanceKm ?? order.distance ?? order.deliveryDistance;
   const lat = order.deliveryLocation?.lat ?? order.lat ?? order.latitude;
@@ -834,29 +847,29 @@ function DeliveryInfo({ order }) {
     <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div>
-          <p className="text-gray-400 font-bold uppercase text-[10px]">Distance</p>
+          <p className="text-gray-400 font-bold uppercase text-[10px]">{t("so.distance")}</p>
           <p className="font-black text-gray-800 mt-0.5">{distance != null ? `${Number(distance).toFixed(1)} km` : "—"}</p>
         </div>
         <div>
-          <p className="text-gray-400 font-bold uppercase text-[10px]">Delivery Fee</p>
+          <p className="text-gray-400 font-bold uppercase text-[10px]">{t("so.deliveryFee")}</p>
           <p className="font-black text-gray-800 mt-0.5">฿{fmtMoney(order.deliveryFee)}</p>
         </div>
         <div>
-          <p className="text-gray-400 font-bold uppercase text-[10px]">Est. Delivery</p>
-          <p className="font-black text-gray-800 mt-0.5">{order.estimatedMinutes ? `${order.estimatedMinutes} min` : "—"}</p>
+          <p className="text-gray-400 font-bold uppercase text-[10px]">{t("so.estDelivery")}</p>
+          <p className="font-black text-gray-800 mt-0.5">{order.estimatedMinutes ? t("so.min", { count: order.estimatedMinutes }) : "—"}</p>
         </div>
         <div>
-          <p className="text-gray-400 font-bold uppercase text-[10px]">GPS</p>
+          <p className="text-gray-400 font-bold uppercase text-[10px]">{t("so.gps")}</p>
           <p className="font-black text-gray-800 mt-0.5 truncate">{lat != null && lng != null ? `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}` : "—"}</p>
         </div>
       </div>
       {mapsUrl && (
         <div className="flex gap-2">
           <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-100">
-            <MapPin size={13} /> Google Map
+            <MapPin size={13} /> {t("so.googleMap")}
           </a>
           <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-100">
-            <RouteIcon size={13} /> Navigate
+            <RouteIcon size={13} /> {t("so.navigate")}
           </a>
         </div>
       )}
@@ -866,6 +879,7 @@ function DeliveryInfo({ order }) {
 
 /* ═══════════════════════ Payment Center ═══════════════════════ */
 function PaymentCenter({ order, onVerifyPayment }) {
+  const { t } = usePreferences();
   const method = order.paymentMethod;
   const isPromptPay = method === "promptpay";
   const isCash = method !== "promptpay" && method !== "transfer";
@@ -889,13 +903,13 @@ function PaymentCenter({ order, onVerifyPayment }) {
     status === PAYMENT_STATUS.PENDING_VERIFICATION ? "bg-blue-100 text-blue-700" :
     "bg-gray-100 text-gray-500";
   const badgeLabel =
-    status === PAYMENT_STATUS.APPROVED ? "Paid" :
-    status === PAYMENT_STATUS.REJECTED ? "Rejected" :
-    status === PAYMENT_STATUS.EXPIRED ? "Expired" :
-    status === PAYMENT_STATUS.WAITING_PAYMENT ? `Waiting ${countdown?.label ?? ""}`.trim() :
-    status === PAYMENT_STATUS.PENDING_VERIFICATION ? "Waiting Review" :
-    "Cash";
-  const methodLabel = isPromptPay ? "PromptPay" : method === "transfer" ? "Bank Transfer" : "Cash on Delivery";
+    status === PAYMENT_STATUS.APPROVED ? t("so.payPaid") :
+    status === PAYMENT_STATUS.REJECTED ? t("so.payRejected") :
+    status === PAYMENT_STATUS.EXPIRED ? t("so.payExpired") :
+    status === PAYMENT_STATUS.WAITING_PAYMENT ? t("so.payWaiting", { label: countdown?.label ?? "" }).trim() :
+    status === PAYMENT_STATUS.PENDING_VERIFICATION ? t("so.payWaitingReview") :
+    t("so.cash");
+  const methodLabel = isPromptPay ? t("so.methodPromptpay") : method === "transfer" ? t("so.methodTransfer") : t("so.methodCash");
 
   if (isCash) {
     return (
@@ -924,22 +938,22 @@ function PaymentCenter({ order, onVerifyPayment }) {
 
       {order.payment?.slipUrl && (
         <div>
-          <p className="text-xs font-bold text-gray-400 mb-1">Payment Slip</p>
+          <p className="text-xs font-bold text-gray-400 mb-1">{t("so.paymentSlip")}</p>
           <a href={order.payment.slipUrl} target="_blank" rel="noreferrer">
-            <img src={order.payment.slipUrl} alt="Payment slip" className="w-28 rounded-xl border border-gray-100" />
+            <img src={order.payment.slipUrl} alt={t("so.paymentSlip")} className="w-28 rounded-xl border border-gray-100" />
           </a>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-        <div>Amount<br/><span className="font-bold text-gray-700">฿{fmtMoney(order.grandTotal ?? order.subtotal ?? 0)}</span></div>
-        <div>Method<br/><span className="font-bold text-gray-700">{methodLabel}</span></div>
-        <div>Payment Time<br/><span className="font-bold text-gray-700">{fmtDateTime(order.paymentTime)}</span></div>
-        <div>Transaction ID<br/><span className="font-bold text-gray-700 break-all">{order.payment?.transactionId || order.id}</span></div>
+        <div>{t("so.amount")}<br/><span className="font-bold text-gray-700">฿{fmtMoney(order.grandTotal ?? order.subtotal ?? 0)}</span></div>
+        <div>{t("so.method")}<br/><span className="font-bold text-gray-700">{methodLabel}</span></div>
+        <div>{t("so.paymentTime")}<br/><span className="font-bold text-gray-700">{fmtDateTime(order.paymentTime)}</span></div>
+        <div>{t("so.transactionId")}<br/><span className="font-bold text-gray-700 break-all">{order.payment?.transactionId || order.id}</span></div>
       </div>
 
       {status === PAYMENT_STATUS.REJECTED && order.payment?.rejectReason && (
-        <p className="text-xs font-bold text-red-600">Rejected: {order.payment.rejectReason}</p>
+        <p className="text-xs font-bold text-red-600">{t("so.rejectedReason", { reason: order.payment.rejectReason })}</p>
       )}
 
       {awaitingReview && (
@@ -947,12 +961,12 @@ function PaymentCenter({ order, onVerifyPayment }) {
           <input
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="Reason for rejection (optional)"
+            placeholder={t("so.rejectReasonPlaceholder")}
             className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-700 outline-none focus:border-primary"
           />
           <div className="flex gap-2">
-            <button onClick={() => onVerifyPayment(order.id, true)} className="flex-1 py-2 rounded-xl bg-primary text-white text-xs font-black hover:bg-primary-dark">Approve Payment</button>
-            <button onClick={() => onVerifyPayment(order.id, false, rejectReason.trim())} className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-black hover:bg-gray-200">Reject Payment</button>
+            <button onClick={() => onVerifyPayment(order.id, true)} className="flex-1 py-2 rounded-xl bg-primary text-white text-xs font-black hover:bg-primary-dark">{t("so.approvePayment")}</button>
+            <button onClick={() => onVerifyPayment(order.id, false, rejectReason.trim())} className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-black hover:bg-gray-200">{t("so.rejectPayment")}</button>
           </div>
         </div>
       )}
@@ -962,6 +976,7 @@ function PaymentCenter({ order, onVerifyPayment }) {
 
 /* ═══════════════════════ Print panel (preview + size persisted) ═══════════════════════ */
 function PrintPanel({ order }) {
+  const { t } = usePreferences();
   const [size, setSize] = useState(() => localStorage.getItem("store_print_size") || "80mm");
   const [showPreview, setShowPreview] = useState(() => localStorage.getItem("store_print_preview") === "1");
   const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem("store_auto_print") === "1");
@@ -971,15 +986,15 @@ function PrintPanel({ order }) {
   return (
     <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-black text-gray-400 uppercase tracking-wider">Print Receipt</p>
+        <p className="text-xs font-black text-gray-400 uppercase tracking-wider">{t("so.printReceiptTitle")}</p>
         <select value={size} onChange={(e) => handleSize(e.target.value)} className="text-xs font-bold border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-primary">
           <option value="58mm">58mm</option>
           <option value="80mm">80mm</option>
-          <option value="a4">A4 Invoice</option>
+          <option value="a4">{t("so.a4Invoice")}</option>
         </select>
       </div>
       <div className="flex items-center justify-between text-xs">
-        <span className="font-bold text-gray-500">Auto Print on Accept</span>
+        <span className="font-bold text-gray-500">{t("so.autoPrintOnAccept")}</span>
         <button onClick={handleAutoPrint} className={`relative w-9 h-5 rounded-full transition-colors ${autoPrint ? "bg-primary" : "bg-gray-300"}`}>
           <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${autoPrint ? "translate-x-4" : "translate-x-0.5"}`} />
         </button>
@@ -987,17 +1002,17 @@ function PrintPanel({ order }) {
       <div className="flex gap-2">
         <button onClick={() => { const v = !showPreview; setShowPreview(v); localStorage.setItem("store_print_preview", v ? "1" : "0"); }}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-100">
-          <Eye size={13} /> Preview
+          <Eye size={13} /> {t("so.preview")}
         </button>
         <button onClick={() => printReceipt(order, size)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-gray-900 text-white text-xs font-bold hover:bg-gray-700">
-          <Printer size={13} /> Print
+          <Printer size={13} /> {t("so.print")}
         </button>
       </div>
       {showPreview && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowPreview(false)}>
           <div className="bg-white rounded-2xl overflow-hidden max-w-sm w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <p className="text-sm font-black">Receipt Preview ({size})</p>
+              <p className="text-sm font-black">{t("so.receiptPreview", { size })}</p>
               <button onClick={() => setShowPreview(false)}><X size={18} className="text-gray-400" /></button>
             </div>
             <iframe title="receipt-preview" srcDoc={buildReceiptHtml(order, size)} className="flex-1 w-full" style={{ minHeight: "400px" }} />
@@ -1010,6 +1025,7 @@ function PrintPanel({ order }) {
 
 /* ═══════════════════════ Order Detail Drawer (collapsible sections) ═══════════════════════ */
 function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onReject, onVerifyPayment, onUpdateETA, onEdit }) {
+  const { t } = usePreferences();
   if (!order) return null;
   const status = normalizeStatus(order.status);
   const statusIdx = STATUS_ORDER.indexOf(status);
@@ -1025,24 +1041,24 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
           <div>
             <p className="text-lg font-black text-gray-900">{order.orderNo || order.id}</p>
             <span className={`text-xs font-bold px-2.5 py-1 rounded-full inline-block mt-1 ${isCancelled ? STATUS_BADGE.cancelled : STATUS_BADGE[status] || "bg-gray-100 text-gray-500"}`}>
-              {STATUS_LABEL_EN[status] || status}
+              {statusLabel(t, status)}
             </span>
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><X size={20} /></button>
+          <button onClick={onClose} aria-label={t("so.close")} className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><X size={20} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {/* Customer */}
-          <Section title="Customer">
+          <Section title={t("so.secCustomer")}>
             <div className="bg-gray-50 rounded-2xl p-4 space-y-2 mb-2">
               <p className="text-sm font-black text-gray-900">{order.customerName || "—"}</p>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500 flex items-center gap-2"><Phone size={14} />{order.phone || "—"}</span>
-                {order.phone && <a href={`tel:${order.phone}`} className="text-xs font-bold text-primary hover:underline">Call</a>}
+                {order.phone && <a href={`tel:${order.phone}`} className="text-xs font-bold text-primary hover:underline">{t("so.call")}</a>}
               </div>
               <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
                 {order.orderType === "pickup" ? <Package size={13} /> : <Bike size={13} />}
-                {order.orderType === "pickup" ? "Pickup" : "Delivery"}
+                {order.orderType === "pickup" ? t("so.pickup") : t("so.delivery")}
               </div>
               {(order.deliveryAddress || order.address) && (
                 <div className="flex items-start justify-between gap-2 pt-1 border-t border-gray-100 mt-2">
@@ -1056,7 +1072,7 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
 
           {/* Notes */}
           {order.note && (
-            <Section title="Notes" defaultOpen>
+            <Section title={t("so.secNotes")} defaultOpen>
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
                 <p className="text-sm font-bold text-amber-800">{order.note}</p>
               </div>
@@ -1065,25 +1081,25 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
 
           {/* Cooking */}
           {isActive && (
-            <Section title="Cooking">
+            <Section title={t("so.secCooking")}>
               <CookingSection order={order} onUpdateETA={onUpdateETA} />
             </Section>
           )}
 
           {/* Rider */}
-          <Section title="Rider" defaultOpen={!!order.riderId}>
+          <Section title={t("so.secRider")} defaultOpen={!!order.riderId}>
             <RiderInfo order={order} />
           </Section>
 
           {/* Delivery */}
           {order.orderType !== "pickup" && (
-            <Section title="Delivery">
+            <Section title={t("so.secDelivery")}>
               <DeliveryInfo order={order} />
             </Section>
           )}
 
           {/* Items */}
-          <Section title="Items">
+          <Section title={t("so.secItems")}>
             <div className="space-y-3">
               {(order.items || []).map((item, i) => (
                 <div key={i} className="flex gap-3">
@@ -1101,29 +1117,29 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
                       {optionLabel(item.sauce) && <span className="text-[10px] font-bold bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-md">{optionLabel(item.sauce)}</span>}
                       {optionLabel(item.powder) && <span className="text-[10px] font-bold bg-purple-50 text-purple-600 px-2 py-0.5 rounded-md">{optionLabel(item.powder)}</span>}
                     </div>
-                    {item.note && <p className="text-xs text-gray-400 mt-1">Note: {item.note}</p>}
+                    {item.note && <p className="text-xs text-gray-400 mt-1">{t("so.noteLabel", { note: item.note })}</p>}
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex justify-between pt-3 mt-3 border-t border-gray-100">
-              <p className="text-sm font-black text-gray-900">Total</p>
+              <p className="text-sm font-black text-gray-900">{t("so.total")}</p>
               <p className="text-lg font-black text-primary">฿{fmtMoney(order.grandTotal ?? order.subtotal)}</p>
             </div>
           </Section>
 
           {/* Payment */}
-          <Section title="Payment">
+          <Section title={t("so.secPayment")}>
             <PaymentCenter order={order} onVerifyPayment={onVerifyPayment} />
           </Section>
 
           {/* Print */}
-          <Section title="Print" defaultOpen={false}>
+          <Section title={t("so.secPrint")} defaultOpen={false}>
             <PrintPanel order={order} />
           </Section>
 
           {/* Timeline */}
-          <Section title="Timeline">
+          <Section title={t("so.secTimeline")}>
             <div className="space-y-0">
               {TIMELINE_STEPS.map((step, i) => {
                 const reached = !isCancelled && statusIdx >= i;
@@ -1139,8 +1155,8 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
                       {i < TIMELINE_STEPS.length - 1 && <span className={`w-0.5 flex-1 ${reached ? "bg-gray-300" : "bg-gray-100"}`} style={{ minHeight: "20px" }} />}
                     </div>
                     <div className="pb-4">
-                      <p className={`text-sm font-bold ${reached ? "text-gray-900" : "text-gray-300"}`}>{step.label}</p>
-                      <p className="text-[10px] text-gray-400">{step.who}{ts ? ` · ${fmtDateTime(ts)}` : ""}</p>
+                      <p className={`text-sm font-bold ${reached ? "text-gray-900" : "text-gray-300"}`}>{t(step.labelKey)}</p>
+                      <p className="text-[10px] text-gray-400">{t(step.whoKey)}{ts ? ` · ${fmtDateTime(ts)}` : ""}</p>
                     </div>
                   </div>
                 );
@@ -1148,19 +1164,19 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
               {isCancelled && (
                 <div className="flex gap-3">
                   <span className="w-7 h-7 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0"><XCircle size={13} className="text-white" /></span>
-                  <p className="text-sm font-bold text-gray-700">Order Cancelled</p>
+                  <p className="text-sm font-bold text-gray-700">{t("so.orderCancelled")}</p>
                 </div>
               )}
             </div>
           </Section>
 
           {/* Global Timeline (Phase 4.0) — order.timeline event history, shared component */}
-          <Section title="History" defaultOpen={false}>
+          <Section title={t("so.secHistory")} defaultOpen={false}>
             <OrderTimeline order={order} />
           </Section>
 
           {/* Audit Log (Phase 4.1) — read-only order.audit trail, shared component */}
-          <Section title="Audit Log" defaultOpen={false}>
+          <Section title={t("so.secAuditLog")} defaultOpen={false}>
             <AuditLog order={order} />
           </Section>
         </div>
@@ -1169,18 +1185,18 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
         <div className="border-t border-gray-100 p-4 space-y-2 flex-shrink-0">
           {!isCancelled && status === "pending" && (
             <div className="flex gap-2">
-              <button onClick={() => { onReject(order.id); onClose(); }} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">Reject Order</button>
+              <button onClick={() => { onReject(order.id); onClose(); }} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">{t("so.rejectOrder")}</button>
               {isPaymentSettled(order)
-                ? <button onClick={() => onAccept(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Accept Order</button>
-                : <span className="flex-1 py-3 rounded-xl bg-amber-100 text-amber-700 text-sm font-black text-center">Awaiting payment</span>}
+                ? <button onClick={() => onAccept(order)} className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{t("so.acceptOrder")}</button>
+                : <span className="flex-1 py-3 rounded-xl bg-amber-100 text-amber-700 text-sm font-black text-center">{t("so.awaitingPayment")}</span>}
             </div>
           )}
           {!isCancelled && next && (
-            <button onClick={() => { onAdvance(order.id, next.to); onClose(); }} className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700">{next.label}</button>
+            <button onClick={() => { onAdvance(order.id, next.to); onClose(); }} className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700">{t(next.labelKey)}</button>
           )}
           {!isCancelled && status !== "completed" && (
             <button onClick={() => { onEdit(order); onClose(); }} className="w-full py-3 rounded-xl border-2 border-gray-200 text-gray-600 text-sm font-black hover:border-primary hover:text-primary flex items-center justify-center gap-2">
-              <Pencil size={15} /> Edit Order{order.version > 1 ? ` · v${order.version}` : ""}
+              <Pencil size={15} /> {t("so.editOrder")}{order.version > 1 ? ` · v${order.version}` : ""}
             </button>
           )}
         </div>
@@ -1194,6 +1210,7 @@ function OrderDetailDrawer({ order, allOrders, onClose, onAdvance, onAccept, onR
 const ETA_PRESETS = [5, 10, 15, 20, 25, 30, 45, 60];
 
 function AcceptWithETAModal({ order, onConfirm, onCancel }) {
+  const { t } = usePreferences();
   const [minutes, setMinutes] = useState(15);
   const [custom, setCustom] = useState(false);
   const [customVal, setCustomVal] = useState("");
@@ -1206,11 +1223,11 @@ function AcceptWithETAModal({ order, onConfirm, onCancel }) {
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4" onClick={onCancel}>
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto overscroll-contain" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100">
-          <p className="text-base font-black text-gray-900">Accept Order</p>
-          <p className="text-xs text-gray-400 mt-0.5">{order.orderNo || order.id} · {order.customerName || "Customer"}</p>
+          <p className="text-base font-black text-gray-900">{t("so.acceptOrder")}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{order.orderNo || order.id} · {order.customerName || t("so.who.customer")}</p>
         </div>
         <div className="px-5 py-4">
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">Estimated Cooking Time</p>
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">{t("so.estCookingTime")}</p>
           <div className="grid grid-cols-4 gap-2 mb-3">
             {ETA_PRESETS.map((p) => (
               <button key={p} onClick={() => { setMinutes(p); setCustom(false); }}
@@ -1221,23 +1238,23 @@ function AcceptWithETAModal({ order, onConfirm, onCancel }) {
           </div>
           <button onClick={() => setCustom((c) => !c)}
             className={`w-full py-2.5 rounded-xl text-sm font-bold mb-3 transition-colors ${custom ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-600 hover:bg-gray-100"}`}>
-            Custom
+            {t("so.custom")}
           </button>
           {custom && (
             <div className="flex items-center gap-2 mb-3">
               <input autoFocus type="number" value={customVal} onChange={(e) => setCustomVal(e.target.value)}
-                placeholder="Minutes…" min={1} max={240}
+                placeholder={t("so.minutesPlaceholder")} min={1} max={240}
                 className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm font-bold outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-              <span className="text-sm font-bold text-gray-400">min</span>
+              <span className="text-sm font-bold text-gray-400">{t("so.minUnit")}</span>
             </div>
           )}
-          {eta && <p className="text-xs text-center text-amber-600 font-bold mb-1">ETA: {eta}</p>}
+          {eta && <p className="text-xs text-center text-amber-600 font-bold mb-1">{t("so.etaValue", { time: eta })}</p>}
         </div>
         <div className="flex gap-2 px-5 pb-5">
-          <button onClick={onCancel} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-black hover:bg-gray-200">Cancel</button>
+          <button onClick={onCancel} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-black hover:bg-gray-200">{t("so.cancel")}</button>
           <button onClick={() => onConfirm(order.id, finalMins)} disabled={finalMins < 1}
             className="flex-1 py-3 rounded-xl bg-primary text-white font-black hover:bg-primary-dark disabled:opacity-40">
-            Accept
+            {t("so.accept")}
           </button>
         </div>
       </div>
@@ -1247,6 +1264,7 @@ function AcceptWithETAModal({ order, onConfirm, onCancel }) {
 
 /* ═══════════════════════ Order Queue Bar (drag-and-drop priority) ═══════════════════════ */
 function OrderQueueBar({ orders, priorityOrder, onReorder, now, onOpen }) {
+  const { t } = usePreferences();
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
 
@@ -1282,9 +1300,9 @@ function OrderQueueBar({ orders, priorityOrder, onReorder, now, onOpen }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-3">
       <div className="flex items-center gap-2 mb-2">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Order Queue</p>
-        <span className="text-[10px] bg-gray-100 text-gray-500 font-bold px-2 py-0.5 rounded-full">{active.length} active</span>
-        <p className="text-[10px] text-gray-300 ml-auto hidden sm:block">Drag to reprioritize</p>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("so.orderQueue")}</p>
+        <span className="text-[10px] bg-gray-100 text-gray-500 font-bold px-2 py-0.5 rounded-full">{t("so.activeCount", { count: active.length })}</span>
+        <p className="text-[10px] text-gray-300 ml-auto hidden sm:block">{t("so.dragToReprioritize")}</p>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {active.map((order, i) => {
@@ -1316,36 +1334,38 @@ function OrderQueueBar({ orders, priorityOrder, onReorder, now, onOpen }) {
 
 /* ═══════════════════════ Sync Status indicator ═══════════════════════ */
 function SyncStatus({ online, loading, lastSync }) {
+  const { t } = usePreferences();
   const [tick, setTick] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), 10000);
     return () => clearInterval(id);
   }, []);
 
-  if (!online) return <span className="flex items-center gap-1.5 text-xs font-bold text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-400" />Offline</span>;
-  if (loading) return <span className="flex items-center gap-1.5 text-xs font-bold text-yellow-500"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />Connecting…</span>;
+  if (!online) return <span className="flex items-center gap-1.5 text-xs font-bold text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-400" />{t("so.offline")}</span>;
+  if (loading) return <span className="flex items-center gap-1.5 text-xs font-bold text-yellow-500"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />{t("so.connecting")}</span>;
   const secAgo = lastSync ? Math.round((tick - lastSync) / 1000) : null;
-  const label = secAgo == null ? "Synced" : secAgo < 60 ? `${secAgo}s ago` : `${Math.floor(secAgo / 60)}m ago`;
+  const label = secAgo == null ? t("so.synced") : secAgo < 60 ? t("so.secsAgo", { count: secAgo }) : t("so.minsAgo", { count: Math.floor(secAgo / 60) });
   return <span className="flex items-center gap-1.5 text-xs font-bold text-gray-400"><Wifi size={12} className="text-green-400" />{label}</span>;
 }
 
 /* ═══════════════════════ Keyboard shortcut help ═══════════════════════ */
 function ShortcutHelpModal({ onClose }) {
+  const { t } = usePreferences();
   const shortcuts = [
-    { key: "A", desc: "Accept focused order" },
-    { key: "R", desc: "Reject focused order" },
-    { key: "P", desc: "Mark Preparing" },
-    { key: "F", desc: "Mark Ready" },
-    { key: "D", desc: "Delivering / Pick Up" },
-    { key: "C", desc: "Complete order" },
-    { key: "ESC", desc: "Close drawer / panel" },
-    { key: "?", desc: "Toggle this help" },
+    { key: "A", desc: t("so.scAccept") },
+    { key: "R", desc: t("so.scReject") },
+    { key: "P", desc: t("so.scPreparing") },
+    { key: "F", desc: t("so.scReady") },
+    { key: "D", desc: t("so.scDelivering") },
+    { key: "C", desc: t("so.scComplete") },
+    { key: "ESC", desc: t("so.scClose") },
+    { key: "?", desc: t("so.scHelp") },
   ];
   return (
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto overscroll-contain" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <span className="flex items-center gap-2 text-base font-black text-gray-900"><Keyboard size={18} /> Keyboard Shortcuts</span>
+          <span className="flex items-center gap-2 text-base font-black text-gray-900"><Keyboard size={18} /> {t("so.shortcutsHeading")}</span>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
         <div className="px-5 py-4 space-y-2">
@@ -1356,7 +1376,7 @@ function ShortcutHelpModal({ onClose }) {
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-gray-300 text-center pb-4">Shortcuts work when no input is focused and a drawer is open</p>
+        <p className="text-[10px] text-gray-300 text-center pb-4">{t("so.shortcutsHint")}</p>
       </div>
     </div>
   );
@@ -1364,6 +1384,7 @@ function ShortcutHelpModal({ onClose }) {
 
 /* ═══════════════════════ Shift Summary bar ═══════════════════════ */
 function ShiftSummary({ orders, shiftStart }) {
+  const { t } = usePreferences();
   const stats = useMemo(() => {
     const today = orders.filter((o) => isToday(o.createdAt));
     const completed = today.filter((o) => normalizeStatus(o.status) === "completed");
@@ -1391,13 +1412,13 @@ function ShiftSummary({ orders, shiftStart }) {
   }, [orders, shiftStart]);
 
   const cols = [
-    { label: "Today", value: stats.total },
-    { label: "Revenue", value: `฿${fmtMoney(stats.revenue)}` },
-    { label: "Done", value: stats.completed },
-    { label: "Cancelled", value: stats.cancelled },
-    { label: "Avg Cook", value: stats.avgCook != null ? `${stats.avgCook}m` : "—" },
-    { label: "Avg Del", value: stats.avgDel != null ? `${stats.avgDel}m` : "—" },
-    { label: "Shift", value: stats.shiftDur },
+    { label: t("so.colToday"), value: stats.total },
+    { label: t("so.colRevenue"), value: `฿${fmtMoney(stats.revenue)}` },
+    { label: t("so.colDone"), value: stats.completed },
+    { label: t("so.colCancelled"), value: stats.cancelled },
+    { label: t("so.colAvgCook"), value: stats.avgCook != null ? `${stats.avgCook}m` : "—" },
+    { label: t("so.colAvgDel"), value: stats.avgDel != null ? `${stats.avgDel}m` : "—" },
+    { label: t("so.colShift"), value: stats.shiftDur },
   ];
 
   return (
@@ -1430,6 +1451,7 @@ function Section({ title, defaultOpen = true, children }) {
 
 /* ═══════════════════════ Cooking section in drawer ═══════════════════════ */
 function CookingSection({ order, onUpdateETA }) {
+  const { t } = usePreferences();
   const [editing, setEditing] = useState(false);
   const [minutes, setMinutes] = useState(order.estimatedMinutes || 15);
 
@@ -1444,14 +1466,14 @@ function CookingSection({ order, onUpdateETA }) {
       {!editing ? (
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase">Estimated Time</p>
-            <p className="font-black text-gray-800 mt-0.5">{order.estimatedMinutes ? `${order.estimatedMinutes} min` : "Not set"}</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase">{t("so.estTime")}</p>
+            <p className="font-black text-gray-800 mt-0.5">{order.estimatedMinutes ? t("so.min", { count: order.estimatedMinutes }) : t("so.notSet")}</p>
             {order.estimatedFinishTime && (
-              <p className="text-xs font-bold text-amber-600 mt-0.5">ETA: {fmtTime(order.estimatedFinishTime)}</p>
+              <p className="text-xs font-bold text-amber-600 mt-0.5">{t("so.etaValue", { time: fmtTime(order.estimatedFinishTime) })}</p>
             )}
           </div>
           <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-md px-1">
-            <Pencil size={12} /> Edit
+            <Pencil size={12} /> {t("so.edit")}
           </button>
         </div>
       ) : (
@@ -1465,8 +1487,8 @@ function CookingSection({ order, onUpdateETA }) {
             ))}
           </div>
           <div className="flex gap-2 mt-2">
-            <button onClick={() => setEditing(false)} className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-black">Cancel</button>
-            <button onClick={save} className="flex-1 py-2 rounded-xl bg-primary text-white text-xs font-black">Save</button>
+            <button onClick={() => setEditing(false)} className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-black">{t("so.cancel")}</button>
+            <button onClick={save} className="flex-1 py-2 rounded-xl bg-primary text-white text-xs font-black">{t("so.save")}</button>
           </div>
         </div>
       )}
@@ -1476,12 +1498,13 @@ function CookingSection({ order, onUpdateETA }) {
 
 /* ═══════════════════════ Empty states ═══════════════════════ */
 function EmptyState({ type }) {
+  const { t } = usePreferences();
   const cfg = {
-    "no-orders": { icon: Inbox, title: "No orders in this status", sub: "New orders will appear here in real-time." },
-    "no-results": { icon: SearchX, title: "No matching orders", sub: "Try adjusting your search or filters." },
-    offline: { icon: WifiOff, title: "You're offline", sub: "Reconnect to see live order updates." },
-    error: { icon: AlertTriangle, title: "Something went wrong", sub: "Please refresh the page and try again." },
-  }[type] || { icon: Inbox, title: "Nothing here", sub: "" };
+    "no-orders": { icon: Inbox, title: t("so.emptyNoOrdersTitle"), sub: t("so.emptyNoOrdersDesc") },
+    "no-results": { icon: SearchX, title: t("so.emptyNoResultsTitle"), sub: t("so.emptyNoResultsDesc") },
+    offline: { icon: WifiOff, title: t("so.emptyOfflineTitle"), sub: t("so.emptyOfflineDesc") },
+    error: { icon: AlertTriangle, title: t("so.emptyErrorTitle"), sub: t("so.emptyErrorDesc") },
+  }[type] || { icon: Inbox, title: t("so.emptyNothing"), sub: "" };
   const Icon = cfg.icon;
   return (
     <div className="flex flex-col items-center justify-center py-20 text-gray-300 bg-white rounded-2xl border border-gray-100">
@@ -1495,6 +1518,7 @@ function EmptyState({ type }) {
 /* ═══════════════════════ Floating new-order notifications (top-right stack) ═══════════════════════ */
 /* ═══════════════════════ Sticky summary header ═══════════════════════ */
 function SummaryHeader({ orders }) {
+  const { t } = usePreferences();
   const stats = useMemo(() => {
     const counts = { pending: 0, cooking: 0, ready_for_delivery: 0, delivering: 0, completed: 0 };
     let revenue = 0;
@@ -1518,11 +1542,11 @@ function SummaryHeader({ orders }) {
   }, [orders]);
 
   const items = [
-    { label: "Pending", value: stats.pending, icon: Inbox, cls: "text-red-500" },
-    { label: "Preparing", value: stats.cooking, icon: ChefHat, cls: "text-orange-500" },
-    { label: "Ready", value: stats.ready_for_delivery, icon: Package, cls: "text-blue-500" },
-    { label: "Delivering", value: stats.delivering, icon: Bike, cls: "text-purple-500" },
-    { label: "Completed", value: stats.completed, icon: CheckCheck, cls: "text-green-500" },
+    { label: t("so.sumPending"), value: stats.pending, icon: Inbox, cls: "text-red-500" },
+    { label: t("so.sumPreparing"), value: stats.cooking, icon: ChefHat, cls: "text-orange-500" },
+    { label: t("so.sumReady"), value: stats.ready_for_delivery, icon: Package, cls: "text-blue-500" },
+    { label: t("so.sumDelivering"), value: stats.delivering, icon: Bike, cls: "text-purple-500" },
+    { label: t("so.sumCompleted"), value: stats.completed, icon: CheckCheck, cls: "text-green-500" },
   ];
 
   return (
@@ -1538,12 +1562,12 @@ function SummaryHeader({ orders }) {
       <div className="flex items-center gap-2 flex-shrink-0">
         <TrendingUp size={16} className="text-primary" />
         <span className="text-lg font-black text-gray-900">฿{fmtMoney(stats.revenue)}</span>
-        <span className="text-[11px] font-bold text-gray-400 uppercase">Today</span>
+        <span className="text-[11px] font-bold text-gray-400 uppercase">{t("so.sumToday")}</span>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <Timer size={16} className="text-gray-400" />
         <span className="text-lg font-black text-gray-900">{stats.avgPrep != null ? `${stats.avgPrep}m` : "—"}</span>
-        <span className="text-[11px] font-bold text-gray-400 uppercase">Avg Prep</span>
+        <span className="text-[11px] font-bold text-gray-400 uppercase">{t("so.sumAvgPrep")}</span>
       </div>
     </div>
   );
@@ -1551,24 +1575,25 @@ function SummaryHeader({ orders }) {
 
 /* ═══════════════════════ Notification center (right sidebar) ═══════════════════════ */
 function NotificationCenter({ open, onClose, history, onClear, muted, onToggleMute }) {
+  const { t } = usePreferences();
   if (!open) return null;
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-sm bg-white shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <p className="text-base font-black text-gray-900">Notification Center</p>
+          <p className="text-base font-black text-gray-900">{t("so.notifCenter")}</p>
           <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:bg-gray-100"><X size={18} /></button>
         </div>
         <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
           <button onClick={onToggleMute} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 text-xs font-bold text-gray-600 hover:bg-gray-100">
-            {muted ? <BellOff size={13} /> : <Bell size={13} />} {muted ? "Unmute" : "Mute"}
+            {muted ? <BellOff size={13} /> : <Bell size={13} />} {muted ? t("so.unmute") : t("so.mute")}
           </button>
-          <button onClick={onClear} className="px-3 py-1.5 rounded-lg bg-gray-50 text-xs font-bold text-gray-600 hover:bg-gray-100 ml-auto">Clear All</button>
+          <button onClick={onClear} className="px-3 py-1.5 rounded-lg bg-gray-50 text-xs font-bold text-gray-600 hover:bg-gray-100 ml-auto">{t("so.clearAll")}</button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {history.length === 0 ? (
-            <p className="text-sm text-gray-300 text-center py-12">No notifications yet</p>
+            <p className="text-sm text-gray-300 text-center py-12">{t("so.noNotifications")}</p>
           ) : history.map((n) => (
             <div key={n.key} className="px-5 py-3 border-b border-gray-50 flex items-start gap-3">
               <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${STATUS_DOT[n.status] || "bg-gray-300"}`} />
@@ -1587,13 +1612,14 @@ function NotificationCenter({ open, onClose, history, onClear, muted, onToggleMu
 /* ═══════════════════════ Main Page ═══════════════════════ */
 const PAGE_SIZE = 50;
 const SORT_OPTIONS = [
-  { key: "waiting_desc", label: "Longest Waiting" },
-  { key: "newest", label: "Newest" },
-  { key: "oldest", label: "Oldest" },
-  { key: "price_desc", label: "Highest Price" },
+  { key: "waiting_desc", labelKey: "so.sort.waiting" },
+  { key: "newest", labelKey: "so.sort.newest" },
+  { key: "oldest", labelKey: "so.sort.oldest" },
+  { key: "price_desc", labelKey: "so.sort.priceDesc" },
 ];
 
 export function Orders() {
+  const { t } = usePreferences();
   const { profile, user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1680,7 +1706,7 @@ export function Orders() {
           knownIds.current.add(order.id);
           if (normalizeStatus(order.status) === "pending") {
             // เสียง/แจ้งเตือน/ป็อปอัปงานใหม่เป็นของ StoreLayout ที่เดียว — หน้านี้เก็บแค่ประวัติแจ้งเตือน
-            setNotifHistory((prev) => [{ key: `${order.id}-${Date.now()}`, status: "pending", time: new Date(), text: `New order ${order.orderNo || order.id}` }, ...prev].slice(0, 50));
+            setNotifHistory((prev) => [{ key: `${order.id}-${Date.now()}`, status: "pending", time: new Date(), text: t("so.newOrderNotif", { order: order.orderNo || order.id }) }, ...prev].slice(0, 50));
           }
         });
         initialized.current = true;
@@ -1688,7 +1714,7 @@ export function Orders() {
       () => setErrored(true)
     );
     return unsub;
-  }, []);
+  }, [t]);
 
   // Auto-cancel orders whose 10-min payment window elapsed. The store dashboard is
   // the reliable sweeper (a customer may have closed the app). expireOrderPayment is
@@ -1886,7 +1912,7 @@ export function Orders() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-black text-gray-900">Order Management</h1>
+          <h1 className="text-xl font-black text-gray-900">{t("so.title")}</h1>
           <SyncStatus online={online} loading={loading} lastSync={lastSync} />
         </div>
         <div className="flex items-center gap-2">
@@ -1894,7 +1920,7 @@ export function Orders() {
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-xl p-1">
             {(["compact", "medium", "large"] ).map((sz) => (
               <button key={sz} onClick={() => { setCardSize(sz); localStorage.setItem("store_card_size", sz); }}
-                title={sz.charAt(0).toUpperCase() + sz.slice(1)}
+                title={t(`so.size${sz.charAt(0).toUpperCase() + sz.slice(1)}`)}
                 className={`p-1.5 rounded-lg transition-colors ${cardSize === sz ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}>
                 <Layers size={15} />
               </button>
@@ -1902,14 +1928,14 @@ export function Orders() {
           </div>
           {/* Auto scroll toggle */}
           <button onClick={() => { const v = !autoScroll; setAutoScroll(v); localStorage.setItem("store_auto_scroll", v ? "1" : "0"); }}
-            title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
+            title={autoScroll ? t("so.autoScrollOn") : t("so.autoScrollOff")}
             className={`p-2.5 rounded-xl border text-sm font-bold transition-colors ${autoScroll ? "border-primary bg-primary-light text-primary" : "border-gray-200 text-gray-400 hover:bg-gray-50"}`}>
             <ScrollText size={16} />
           </button>
-          <button onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (?)" className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50">
+          <button onClick={() => setShowShortcuts(true)} title={t("so.shortcutsTitle")} className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50">
             <Keyboard size={16} />
           </button>
-          <button onClick={() => setMuted((m) => !m)} title={muted ? "Unmute" : "Mute"} className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <button onClick={() => setMuted((m) => !m)} title={muted ? t("so.unmute") : t("so.mute")} className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             {muted ? <BellOff size={17} /> : <Bell size={17} />}
           </button>
           <button onClick={() => setShowNotif(true)} className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
@@ -1917,7 +1943,7 @@ export function Orders() {
             {notifHistory.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{notifHistory.length > 9 ? "9+" : notifHistory.length}</span>}
           </button>
           <Link to="/store/kitchen" className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-black hover:bg-gray-700">
-            <ChefHat size={16} /> Kitchen
+            <ChefHat size={16} /> {t("so.kitchen")}
           </Link>
         </div>
       </div>
@@ -1935,7 +1961,7 @@ export function Orders() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search order, name, phone, item…"
+            placeholder={t("so.searchPlaceholder")}
             className="w-full pl-10 pr-3 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
           {search && (
@@ -1945,11 +1971,11 @@ export function Orders() {
           )}
         </div>
         <button onClick={() => setShowFilters((v) => !v)} className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-sm font-bold ${showFilters ? "bg-primary-light border-primary text-primary" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
-          <SlidersHorizontal size={15} /> Filters
+          <SlidersHorizontal size={15} /> {t("so.filters")}
         </button>
         <div className="relative">
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="appearance-none pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-600 outline-none focus:border-primary">
-            {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{t(s.labelKey)}</option>)}
           </select>
           <ArrowDownUp size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" />
         </div>
@@ -1959,45 +1985,45 @@ export function Orders() {
       {showFilters && (
         <div className="bg-white rounded-2xl border border-gray-100 p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Payment</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.filterPayment")}</label>
             <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none">
-              <option value="all">All</option><option value="cash">Cash</option><option value="promptpay">PromptPay</option>
+              <option value="all">{t("so.filterAll")}</option><option value="cash">{t("so.cash")}</option><option value="promptpay">{t("so.promptpay")}</option>
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Delivery</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.filterDelivery")}</label>
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none">
-              <option value="all">All</option><option value="delivery">Delivery</option><option value="pickup">Pickup</option>
+              <option value="all">{t("so.filterAll")}</option><option value="delivery">{t("so.delivery")}</option><option value="pickup">{t("so.pickup")}</option>
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Date</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.filterDate")}</label>
             <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none">
-              <option value="all">All</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="range">Custom Date</option>
+              <option value="all">{t("so.filterAll")}</option><option value="today">{t("so.dateToday")}</option><option value="yesterday">{t("so.dateYesterday")}</option><option value="range">{t("so.dateCustom")}</option>
             </select>
           </div>
           {dateFilter === "range" && (
             <>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase">From</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.dateFrom")}</label>
                 <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none" />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase">To</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.dateTo")}</label>
                 <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none" />
               </div>
             </>
           )}
           <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Min Price</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.minPrice")}</label>
             <input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="0" className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none" />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Max Price</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.maxPrice")}</label>
             <input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="9999" className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none" />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Min Waiting (min)</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">{t("so.minWaiting")}</label>
             <input type="number" value={minWaiting} onChange={(e) => setMinWaiting(e.target.value)} placeholder="0" className="w-full mt-1 px-2.5 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 outline-none" />
           </div>
         </div>
@@ -2012,7 +2038,7 @@ export function Orders() {
             className={`flex-shrink-0 flex items-center gap-2 px-4 py-3 md:py-3.5 rounded-xl text-sm font-black whitespace-nowrap transition-colors min-h-[48px]
               ${activeTab === tab.key ? "bg-gray-900 text-white" : "bg-white text-gray-500 border border-gray-100 hover:bg-gray-50"}`}
           >
-            {tab.label}
+            {t(tab.labelKey)}
             <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold ${activeTab === tab.key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
               {tabCounts[tab.key] || 0}
             </span>
@@ -2024,11 +2050,11 @@ export function Orders() {
       {filtered.length > 0 && (
         <div className="flex items-center gap-3">
           <button onClick={selectAll} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-800">
-            <CheckSquare size={14} /> Select All
+            <CheckSquare size={14} /> {t("so.selectAll")}
           </button>
           {selected.size > 0 && (
             <button onClick={clearSelection} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-800">
-              <Square size={14} /> Clear Selection
+              <Square size={14} /> {t("so.clearSelection")}
             </button>
           )}
         </div>
@@ -2065,7 +2091,7 @@ export function Orders() {
           {visibleCount < filtered.length && (
             <div className="flex justify-center pt-2">
               <button onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                Load more ({filtered.length - visibleCount} remaining)
+                {t("so.loadMore", { count: filtered.length - visibleCount })}
               </button>
             </div>
           )}
@@ -2078,19 +2104,19 @@ export function Orders() {
       {/* Floating bulk action bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-2xl px-4 py-3 shadow-2xl max-w-[95vw]">
-          <p className="text-sm font-bold whitespace-nowrap">{selected.size} selected</p>
+          <p className="text-sm font-bold whitespace-nowrap">{t("so.selectedCount", { count: selected.size })}</p>
           {activeTab === "pending" && (
             <>
-              <button onClick={bulkReject} className="px-3 py-1.5 rounded-lg bg-white/10 text-sm font-bold hover:bg-white/20">Reject</button>
-              <button onClick={bulkAccept} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-sm font-bold hover:bg-primary-dark"><CheckCheck size={14} /> Accept</button>
+              <button onClick={bulkReject} className="px-3 py-1.5 rounded-lg bg-white/10 text-sm font-bold hover:bg-white/20">{t("so.reject")}</button>
+              <button onClick={bulkAccept} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-sm font-bold hover:bg-primary-dark"><CheckCheck size={14} /> {t("so.accept")}</button>
             </>
           )}
           <select onChange={(e) => bulkChangeStatus(e.target.value)} value="" className="px-3 py-1.5 rounded-lg bg-white/10 text-sm font-bold outline-none">
-            <option value="" disabled>Change Status…</option>
-            {TABS.map((t) => <option key={t.key} value={t.key} className="text-gray-900">{t.label}</option>)}
+            <option value="" disabled>{t("so.changeStatus")}</option>
+            {TABS.map((tab) => <option key={tab.key} value={tab.key} className="text-gray-900">{t(tab.labelKey)}</option>)}
           </select>
-          <button onClick={bulkPrint} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm font-bold hover:bg-white/20"><Printer size={14} /> Print</button>
-          <button onClick={bulkExport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm font-bold hover:bg-white/20"><Download size={14} /> Export</button>
+          <button onClick={bulkPrint} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm font-bold hover:bg-white/20"><Printer size={14} /> {t("so.print")}</button>
+          <button onClick={bulkExport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-sm font-bold hover:bg-white/20"><Download size={14} /> {t("so.export")}</button>
           <button onClick={() => setSelected(new Set())} className="px-2 py-1.5 text-white/60 hover:text-white"><X size={16} /></button>
         </div>
       )}

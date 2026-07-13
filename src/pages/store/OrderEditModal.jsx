@@ -2,23 +2,28 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { X, Plus, Minus, Trash2, Search, Save, Loader2, Pencil } from "lucide-react";
 import { db } from "../../firebase";
+import { usePreferences } from "../../context/PreferencesContext";
 import { fmtMoney } from "../../store/orderStatus";
 import { recalcOrder, orderTotal } from "../../store/orderTotals";
 import { EDIT_REASONS, REFUND_METHODS, blankItemFromMenu, saveOrderEdit } from "../../store/orderEdit";
 
 const OPTION_FIELDS = [
-  { key: "top_chicken", label: "Topping" },
-  { key: "spicy", label: "Spicy" },
-  { key: "Sauce", label: "Sauce" },
-  { key: "sauce", label: "Extra Sauce" },
-  { key: "powder", label: "Powder" },
-  { key: "tableCheese", label: "Cheese" },
+  { key: "top_chicken", labelKey: "soe.optTopping" },
+  { key: "spicy", labelKey: "soe.optSpicy" },
+  { key: "Sauce", labelKey: "soe.optSauce" },
+  { key: "sauce", labelKey: "soe.optExtraSauce" },
+  { key: "powder", labelKey: "soe.optPowder" },
+  { key: "tableCheese", labelKey: "soe.optCheese" },
 ];
+
+// PromptPay/Transfer/Cash refund-method labels, keyed by REFUND_METHODS value.
+const REFUND_METHOD_KEY = { cash: "soe.refundCash", transfer: "soe.refundTransfer", promptpay: "soe.refundPromptpay" };
 
 // Store-facing order editor: add/remove items, change qty, options and notes.
 // On save it recalculates totals, versions the order and routes the difference to
 // additional payment (higher) or refund (lower). Reuses shared utils only.
 export default function OrderEditModal({ order, editedBy, onClose }) {
+  const { t } = usePreferences();
   const [items, setItems] = useState(() =>
     (order.items || []).map((it) => ({ ...it, qty: Number(it.qty || 1) }))
   );
@@ -72,7 +77,7 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
       await saveOrderEdit(order, { items, reason, reasonNote, refundMethod, editedBy });
       onClose();
     } catch {
-      setError("Save failed. Please try again.");
+      setError(t("soe.saveFailed"));
       setSaving(false);
     }
   };
@@ -86,9 +91,9 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <span className="flex items-center gap-2 text-base font-black text-gray-900">
-            <Pencil size={18} className="text-primary" /> Edit Order {order.orderNo || ""}
+            <Pencil size={18} className="text-primary" /> {t("soe.title", { no: order.orderNo || "" })}
           </span>
-          <button onClick={onClose} aria-label="Close" className="p-2 rounded-lg text-gray-400 hover:bg-gray-100"><X size={18} /></button>
+          <button onClick={onClose} aria-label={t("soe.close")} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100"><X size={18} /></button>
         </div>
 
         {/* Body */}
@@ -101,33 +106,33 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
                   <p className="text-xs text-gray-400 font-medium">฿{fmtMoney(it.price)} × {it.qty} = ฿{fmtMoney(Number(it.price || 0) * Number(it.qty || 1))}</p>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button onClick={() => setQty(i, -1)} aria-label="Decrease" className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus size={14} /></button>
+                  <button onClick={() => setQty(i, -1)} aria-label={t("soe.decrease")} className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus size={14} /></button>
                   <span className="w-6 text-center text-sm font-black text-gray-900">{it.qty}</span>
-                  <button onClick={() => setQty(i, 1)} aria-label="Increase" className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"><Plus size={14} /></button>
-                  <button onClick={() => removeItem(i)} aria-label="Remove" className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50"><Trash2 size={14} /></button>
+                  <button onClick={() => setQty(i, 1)} aria-label={t("soe.increase")} className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"><Plus size={14} /></button>
+                  <button onClick={() => removeItem(i)} aria-label={t("soe.remove")} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50"><Trash2 size={14} /></button>
                 </div>
               </div>
               <button
                 onClick={() => setExpanded(expanded === i ? null : i)}
                 className="mt-2 text-xs font-bold text-primary hover:text-primary-dark"
               >
-                {expanded === i ? "Hide options" : "Options & note"}
+                {expanded === i ? t("soe.hideOptions") : t("soe.showOptions")}
               </button>
               {expanded === i && (
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  {OPTION_FIELDS.map(({ key, label }) => (
+                  {OPTION_FIELDS.map(({ key, labelKey }) => (
                     <input
                       key={key}
                       value={typeof it[key] === "object" ? it[key]?.name || "" : it[key] || ""}
                       onChange={(e) => setField(i, key, e.target.value)}
-                      placeholder={label}
+                      placeholder={t(labelKey)}
                       className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs font-medium text-gray-700 outline-none focus:border-primary"
                     />
                   ))}
                   <input
                     value={it.note || ""}
                     onChange={(e) => setField(i, "note", e.target.value)}
-                    placeholder="Note"
+                    placeholder={t("soe.note")}
                     className="col-span-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs font-medium text-gray-700 outline-none focus:border-primary"
                   />
                 </div>
@@ -141,7 +146,7 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
               onClick={() => setShowPicker(true)}
               className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border-2 border-dashed border-gray-200 text-gray-500 text-sm font-bold hover:border-primary hover:text-primary"
             >
-              <Plus size={16} /> Add Menu Item
+              <Plus size={16} /> {t("soe.addMenuItem")}
             </button>
           ) : (
             <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
@@ -151,14 +156,14 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
                   autoFocus
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search menu…"
+                  placeholder={t("soe.searchMenu")}
                   className="flex-1 bg-transparent text-sm outline-none"
                 />
-                <button onClick={() => { setShowPicker(false); setSearch(""); }} aria-label="Close search" className="text-gray-400"><X size={15} /></button>
+                <button onClick={() => { setShowPicker(false); setSearch(""); }} aria-label={t("soe.closeSearch")} className="text-gray-400"><X size={15} /></button>
               </div>
               <div className="max-h-52 overflow-y-auto divide-y divide-gray-50">
                 {filteredMenus.length === 0 ? (
-                  <p className="text-xs text-gray-400 font-medium py-4 text-center">No menu items found.</p>
+                  <p className="text-xs text-gray-400 font-medium py-4 text-center">{t("soe.noMenuFound")}</p>
                 ) : filteredMenus.map((m) => (
                   <button key={m.id} onClick={() => addMenu(m)} className="w-full flex items-center justify-between gap-3 py-2.5 text-left hover:bg-gray-50 px-1">
                     <span className="text-sm font-bold text-gray-800 truncate">{m.name}</span>
@@ -173,16 +178,16 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
         {/* Recalc + reason + save */}
         <div className="border-t border-gray-100 p-5 space-y-3 flex-shrink-0">
           <div className="space-y-1 text-sm">
-            <div className="flex justify-between text-gray-500 font-medium"><span>Subtotal</span><span>฿{fmtMoney(totals.subtotal)}</span></div>
-            <div className="flex justify-between text-gray-500 font-medium"><span>Delivery</span><span>฿{fmtMoney(totals.deliveryFee)}</span></div>
-            {totals.discount > 0 && <div className="flex justify-between text-gray-500 font-medium"><span>Discount</span><span>-฿{fmtMoney(totals.discount)}</span></div>}
-            {totals.serviceCharge > 0 && <div className="flex justify-between text-gray-500 font-medium"><span>Service</span><span>฿{fmtMoney(totals.serviceCharge)}</span></div>}
-            <div className="flex justify-between text-base font-black text-gray-900 pt-1 border-t border-gray-100"><span>New Total</span><span className="text-primary">฿{fmtMoney(totals.grandTotal)}</span></div>
+            <div className="flex justify-between text-gray-500 font-medium"><span>{t("soe.subtotal")}</span><span>฿{fmtMoney(totals.subtotal)}</span></div>
+            <div className="flex justify-between text-gray-500 font-medium"><span>{t("soe.delivery")}</span><span>฿{fmtMoney(totals.deliveryFee)}</span></div>
+            {totals.discount > 0 && <div className="flex justify-between text-gray-500 font-medium"><span>{t("soe.discount")}</span><span>-฿{fmtMoney(totals.discount)}</span></div>}
+            {totals.serviceCharge > 0 && <div className="flex justify-between text-gray-500 font-medium"><span>{t("soe.service")}</span><span>฿{fmtMoney(totals.serviceCharge)}</span></div>}
+            <div className="flex justify-between text-base font-black text-gray-900 pt-1 border-t border-gray-100"><span>{t("soe.newTotal")}</span><span className="text-primary">฿{fmtMoney(totals.grandTotal)}</span></div>
             <div className="flex justify-between text-xs font-bold pt-0.5">
-              <span className="text-gray-400">Was ฿{fmtMoney(oldTotal)}</span>
-              {diff > 0 && <span className="text-amber-600">Customer pays +฿{fmtMoney(diff)}</span>}
-              {diff < 0 && <span className="text-blue-600">Refund ฿{fmtMoney(-diff)}</span>}
-              {diff === 0 && <span className="text-gray-400">No change</span>}
+              <span className="text-gray-400">{t("soe.was", { amount: fmtMoney(oldTotal) })}</span>
+              {diff > 0 && <span className="text-amber-600">{t("soe.customerPays", { amount: fmtMoney(diff) })}</span>}
+              {diff < 0 && <span className="text-blue-600">{t("soe.refund", { amount: fmtMoney(-diff) })}</span>}
+              {diff === 0 && <span className="text-gray-400">{t("soe.noChange")}</span>}
             </div>
           </div>
 
@@ -193,9 +198,9 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
                 <button
                   key={m}
                   onClick={() => setRefundMethod(m)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-black capitalize border ${refundMethod === m ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"}`}
+                  className={`flex-1 py-2 rounded-xl text-xs font-black border ${refundMethod === m ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"}`}
                 >
-                  {m}
+                  {t(REFUND_METHOD_KEY[m] || m)}
                 </button>
               ))}
             </div>
@@ -207,16 +212,16 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
             onChange={(e) => setReason(e.target.value)}
             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 outline-none focus:border-primary"
           >
-            <option value="">Select reason…</option>
+            <option value="">{t("soe.selectReason")}</option>
             {EDIT_REASONS.map((r) => (
-              <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+              <option key={r} value={r}>{t(`oe.reason.${r}`)}</option>
             ))}
           </select>
           {reason === "other" && (
             <input
               value={reasonNote}
               onChange={(e) => setReasonNote(e.target.value)}
-              placeholder="Reason detail"
+              placeholder={t("soe.reasonDetail")}
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 outline-none focus:border-primary"
             />
           )}
@@ -229,7 +234,7 @@ export default function OrderEditModal({ order, editedBy, onClose }) {
             className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary-dark disabled:opacity-40"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {saving ? "Saving…" : "Save Changes"}
+            {saving ? t("soe.saving") : t("soe.saveChanges")}
           </button>
         </div>
       </div>
