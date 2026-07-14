@@ -293,7 +293,7 @@ export const OrderDetail = () => {
   const refundAmount = Number(order.refundAmount || 0);
 
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6 pb-32">
+    <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6 pb-44">
       {/* Header */}
       <div>
         <div className="flex items-center justify-between gap-3">
@@ -633,12 +633,14 @@ export const OrderDetail = () => {
         </div>
       )}
 
-      {/* Bottom Actions */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 sm:p-6 z-30">
-        <div className="max-w-3xl mx-auto flex gap-3">
+      {/* Bottom Actions — premium equal-width bar. Sits ABOVE the mobile bottom nav
+          and clears the desktop sidebar (md:left-64); safe-area handled on md where it
+          rests at the true bottom. Contact/Track = dark secondary, Reorder = primary. */}
+      <div className="fixed left-0 right-0 md:left-64 bottom-[calc(60px+env(safe-area-inset-bottom))] md:bottom-0 bg-white border-t border-gray-100 px-4 pt-3 pb-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))] z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="max-w-3xl mx-auto flex items-stretch gap-2.5">
           <Button
-            variant="outline"
-            className="flex-1"
+            variant="dark"
+            className="flex-1 h-[60px] !flex-col !gap-1 !px-1 !rounded-2xl text-[11px] whitespace-nowrap"
             onClick={() => {
               window.location.href = `tel:${STORE_PHONE}`;
             }}
@@ -647,15 +649,19 @@ export const OrderDetail = () => {
             {t("od.contactStore")}
           </Button>
           <Button
-            variant="outline"
-            className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="dark"
+            className="flex-1 h-[60px] !flex-col !gap-1 !px-1 !rounded-2xl text-[11px] whitespace-nowrap"
             disabled={!isTrackable}
             onClick={() => trackingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
           >
             <Navigation size={18} />
             {t("od.trackRider")}
           </Button>
-          <Button className="flex-1 opacity-50 cursor-not-allowed" disabled>
+          <Button
+            variant="primary"
+            className="flex-1 h-[60px] !flex-col !gap-1 !px-1 !rounded-2xl text-[11px] whitespace-nowrap"
+            disabled
+          >
             <RotateCcw size={18} />
             {t("od.reorder")}
           </Button>
