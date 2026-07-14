@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+### Fixed (Task 4 — Bank/PromptPay checkout hung forever, no order created)
+- **สาเหตุที่แท้จริง = deploy ค้าง ไม่ใช่บั๊กในโค้ด**: การแก้ให้อัปสลิปไป Cloudinary
+  (commit `5aec774`) ถูกต้องและ build ผ่าน แต่ **Vercel ยัง serve bundle เก่า** ที่ยังอัปสลิป
+  ไป `slips/` บน Firebase Storage (ไม่มี bucket → 404/ค้าง) `addDoc(orders)` จึงไม่ถูกเรียก
+  เฉพาะวิธีที่แนบสลิป (โอน/พร้อมเพย์) — เงินสดไม่แนบสลิปเลยสร้างออเดอร์ได้ตลอด
+- **วิธีแก้**: push commit ใหม่เพื่อ trigger Vercel ให้ deploy โค้ดล่าสุด + เพิ่มความทนทาน —
+  `uploadSlip()` หุ้ม Cloudinary upload ด้วย `AbortController` timeout 45 วินาที เพื่อว่าถ้า
+  เครือข่ายค้างในอนาคต การอัปโหลดจะถูก abort แล้ว throw เข้า catch → ขึ้น error dialog แทนที่จะ
+  ค้างหน้า "กำลังสั่งซื้อ..." โดยไม่มีออเดอร์
+- **ยืนยัน**: production ตอนนี้ serve `paymentUtils` ตัวใหม่ (ไม่มี `slips/`/`uploadBytes` แล้ว,
+  มี `AbortController` + Cloudinary), ทดสอบ Cloudinary upload จริง = HTTP 200, และ
+  `addDoc(orders)` payload แบบสลิปจริงบน Firestore production = สร้างสำเร็จ 155 ms
+
 ### Fixed (Store Settings — save regression)
 - **Firestore save / Store status / Business Hours / Notif / E-Payment**: เปลี่ยนจาก `updateDoc`
   เป็น `setDoc(..., { merge: true })` บน `stores/{STORE_ID}` — `updateDoc` โยน error เมื่อเอกสารร้าน

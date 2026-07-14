@@ -9,6 +9,11 @@
 - _(ยังไม่มี — เพิ่มรายการเมื่อพบงาน)_
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-15 Task 4: แก้ Bank/PromptPay checkout ค้าง "กำลังสั่งซื้อ" ไม่สร้างออเดอร์ — สาเหตุคือ
+  Vercel serve bundle เก่า (ยังอัปสลิปไป Firebase Storage `slips/` ที่ไม่มี bucket) ทั้งที่โค้ด
+  Cloudinary บน main ถูกต้องแล้ว → push commit `4bf0fd8` re-deploy + เพิ่ม AbortController
+  timeout 45s ใน `uploadSlip()`. Verified: production bundle ใหม่ไม่มี `slips/`, Cloudinary 200,
+  addDoc สร้างสำเร็จ
 - 2026-07-14 แก้ Store Settings save regression: `updateDoc`→`setDoc(merge)` (5 จุด) + แก้ storage path
   โลโก้/แบนเนอร์เป็น 2 ส่วนให้ผ่าน Storage rules — build ผ่าน, 0 new ESLint
 - 2026-07-14 สร้าง `CLAUDE.md`, `TODO.md`, `CHANGELOG.md` เป็นกฎหลักและระบบติดตามงานของโปรเจกต์
