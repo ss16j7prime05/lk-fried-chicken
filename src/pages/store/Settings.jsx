@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import {
   Store, Bell, Printer, Shield, CheckCircle2, Save, Loader2,
   Volume2, VolumeX, Moon, Sun, Monitor, Play,
@@ -13,8 +12,9 @@ import {
   Mail, PhoneCall,
   Banknote, QrCode, Landmark,
 } from "lucide-react";
-import { db, storage } from "../../firebase";
+import { db } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
+import { uploadImage } from "../../services/cloudinary";
 import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION, isValidThaiPhone } from "../../constants/address";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -697,17 +697,7 @@ export function Settings() {
     finally { setSavingHours(false); }
   };
 
-  /* ── upload a file/blob to storage and return its URL ── */
-  const uploadTo = async (data, kind, name) => {
-    // Keep a two-segment object path (folder/file) so it matches the authenticated
-    // `/{folder}/{file}` Storage rule — same shape the Menu image upload uses. A
-    // three-segment path (stores/{id}/file) is denied by the rules and broke uploads.
-    const r = ref(storage, `stores/${STORE_ID}_${kind}_${Date.now()}_${name}`);
-    await uploadBytes(r, data);
-    return getDownloadURL(r);
-  };
-
-  /* ── logo: preview immediately, upload, keep preview + retry on failure ── */
+  /* ── logo: preview immediately, upload to Cloudinary, keep preview + retry on failure ── */
   const handleUploadLogo = async (file) => {
     if (!file) return;
     setLogoErr("");
@@ -715,10 +705,10 @@ export function Settings() {
     setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
     setUploadingLogo(true);
     try {
-      const url = await uploadTo(file, "logo", file.name);
-      // Persist to Firestore immediately (merge, single field) so the logo survives a
-      // refresh without waiting for the separate "Save" button — the download URL only
-      // living in local state was why uploads "didn't work" after reload.
+      // Upload straight to Cloudinary, then persist the secure_url to Firestore
+      // immediately (single-field merge) so the logo survives a refresh without the
+      // separate "Save" button — a URL living only in local state disappeared on reload.
+      const url = await uploadImage(file);
       await setDoc(doc(db, "stores", STORE_ID), { storeLogo: url }, { merge: true });
       setStoreLogo(url);
       setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
@@ -729,22 +719,21 @@ export function Settings() {
     }
   };
 
-  /* ── logo: delete (best-effort remove from storage + clear field in Firestore) ── */
+  /* ── logo: delete (clear field in Firestore + local state) ── */
   const handleDeleteLogo = async () => {
     if (!storeLogo) return;
     if (!window.confirm(t("si.deleteLogoConfirm"))) return;
     const prev = storeLogo;
     setStoreLogo("");
-    // Clear the field in Firestore too, otherwise onSnapshot restores it on next load.
+    // Clear the field in Firestore, otherwise onSnapshot restores it on next load.
+    // The Cloudinary asset stays on the CDN (unsigned uploads can't be deleted from the
+    // client); dropping the reference is what removes it from the storefront.
     try {
       await setDoc(doc(db, "stores", STORE_ID), { storeLogo: "" }, { merge: true });
-    } catch { setStoreLogo(prev); alert(t("ss.saveFailed")); return; }
-    try {
-      await deleteObject(ref(storage, prev));
-    } catch { /* file may be gone / not a storage URL — clearing the field is enough */ }
+    } catch { setStoreLogo(prev); alert(t("ss.saveFailed")); }
   };
 
-  /* ── banner: crop, preview immediately, upload, keep preview + retry on failure ── */
+  /* ── banner: crop, preview immediately, upload to Cloudinary, keep preview + retry ── */
   const handleBannerCropped = async (blob) => {
     if (!blob) return;
     setCropFile(null);
@@ -753,7 +742,7 @@ export function Settings() {
     setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
     setUploadingBanner(true);
     try {
-      const url = await uploadTo(blob, "banner", "banner.jpg");
+      const url = await uploadImage(blob);
       // Persist immediately (same reason as the logo) so the banner survives a refresh.
       await setDoc(doc(db, "stores", STORE_ID), { storeBanner: url }, { merge: true });
       setStoreBanner(url);
