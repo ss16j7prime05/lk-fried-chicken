@@ -3,8 +3,9 @@ import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { Phone, MapPin, Navigation, RotateCcw, Check, Bike, Clock, Upload, X, Loader2, Pencil } from "lucide-react";
 import { db } from "../../firebase";
-import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { STORE_PHONE } from "../../config";
 import { getStore } from "./getStore";
+import { useStore } from "../../store/useStore";
 import { PAYMENT_STATUS, countdownFrom, uploadSlip, submitSlip, expire } from "../../payment/paymentService";
 import { normalizeStatus } from "../../store/orderStatus";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -143,6 +144,7 @@ const ItemRow = ({ item, t }) => {
 export const OrderDetail = () => {
   const { orderId } = useParams();
   const { t, language } = usePreferences();
+  const store = useStore(); // live stores/{STORE_ID} — single source of truth
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -433,8 +435,8 @@ export const OrderDetail = () => {
         <SectionTitle>{t("od.storeInfo")}</SectionTitle>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-bold text-gray-900">{PROMPTPAY_ACCOUNT_NAME}</p>
-            <p className="text-sm text-gray-400 font-medium">{STORE_PHONE}</p>
+            <p className="font-bold text-gray-900">{store?.storeName || "LK Fried Chicken"}</p>
+            <p className="text-sm text-gray-400 font-medium">{store?.phone || STORE_PHONE}</p>
           </div>
         </div>
       </Card>
@@ -642,7 +644,7 @@ export const OrderDetail = () => {
             variant="dark"
             className="flex-1 h-[60px] !flex-col !gap-1 !px-1 !rounded-2xl text-[11px] whitespace-nowrap"
             onClick={() => {
-              window.location.href = `tel:${STORE_PHONE}`;
+              window.location.href = `tel:${store?.phone || STORE_PHONE}`;
             }}
           >
             <Phone size={18} />

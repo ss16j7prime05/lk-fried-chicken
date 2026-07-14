@@ -7,8 +7,9 @@ import {
   Info,
   HelpCircle,
 } from "lucide-react";
-import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { STORE_PHONE } from "../../config";
 import { getStore } from "./getStore";
+import { useStore } from "../../store/useStore";
 import { usePreferences } from "../../context/PreferencesContext";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
@@ -47,6 +48,8 @@ const FaqAccordionItem = ({ question, answer, open, onToggle }) => (
 
 export const HelpCenter = () => {
   const { t } = usePreferences();
+  const store = useStore(); // live stores/{STORE_ID} — single source of truth
+  const storePhone = store?.phone || STORE_PHONE;
   const [storeLocation, setStoreLocation] = useState(null);
   const [reportText, setReportText] = useState("");
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
@@ -63,7 +66,7 @@ export const HelpCenter = () => {
   };
 
   const handleCallStore = () => {
-    window.location.href = `tel:${STORE_PHONE}`;
+    window.location.href = `tel:${storePhone}`;
   };
 
   // No Firestore collection exists to persist a free-text report (and adding one
@@ -72,7 +75,7 @@ export const HelpCenter = () => {
   // in the app.
   const handleSendReport = () => {
     const body = encodeURIComponent(reportText.trim() || t("help.reportDefault"));
-    window.location.href = `sms:${STORE_PHONE}?body=${body}`;
+    window.location.href = `sms:${storePhone}?body=${body}`;
   };
 
   return (
@@ -103,8 +106,8 @@ export const HelpCenter = () => {
             <Phone size={20} />
           </div>
           <div>
-            <p className="font-bold text-gray-900">{PROMPTPAY_ACCOUNT_NAME}</p>
-            <p className="text-sm text-gray-400 font-medium">{STORE_PHONE}</p>
+            <p className="font-bold text-gray-900">{store?.storeName || "LK Fried Chicken"}</p>
+            <p className="text-sm text-gray-400 font-medium">{storePhone}</p>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
@@ -167,7 +170,7 @@ export const HelpCenter = () => {
             <Info size={20} />
           </div>
           <div>
-            <p className="font-bold text-gray-900">{PROMPTPAY_ACCOUNT_NAME}</p>
+            <p className="font-bold text-gray-900">{store?.storeName || "LK Fried Chicken"}</p>
             <p className="text-xs text-gray-400 font-medium">{t("help.version")}</p>
           </div>
         </div>

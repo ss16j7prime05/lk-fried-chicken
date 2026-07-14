@@ -15,7 +15,8 @@ import {
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
-import { STORE_PHONE, PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { STORE_PHONE } from "../../config";
+import { useStore } from "../../store/useStore";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
@@ -96,6 +97,9 @@ export const Settings = () => {
   // Theme/language come from PreferencesContext (applies app-wide instantly and
   // persists to localStorage + users/{uid}); this page only renders the controls.
   const { theme, setTheme, language, setLanguage, t } = usePreferences();
+  const store = useStore(); // live stores/{STORE_ID} — single source of truth
+  const storeName = store?.storeName || "LK Fried Chicken";
+  const storePhone = store?.phone || STORE_PHONE;
 
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -131,7 +135,7 @@ export const Settings = () => {
   };
 
   const handleContactStore = () => {
-    window.location.href = `tel:${STORE_PHONE}`;
+    window.location.href = `tel:${storePhone}`;
   };
 
   if (loading) {
@@ -234,12 +238,12 @@ export const Settings = () => {
         title={t("settings.about")}
         closeLabel={t("common.close")}
       >
-        <p>{t("settings.aboutBody", { name: PROMPTPAY_ACCOUNT_NAME })}</p>
+        <p>{t("settings.aboutBody", { name: storeName })}</p>
         <p>{t("settings.version")}</p>
         <p>
           {t("settings.aboutContact")}{" "}
-          <a href={`tel:${STORE_PHONE}`} className="text-primary font-bold">
-            {STORE_PHONE}
+          <a href={`tel:${storePhone}`} className="text-primary font-bold">
+            {storePhone}
           </a>
         </p>
       </InfoModal>
