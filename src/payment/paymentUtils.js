@@ -41,12 +41,30 @@ export const countdownFrom = (expireAt, nowMs = Date.now()) => {
   return { remainingMs: remaining, expired: remaining <= 0, label: `${mm}:${ss}` };
 };
 
+// เวลาสูงสุดที่ยอมให้อัปโหลดสลิป (มือถือเน็ตช้ายังพอ; ปกติ Cloudinary ~1-2 วินาที)
+const SLIP_UPLOAD_TIMEOUT_MS = 45 * 1000;
+
 // อัปโหลดสลิปการชำระเงินไป Cloudinary แล้วคืน URL (ใช้ร่วมกันระหว่าง Checkout และ
 // Order Detail). ใช้ Cloudinary เหมือนโลโก้/แบนเนอร์/QR เพราะโปรเจกต์นี้ไม่ได้เปิดใช้
 // Firebase Storage (bucket ไม่มีจริง → uploadBytes เดิม 404 ทำให้สร้างออเดอร์ไม่สำเร็จ
 // เฉพาะวิธีที่ต้องแนบสลิป: โอนเงิน / พร้อมเพย์).
+//
+// หุ้ม timeout ด้วย AbortController เสมอ: ถ้าเครือข่ายค้าง (เช่น in-app browser ของ LINE
+// บล็อกคำขอ) การอัปโหลดจะถูกยกเลิกและ throw แทนที่จะค้างไม่จบ ทำให้ handleConfirmOrder
+// เข้า catch → ขึ้น dialog แจ้ง error แทนที่จะค้างหน้า "กำลังสั่งซื้อ..." ตลอดไป.
 export async function uploadSlip(file) {
-  return uploadImage(file);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SLIP_UPLOAD_TIMEOUT_MS);
+  try {
+    return await uploadImage(file, { signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error("Slip upload timed out", { cause: err });
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Idempotent: ยกเลิกออเดอร์ที่หมดเวลาชำระ (WAITING_PAYMENT → EXPIRED + CANCELLED).
