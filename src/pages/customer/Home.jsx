@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
 import { Search, ShoppingCart } from "lucide-react";
 import { db } from "../../firebase";
-import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { FoodCardSkeleton } from "../../components/ui/Skeleton";
 import { FoodCard } from "../../components/customer/FoodCard";
 import { StoreHeader } from "../../components/customer/StoreHeader";
 import { MenuDetailModal } from "../../components/customer/MenuDetailModal";
@@ -134,7 +134,14 @@ export const Home = () => {
       )}
 
       {loading ? (
-        <Loading text={t("home.loading")} />
+        <section className="space-y-4">
+          <div className="h-6 w-40 bg-gray-100 rounded-full animate-pulse" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <FoodCardSkeleton key={i} />
+            ))}
+          </div>
+        </section>
       ) : error ? (
         <EmptyState icon="⚠️" title={t("common.somethingWrong")} description={t(error)} />
       ) : availableMenus.length === 0 ? (
@@ -147,8 +154,8 @@ export const Home = () => {
         <>
           {/* Recommended */}
           {recommended.length > 0 && (
-            <section className="space-y-4">
-              <h2 className="text-xl font-black text-gray-900">{t("home.recommended")}</h2>
+            <section className="space-y-3">
+              <h2 className="text-base sm:text-lg font-black text-gray-900">{t("home.recommended")}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {recommended.map((item) => (
                   <FoodCard
@@ -169,8 +176,8 @@ export const Home = () => {
           )}
 
           {/* Popular */}
-          <section className="space-y-4">
-            <h2 className="text-xl font-black text-gray-900">{t("home.popular")}</h2>
+          <section className="space-y-3">
+            <h2 className="text-base sm:text-lg font-black text-gray-900">{t("home.popular")}</h2>
             {popular.length === 0 ? (
               <EmptyState
                 icon="🍗"
