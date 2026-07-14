@@ -46,50 +46,58 @@ export function StoreHeader() {
 
   return (
     <section>
-      {/* Premium cover image with a dark gradient for text readability */}
-      <div className="relative h-28 sm:h-36 md:h-44 rounded-3xl overflow-hidden bg-gray-100">
-        {store?.storeBanner ? (
-          <img src={store.storeBanner} alt={name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary to-primary-dark" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-      </div>
-
-      {/* Circular logo (white border + soft shadow) overlapping the cover */}
-      <div className="-mt-8 px-1 flex items-end gap-3">
-        <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full border-[3px] border-white bg-white shadow-premium overflow-hidden shrink-0">
-          {store?.storeLogo ? (
-            <img src={store.storeLogo} alt={name} className="w-full h-full object-cover" />
+      {/* Cover + overlapping logo. The wrapper is NOT clipped so the logo can hang
+          below the cover; only the cover itself clips its image/gradient. */}
+      <div className="relative">
+        {/* Premium cover image with a dark gradient for text readability */}
+        <div className="relative h-28 sm:h-36 md:h-44 rounded-3xl overflow-hidden bg-gray-100">
+          {store?.storeBanner ? (
+            <img src={store.storeBanner} alt={name} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-2xl">🍗</div>
+            <div className="w-full h-full bg-gradient-to-br from-primary to-primary-dark" />
           )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
         </div>
-        <div className="min-w-0 flex-1 pb-0.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg sm:text-xl font-black text-gray-900 truncate">{name}</h1>
-            <span
-              className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full transition-colors ${
-                isOpen ? "bg-primary-light text-primary" : "bg-gray-100 text-gray-500"
-              }`}
-            >
-              {isOpen ? t("home.open") : t("home.closed")}
-            </span>
+
+        {/* Circular logo — overlaps the cover Facebook/LINE-style: exactly half of it
+            (translate-y-1/2) extends below the cover edge, layered above it (z-20),
+            with a 4px white border and a soft shadow. Never clipped. */}
+        <div className="absolute left-4 bottom-0 translate-y-1/2 z-20">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-white bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] overflow-hidden">
+            {store?.storeLogo ? (
+              <img src={store.storeLogo} alt={name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-3xl">🍗</div>
+            )}
           </div>
-          {category && (
-            <p className="text-xs font-medium text-gray-400 truncate mt-0.5">{category}</p>
-          )}
         </div>
       </div>
 
-      {/* Compact info row: rating (if real) · ETA · delivery fee · distance (if real) */}
-      <div className="mt-2.5 flex flex-wrap items-center gap-y-1 text-xs font-bold text-gray-500">
-        {infoItems.map((item, i) => (
-          <span key={item.key} className="flex items-center">
-            {i > 0 && <span className="mx-2 text-gray-300">•</span>}
-            {item}
+      {/* Name + status, sitting below the overlapping logo (spacer clears the hang) */}
+      <div className="mt-12 sm:mt-14">
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl font-black text-gray-900 truncate">{name}</h1>
+          <span
+            className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full transition-colors ${
+              isOpen ? "bg-primary-light text-primary" : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {isOpen ? t("home.open") : t("home.closed")}
           </span>
-        ))}
+        </div>
+        {category && (
+          <p className="text-xs font-medium text-gray-400 truncate mt-0.5">{category}</p>
+        )}
+
+        {/* Compact info row: rating (if real) · ETA · delivery fee · distance (if real) */}
+        <div className="mt-2 flex flex-wrap items-center gap-y-1 text-xs font-bold text-gray-500">
+          {infoItems.map((item, i) => (
+            <span key={item.key} className="flex items-center">
+              {i > 0 && <span className="mx-2 text-gray-300">•</span>}
+              {item}
+            </span>
+          ))}
+        </div>
       </div>
     </section>
   );
