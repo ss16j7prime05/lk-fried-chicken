@@ -1,6 +1,6 @@
 import { doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { db } from "../firebase";
+import { uploadImage } from "../services/cloudinary";
 import { notifyCustomer, notifyStore, NOTIF_TYPE } from "../notifications/notificationUtils";
 
 // สถานะการชำระเงิน (nested ใน order.payment.status)
@@ -41,11 +41,12 @@ export const countdownFrom = (expireAt, nowMs = Date.now()) => {
   return { remainingMs: remaining, expired: remaining <= 0, label: `${mm}:${ss}` };
 };
 
-// อัปโหลดสลิปไป Storage แล้วคืน URL (ใช้ร่วมกันระหว่าง Checkout และ Order Detail)
+// อัปโหลดสลิปการชำระเงินไป Cloudinary แล้วคืน URL (ใช้ร่วมกันระหว่าง Checkout และ
+// Order Detail). ใช้ Cloudinary เหมือนโลโก้/แบนเนอร์/QR เพราะโปรเจกต์นี้ไม่ได้เปิดใช้
+// Firebase Storage (bucket ไม่มีจริง → uploadBytes เดิม 404 ทำให้สร้างออเดอร์ไม่สำเร็จ
+// เฉพาะวิธีที่ต้องแนบสลิป: โอนเงิน / พร้อมเพย์).
 export async function uploadSlip(file) {
-  const r = ref(storage, `slips/${Date.now()}_${file.name}`);
-  await uploadBytes(r, file);
-  return getDownloadURL(r);
+  return uploadImage(file);
 }
 
 // Idempotent: ยกเลิกออเดอร์ที่หมดเวลาชำระ (WAITING_PAYMENT → EXPIRED + CANCELLED).
