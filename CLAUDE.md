@@ -121,36 +121,64 @@ firebase deploy --only functions            # deploy Cloud Functions
 
 ```
 src/
+  main.jsx                   Entry point + Router (routes ทั้งหมด, lazy-loaded)
   App.jsx                    หน้า Customer สั่งอาหาร (menu, cart, checkout)
-  main.jsx                   Entry point + Router
   AuthContext.jsx            Firebase Auth state + โปรไฟล์ users/{uid}
-  firebase.js                Firebase app init
-  config.js / appConfig.js   ค่าคงที่ทั้งแอป (STORE_ID, PromptPay ฯลฯ)
+  ProtectedRoute.jsx         Route guard ตาม role + approval-status
+  firebase.js                Firebase app init (config hardcode ในไฟล์นี้)
+  config.js / appConfig.js   ค่าคงที่ทั้งแอป (STORE_ID, PROMPTPAY_ID ฯลฯ)
   featureFlags.js            Feature flags
+  permissions.js             ตารางสิทธิ์ตาม role
+  analytics.js / errorCenter.js / healthDashboard.js / orderNoUtils.js  utilities ระดับแอป
 
-  admin/                     Admin Control Center (stats, approvals, payments, reports, riders, stores)
+  admin/                     Admin Control Center v2 (stats, approvals, payments, reports)
+  store/                     Store Dashboard v2 (realtime orders, OrderCard, status pipeline)
+  rider/                     Rider Dashboard v2 (accept/deliver flow, GPS)
+  register/                  RegisterCustomer/Store/Rider (flow สมัครปัจจุบัน)
+  signup/                    หน้า signup store/rider (legacy)
+  login/                     Login แบบรวม (role tabs) + หน้า login ราย role + lineAuth
+  pages/                     หน้า customer/ และ store/ เพิ่มเติม
+  location/                  LocationPicker, DeliveryMap, MapButton, routeEngine, distance
+  tracking/                  LiveMap, Rider/Customer/StoreMarker, ETABox, TrackingPanel
+  payment/                   PromptPayQR, PaymentStatusBadge, paymentUtils
+  notifications/             ระบบแจ้งเตือนในแอป
   components/
     customer/                Cart, FoodCard, MenuDetail, Address ฯลฯ
     store/                   ส่วนประกอบฝั่งร้าน (BannerCropper ฯลฯ)
     order/                   OrderTimeline, AuditLog, event labels
     notifications/           NotificationBell
-    ui/                       Design system: Button, Card, Modal, Input, Badge, ...
-  context/                   CartContext, PreferencesContext
-  hooks/                     useAddresses, useNotifications, useNotificationInbox
-  layouts/                   CustomerLayout, StoreLayout
-  location/                  LocationPicker, DeliveryMap, MapButton, routeEngine, distance
-  login/                     Login แบบรวม + หน้า login ราย role + lineAuth
-  i18n/translations.js       ข้อความหลายภาษา
-  constants/                 ค่าคงที่ (address ฯลฯ)
+    ui/                      Design system: Button, Card, Modal, Input, Badge, ...
+  context/ hooks/ layouts/ i18n/ constants/   state, hooks, layout, แปลภาษา, ค่าคงที่
 
-functions/                   Cloud Functions (LINE OA notifications, webhook)
-firestore.rules              Firestore security rules
-storage.rules                Firebase Storage security rules
-vercel.json                  ตั้งค่า deploy Vercel (SPA rewrites)
-firebase.json / .firebaserc  ตั้งค่า Firebase
+functions/
+  index.js                   Cloud Functions entry (re-export)
+  firebaseAdmin.js           Admin SDK bootstrap
+  orderNotification.js       Firestore triggers -> LINE (8 order events)
+  lineWebhook.js             Webhook endpoint (verify LINE signature)
+  services/lineNotificationService.js   LINE push + retry + logging + verify
+
+firestore.rules  storage.rules  vercel.json  firebase.json / .firebaserc
 ```
 
 > รายละเอียดเพิ่มเติมของแต่ละโมดูลอยู่ใน `README.md`
+
+### สิ่งที่ต้องรู้ก่อนแก้ (Architecture ที่มองไม่เห็นจากไฟล์เดียว)
+
+* **Legacy vs v2 — มีโค้ด 2 ชุดต่อบทบาท:** ไฟล์ระดับ root
+  (`Store.jsx`, `StoreDashboard.jsx`, `StoreMenu.jsx`, `Rider.jsx`, `RiderProfile.jsx`,
+  `Admin.jsx`, `AdminDashboard.jsx`) คือ **ของเดิม (legacy)** ส่วนโฟลเดอร์
+  `store/`, `rider/`, `admin/` คือ **v2 ที่ใช้งานจริง**
+  → ก่อนแก้ให้เช็ก `main.jsx` ว่า route ชี้ไปชุดไหน อย่าแก้ไฟล์ที่ไม่ได้ถูก mount
+* **Key ของ users คือ Firebase Auth UID เสมอ:** ทุก doc คือ `users/{auth.uid}`
+  (ห้าม hardcode id เช่น `admin_0001`) และ login อ่าน `users/{auth.currentUser.uid}`
+  ตรง ๆ ไม่ query ด้วย email
+* **Approval flow:** Customer = `status:"active"` อัตโนมัติ; Store/Rider = `status:"pending"`
+  จนแอดมินอนุมัติ; Admin สร้างมือใน Console เท่านั้น (ไม่มีหน้า self-register)
+* **Cloud Functions ใช้ env vars แยกจาก frontend:** `LINE_CHANNEL_ACCESS_TOKEN`,
+  `LINE_CHANNEL_SECRET`, `STORE_LINE_USER_ID`, `TRACK_BASE_URL`, `STORE_DASHBOARD_URL`
+  (ตั้งก่อน `firebase deploy --only functions`) — ต่างจาก frontend ที่ config hardcode
+* **ESLint 2 ชุด (`eslint.config.js`):** `src/**` = browser globals, `functions/**` = node globals
+  → โค้ด functions ใช้ `process`/`Buffer` ได้ ส่วน `src/` ใช้ไม่ได้
 
 ---
 
