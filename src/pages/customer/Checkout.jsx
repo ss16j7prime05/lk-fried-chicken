@@ -401,8 +401,18 @@ export const Checkout = () => {
       let slipImage = "";
       let paymentTime = null;
       if (slipFile && needsCountdown) {
-        slipImage = await uploadSlip(slipFile);
-        paymentTime = new Date();
+        // Slip upload must NEVER block order creation. If Cloudinary rejects the
+        // image (bad/unsupported format, transient network error, etc.) we still
+        // place the order — it falls through to WAITING_PAYMENT below, and the
+        // customer re-uploads the slip on the Order Detail page. Previously an
+        // upload error threw here and aborted the whole order (nothing reached
+        // Firestore) — only for slip methods (โอน / พร้อมเพย์), never cash.
+        try {
+          slipImage = await uploadSlip(slipFile);
+          paymentTime = new Date();
+        } catch (uploadErr) {
+          console.error("Slip upload failed; placing order as WAITING_PAYMENT so the customer can re-upload on Order Detail:", uploadErr);
+        }
       }
 
       // Payment status + countdown window:
