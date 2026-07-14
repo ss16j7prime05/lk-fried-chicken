@@ -16,7 +16,8 @@ export const Button = ({
   return (
     <motion.button
       whileTap={{ scale: 0.97 }}
-      className={`px-6 py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${variants[variant]} ${className}`}
+      transition={{ duration: 0.15 }}
+      className={`px-6 py-3 min-h-[44px] rounded-2xl font-bold transition-colors duration-150 flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none ${variants[variant]} ${className}`}
       {...props}
     >
       {children}

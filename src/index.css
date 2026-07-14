@@ -29,6 +29,15 @@
   @apply bg-gray-200 rounded-full;
 }
 
+/* Horizontal scroll containers (category chips) with no visible scrollbar. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Dark theme override layer (.dark set on <html> by PreferencesContext).
    The app's components use light design tokens (bg-white / gray-*) directly, so
