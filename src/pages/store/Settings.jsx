@@ -716,6 +716,10 @@ export function Settings() {
     setUploadingLogo(true);
     try {
       const url = await uploadTo(file, "logo", file.name);
+      // Persist to Firestore immediately (merge, single field) so the logo survives a
+      // refresh without waiting for the separate "Save" button — the download URL only
+      // living in local state was why uploads "didn't work" after reload.
+      await setDoc(doc(db, "stores", STORE_ID), { storeLogo: url }, { merge: true });
       setStoreLogo(url);
       setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
     } catch {
@@ -725,12 +729,16 @@ export function Settings() {
     }
   };
 
-  /* ── logo: delete (best-effort remove from storage + clear field) ── */
+  /* ── logo: delete (best-effort remove from storage + clear field in Firestore) ── */
   const handleDeleteLogo = async () => {
     if (!storeLogo) return;
     if (!window.confirm(t("si.deleteLogoConfirm"))) return;
     const prev = storeLogo;
     setStoreLogo("");
+    // Clear the field in Firestore too, otherwise onSnapshot restores it on next load.
+    try {
+      await setDoc(doc(db, "stores", STORE_ID), { storeLogo: "" }, { merge: true });
+    } catch { setStoreLogo(prev); alert(t("ss.saveFailed")); return; }
     try {
       await deleteObject(ref(storage, prev));
     } catch { /* file may be gone / not a storage URL — clearing the field is enough */ }
@@ -746,6 +754,8 @@ export function Settings() {
     setUploadingBanner(true);
     try {
       const url = await uploadTo(blob, "banner", "banner.jpg");
+      // Persist immediately (same reason as the logo) so the banner survives a refresh.
+      await setDoc(doc(db, "stores", STORE_ID), { storeBanner: url }, { merge: true });
       setStoreBanner(url);
       setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
     } catch {
