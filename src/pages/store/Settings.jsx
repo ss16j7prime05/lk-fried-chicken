@@ -346,7 +346,7 @@ function UploadError({ error, onRetry, t }) {
   );
 }
 
-function ImageUpload({ label, value, previewClass, uploading, error, onSelect, onDelete, onRetry, t }) {
+function ImageUpload({ label, value, previewClass, uploading, progress = 0, error, onSelect, onDelete, onRetry, t }) {
   return (
     <LabeledField label={label}>
       <div className="flex items-center gap-3">
@@ -358,7 +358,7 @@ function ImageUpload({ label, value, previewClass, uploading, error, onSelect, o
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-            {uploading ? t("si.uploading") : value ? t("si.replace") : t("si.upload")}
+            {uploading ? `${t("si.uploading")} ${progress}%` : value ? t("si.replace") : t("si.upload")}
             <input
               type="file"
               accept="image/*"
@@ -592,7 +592,9 @@ export function Settings() {
   const [social, setSocial] = useState(EMPTY_SOCIAL);
   const [tax, setTax] = useState(EMPTY_TAX);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoProgress, setLogoProgress] = useState(0);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [bannerProgress, setBannerProgress] = useState(0);
   // Immediate local preview (object URL) shown while uploading; separate from the
   // saved URL so an in-progress/failed upload never gets written to Firestore.
   const [logoPreview, setLogoPreview] = useState("");
@@ -629,6 +631,7 @@ export function Settings() {
   const [savingPay, setSavingPay] = useState(false);
   const [savedPay, setSavedPay] = useState(false);
   const [uploadingQr, setUploadingQr] = useState(false);
+  const [qrProgress, setQrProgress] = useState(0);
   const [qrErr, setQrErr] = useState("");
 
   /* receipt */
@@ -706,11 +709,12 @@ export function Settings() {
     setLastLogoFile(file);
     setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
     setUploadingLogo(true);
+    setLogoProgress(0);
     try {
       // Upload to Cloudinary, then persist the secure_url to Firestore immediately
       // (single-field merge) so the logo survives a refresh without the separate
       // "Save" button — a URL living only in local state disappeared on reload.
-      const url = await uploadImage(file);
+      const url = await uploadImage(file, { onProgress: setLogoProgress });
       await setDoc(doc(db, "stores", STORE_ID), { storeLogo: url }, { merge: true });
       setStoreLogo(url);
       setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
@@ -743,9 +747,10 @@ export function Settings() {
     setLastBannerBlob(blob);
     setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
     setUploadingBanner(true);
+    setBannerProgress(0);
     try {
       // Persist immediately (same reason as the logo) so the banner survives a refresh.
-      const url = await uploadImage(blob);
+      const url = await uploadImage(blob, { onProgress: setBannerProgress });
       await setDoc(doc(db, "stores", STORE_ID), { storeBanner: url }, { merge: true });
       setStoreBanner(url);
       setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
@@ -862,8 +867,9 @@ export function Settings() {
     if (!file) return;
     setQrErr("");
     setUploadingQr(true);
+    setQrProgress(0);
     try {
-      const url = await uploadImage(file);
+      const url = await uploadImage(file, { onProgress: setQrProgress });
       setPaySettings((p) => ({ ...p, promptPayQrUrl: url }));
       await setDoc(doc(db, "stores", STORE_ID), { paymentSettings: { promptPayQrUrl: url } }, { merge: true });
     } catch (e) {
@@ -987,6 +993,7 @@ export function Settings() {
           value={logoPreview || storeLogo}
           previewClass="w-16 h-16"
           uploading={uploadingLogo}
+          progress={logoProgress}
           error={logoErr}
           onSelect={handleUploadLogo}
           onDelete={handleDeleteLogo}
@@ -1004,7 +1011,7 @@ export function Settings() {
             <div className="flex gap-2">
               <label className="flex items-center justify-center gap-2 flex-1 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
                 {uploadingBanner ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                {uploadingBanner ? t("si.uploading") : storeBanner ? t("si.replace") : t("si.upload")}
+                {uploadingBanner ? `${t("si.uploading")} ${bannerProgress}%` : storeBanner ? t("si.replace") : t("si.upload")}
                 <input
                   type="file"
                   accept="image/*"
@@ -1561,7 +1568,7 @@ export function Settings() {
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
                 {uploadingQr ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                {uploadingQr ? t("si.uploading") : paySettings.promptPayQrUrl ? t("si.replace") : t("sp.uploadQr")}
+                {uploadingQr ? `${t("si.uploading")} ${qrProgress}%` : paySettings.promptPayQrUrl ? t("si.replace") : t("sp.uploadQr")}
                 <input
                   type="file"
                   accept="image/*"

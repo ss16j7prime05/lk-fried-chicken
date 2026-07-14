@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { db, storage } from "./firebase";
+import { db } from "./firebase";
 import {
   collection,
   query,
@@ -9,7 +9,7 @@ import {
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { uploadImage } from "./services/cloudinary";
 import { Camera, MessageCircle, Send, X } from "lucide-react";
 
 const formatTime = (createdAt) => {
@@ -93,12 +93,9 @@ function Chat({ orderId, sender }) {
     try {
       let imageUrl = "";
       if (file) {
-        const storageRef = ref(
-          storage,
-          `chats/${orderId}/${Date.now()}_${file.name}`
-        );
-        await uploadBytes(storageRef, file);
-        imageUrl = await getDownloadURL(storageRef);
+        // Shared Cloudinary uploader (HEIC/compress/retry) — same single upload
+        // path as the rest of the app; returns the CDN secure_url.
+        imageUrl = await uploadImage(file);
       }
       await addDoc(collection(db, "chats"), {
         orderId,

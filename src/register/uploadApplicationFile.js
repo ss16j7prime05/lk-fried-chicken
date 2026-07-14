@@ -1,12 +1,11 @@
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../firebase";
+import { uploadImage } from "../services/cloudinary";
 
-// อัปโหลดไฟล์เอกสารสมัครสมาชิก (ร้าน/ไรเดอร์) ไปที่ applications/{role}/{uid}/{field} แล้วคืน URL จริง
-// ต้องล็อกอินก่อนเรียก (createUserWithEmailAndPassword สำเร็จแล้ว) เพราะ Storage rule ผูกกับ uid เจ้าของไฟล์
+// อัปโหลดรูปเอกสารสมัครสมาชิก (ร้าน/ไรเดอร์: โลโก้/ปก/บัตร ปชช./รูปร้าน/ใบขับขี่/รูปรถ)
+// ผ่าน uploadImage ตัวกลางเดียวของทั้งแอป (Cloudinary) แล้วคืน secure_url จริง —
+// เดิมใช้ Firebase Storage ซึ่งโปรเจกต์นี้ไม่มี bucket จริง (uploadBytes 404) ทำให้
+// อัปเอกสารสมัครล้มเหลว. field/uid ยังถูกเก็บเป็น key ในเอกสาร application อยู่แล้ว
+// จึงไม่ต้องพึ่ง path ของไฟล์.
 export async function uploadApplicationFile(role, uid, field, file) {
   if (!file) return "";
-  const path = `applications/${role}/${uid}/${field}-${Date.now()}-${file.name}`;
-  const fileRef = ref(storage, path);
-  await uploadBytes(fileRef, file);
-  return await getDownloadURL(fileRef);
+  return uploadImage(file);
 }

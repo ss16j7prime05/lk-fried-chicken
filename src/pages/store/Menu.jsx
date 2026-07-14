@@ -9,7 +9,7 @@ import {
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { uploadImage } from "../../services/cloudinary";
 import {
   AlertTriangle,
   CheckSquare,
@@ -37,7 +37,7 @@ import {
   ChevronRight,
   Tag,
 } from "lucide-react";
-import { db, storage } from "../../firebase";
+import { db } from "../../firebase";
 import { usePreferences } from "../../context/PreferencesContext";
 import { STORE_ID } from "../../config";
 
@@ -88,11 +88,9 @@ const fmtDate = (ts) => {
 };
 
 /* ═══════════════════════ image upload ═══════════════════════ */
-async function uploadMenuImage(file) {
-  const storageRef = ref(storage, `menus/${Date.now()}_${file.name}`);
-  await uploadBytes(storageRef, file);
-  return getDownloadURL(storageRef);
-}
+// Menu photos go through the shared Cloudinary uploader (HEIC/compress/retry/
+// progress). onProgress is optional so callers can render a percentage.
+const uploadMenuImage = (file, onProgress) => uploadImage(file, { onProgress });
 
 /* ═══════════════════════ Menu Card skeleton ═══════════════════════ */
 function MenuSkeleton({ grid }) {
@@ -268,17 +266,20 @@ function DeleteDialog({ item, onConfirm, onCancel }) {
 function ImageField({ value, onChange }) {
   const { t } = usePreferences();
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const fileRef = useRef(null);
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file after an error
     if (!file) return;
     setUploading(true);
+    setProgress(0);
     try {
-      const url = await uploadMenuImage(file);
+      const url = await uploadMenuImage(file, setProgress);
       onChange(url);
-    } catch {
-      alert(t("sm.uploadFailed"));
+    } catch (err) {
+      alert(err?.message || t("sm.uploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -307,7 +308,7 @@ function ImageField({ value, onChange }) {
           ) : (
             <Image size={16} />
           )}
-          {t("sm.upload")}
+          {uploading ? `${progress}%` : t("sm.upload")}
         </button>
         <input
           ref={fileRef}

@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### Changed (Image upload system — unified & hardened, all surfaces)
+- **`src/services/cloudinary.js` เป็นทางเดียวของการอัปโหลดรูปทั้งแอป** — เขียนใหม่ให้:
+  รับ JPG/JPEG/PNG/WEBP/GIF และ **HEIC/HEIF** (ตรวจจาก MIME หรือนามสกุล เผื่อมือถือส่ง MIME ว่าง);
+  แปลง HEIC + ย่อรูปใหญ่เป็น JPEG ฝั่ง client ด้วย canvas (เคารพ EXIF orientation รูป iPhone
+  ไม่ตะแคง) โดยรูปที่เล็กและเป็นฟอร์แมตเว็บอยู่แล้วจะไม่ถูกแตะ (คงคุณภาพ); อัปผ่าน XHR จึงมี
+  **progress จริง** (onProgress); **timeout ต่อครั้ง + retry อัตโนมัติ** เมื่อเน็ตสะดุด/5xx
+  (เหมาะกับเน็ตมือถือช้า); การันตี promise จบเสมอ (ไม่ค้าง); คืน `secure_url` พร้อม Error message
+  ที่ชัด (มี `.kind`)
+- **ย้ายทุกจุดอัปโหลดที่ยังใช้ Firebase Storage (bucket ไม่มีจริง → 404) มาที่ Cloudinary**:
+  รูปเมนู (`pages/store/Menu.jsx`), รูปโปรไฟล์ลูกค้า (`pages/customer/Profile.jsx`),
+  เอกสารสมัครร้าน/ไรเดอร์ (`register/uploadApplicationFile.js`), รูปในแชท (`Chat.jsx` ที่ rider
+  order card ใช้) — จุดเหล่านี้เดิม **พังเงียบ** เพราะ Storage; ตอนนี้ทำงานผ่าน pipeline เดียวกัน
+- **เพิ่มแถบ % ความคืบหน้า**: โลโก้/ปก/QR (Store Settings), รูปเมนู, รูปโปรไฟล์ลูกค้า
+- `uploadSlip` ตัดโค้ด timeout ซ้ำซ้อนออก เหลือ delegate ไป `uploadImage` (ได้ HEIC/บีบอัด/retry
+  ฟรี) — **ไม่แตะ logic ของ checkout / การสร้างออเดอร์**
+- Legacy ที่ไม่ได้ route (`App.jsx`, `Rider.jsx`, `StoreMenu.jsx`, `TrackOrder.jsx`) ปล่อยไว้
+  ตามเดิม (dead code)
+- verify: `npm run build` ผ่าน, ESLint 0 error ใหม่ (คงที่ 64/61) — รอผู้ใช้ทดสอบจริงบนอุปกรณ์
+
 ### Fixed (Task 4b — Bank/PromptPay reached error dialog, no order created)
 - **สาเหตุ**: ไล่ flow จริงแบบ end-to-end (คอมโพเนนต์จริง ทั้ง dev + prod build ที่ minify,
   ทั้ง delivery/pickup) พบว่า `generateOrderNo`, `uploadSlip` (Cloudinary), และ `addDoc`

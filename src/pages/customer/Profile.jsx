@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { uploadImage } from "../../services/cloudinary";
 import {
   Banknote,
   QrCode,
@@ -13,7 +13,7 @@ import {
   MapPin,
   ChevronRight,
 } from "lucide-react";
-import { db, storage } from "../../firebase";
+import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { normalizeStatus } from "../../store/orderStatus";
@@ -59,6 +59,7 @@ export const Profile = () => {
   const [saveMessage, setSaveMessage] = useState(null);
 
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarProgress, setAvatarProgress] = useState(0);
   const [avatarError, setAvatarError] = useState(null);
 
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -126,18 +127,17 @@ export const Profile = () => {
     if (!file || !user?.uid) return;
 
     setAvatarUploading(true);
+    setAvatarProgress(0);
     setAvatarError(null);
     try {
-      // Flat "avatars/{file}" path (no nested uid subfolder) matches the existing
-      // generic storage.rules catch-all (`/{folder}/{file}`: any authenticated
-      // user, image, <5MB) with zero rules changes.
-      const avatarRef = ref(storage, `avatars/${user.uid}_${file.name}`);
-      await uploadBytes(avatarRef, file);
-      const url = await getDownloadURL(avatarRef);
+      // Shared Cloudinary uploader (HEIC/compress/retry/progress) — same single
+      // upload path as every other image in the app. Returns the CDN secure_url,
+      // which we persist to users/{uid}.avatarUrl.
+      const url = await uploadImage(file, { onProgress: setAvatarProgress });
       await updateDoc(doc(db, "users", user.uid), { avatarUrl: url });
     } catch (err) {
       console.error("Failed to upload avatar:", err);
-      setAvatarError(t("profile.avatarFail"));
+      setAvatarError(err?.message || t("profile.avatarFail"));
     } finally {
       setAvatarUploading(false);
     }
@@ -177,7 +177,9 @@ export const Profile = () => {
             {t("profile.memberSince", { date: formatMemberSince(profile?.createdAt, language) })}
           </p>
           {avatarUploading && (
-            <p className="text-xs text-primary font-bold mt-1">{t("profile.uploadingPhoto")}</p>
+            <p className="text-xs text-primary font-bold mt-1">
+              {t("profile.uploadingPhoto")} {avatarProgress}%
+            </p>
           )}
           {avatarError && <p className="text-xs text-secondary font-bold mt-1">{avatarError}</p>}
         </div>

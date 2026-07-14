@@ -9,6 +9,10 @@
 - _(ยังไม่มี — เพิ่มรายการเมื่อพบงาน)_
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-15 ยกเครื่องระบบอัปโหลดรูปทั้งแอปให้ผ่าน `services/cloudinary.js` ตัวเดียว (HEIC/HEIF,
+  บีบอัด+แปลงฝั่ง client, progress, timeout+retry, ไม่ค้าง) และย้ายทุกจุดที่ยังใช้ Firebase Storage
+  (เมนู/โปรไฟล์ลูกค้า/เอกสารสมัคร/แชท) มา Cloudinary. ไม่แตะ checkout/order. build ผ่าน, 0 error ใหม่.
+  รอผู้ใช้ทดสอบจริง (Android/iPhone gallery+camera, สลิป, รูปทั่วไป)
 - 2026-07-15 Task 4b: แก้ Bank/PromptPay ขึ้น error dialog ไม่สร้างออเดอร์ — หุ้ม `uploadSlip`
   ด้วย try/catch ใน `handleConfirmOrder` ถ้าอัปสลิปล้มเหลวให้สร้างออเดอร์เป็น WAITING_PAYMENT
   แทนการ abort (ลูกค้าอัปสลิปใหม่ที่ Order Detail) → ออเดอร์ถูกสร้างเสมอ. commit `e37214b`,
