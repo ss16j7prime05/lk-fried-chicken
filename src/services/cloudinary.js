@@ -1,27 +1,55 @@
 // Cloudinary image upload service (unsigned) — reusable across the app.
 //
 // Uploads directly from the browser to Cloudinary using an *unsigned* upload
-// preset, so no API secret ever ships to the client. Returns the CDN
-// `secure_url`, which callers persist to Firestore.
+// preset, so no API secret ever ships to the client.
+//
+// This function NEVER throws for network/HTTP errors — it returns a structured
+// result so the caller can surface full debug info (URL, status, response body,
+// error message) in the UI and always clear its loading state.
 //
 // Config lives in src/config.js (CLOUDINARY_CLOUD_NAME / CLOUDINARY_UPLOAD_PRESET).
 import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../config";
 
-const UPLOAD_ENDPOINT = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+// Exported so callers (and the on-screen debug panel) can show the exact values.
+export const UPLOAD_ENDPOINT = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+export const CLOUD_NAME = CLOUDINARY_CLOUD_NAME;
+export const UPLOAD_PRESET = CLOUDINARY_UPLOAD_PRESET;
 
 /**
- * Upload an image File/Blob to Cloudinary.
- *
- * @param {File|Blob} file  The image to upload (from a file input or a cropper blob).
- * @param {object} [opts]
- * @param {string} [opts.folder]   Optional Cloudinary folder (only send if the preset allows it).
- * @param {string} [opts.publicId] Optional public_id for the asset.
- * @param {AbortSignal} [opts.signal] Optional abort signal.
- * @returns {Promise<string>} The uploaded asset's https `secure_url`.
- * @throws {Error} If no file is given or Cloudinary rejects the upload.
+ * @typedef {Object} CloudinaryResult
+ * @property {boolean} ok            Whether the upload succeeded.
+ * @property {string}  url           The upload endpoint that was POSTed to.
+ * @property {string}  cloudName     Cloud name used.
+ * @property {string}  uploadPreset  Upload preset used.
+ * @property {number}  status        HTTP status (0 if fetch() itself threw).
+ * @property {*}       body          Parsed JSON (or raw text) of the response.
+ * @property {string}  secureUrl     https CDN URL on success (else "").
+ * @property {string}  errorMessage  Human-readable failure reason (else "").
+ */
+
+/**
+ * Upload an image File/Blob to Cloudinary (unsigned).
+ * @param {File|Blob} file
+ * @param {{ folder?: string, publicId?: string, signal?: AbortSignal }} [opts]
+ * @returns {Promise<CloudinaryResult>}
  */
 export async function uploadImage(file, opts = {}) {
-  if (!file) throw new Error("uploadImage: no file provided");
+  /** @type {CloudinaryResult} */
+  const result = {
+    ok: false,
+    url: UPLOAD_ENDPOINT,
+    cloudName: CLOUDINARY_CLOUD_NAME,
+    uploadPreset: CLOUDINARY_UPLOAD_PRESET,
+    status: 0,
+    body: null,
+    secureUrl: "",
+    errorMessage: "",
+  };
+
+  if (!file) {
+    result.errorMessage = "no file provided";
+    return result;
+  }
 
   const form = new FormData();
   form.append("file", file);
@@ -29,25 +57,43 @@ export async function uploadImage(file, opts = {}) {
   if (opts.folder) form.append("folder", opts.folder);
   if (opts.publicId) form.append("public_id", opts.publicId);
 
+  // Log exactly what we're about to POST so a misconfigured cloud name / preset is
+  // obvious in the browser console before the request goes out.
+  console.info("[cloudinary] upload URL    =", UPLOAD_ENDPOINT);
+  console.info("[cloudinary] cloud_name    =", CLOUDINARY_CLOUD_NAME);
+  console.info("[cloudinary] upload_preset =", CLOUDINARY_UPLOAD_PRESET);
+
   let res;
   try {
     res = await fetch(UPLOAD_ENDPOINT, { method: "POST", body: form, signal: opts.signal });
   } catch (e) {
-    // Network / CORS / offline
-    throw new Error(`Cloudinary upload failed: ${e?.message || "network error"}`, { cause: e });
+    // Network / CORS / offline — surface the exact underlying error.
+    console.error("[cloudinary] fetch() failed:", e);
+    result.errorMessage = e?.message || "network error (fetch failed)";
+    return result;
   }
+
+  result.status = res.status;
+
+  // Read as text first, then try JSON — so we always have a body to display,
+  // even when Cloudinary returns a non-JSON error page.
+  let text = "";
+  try { text = await res.text(); } catch { /* ignore read error */ }
+  try { result.body = text ? JSON.parse(text) : null; } catch { result.body = text; }
 
   if (!res.ok) {
-    // Cloudinary returns { error: { message } } on failure
-    let detail = `HTTP ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.error?.message) detail = body.error.message;
-    } catch { /* non-JSON error body */ }
-    throw new Error(`Cloudinary upload failed: ${detail}`);
+    result.errorMessage = result.body?.error?.message || `HTTP ${res.status}`;
+    console.error("[cloudinary] upload failed:", res.status, result.body);
+    return result;
   }
 
-  const data = await res.json();
-  if (!data?.secure_url) throw new Error("Cloudinary upload failed: missing secure_url");
-  return data.secure_url;
+  const secureUrl = result.body?.secure_url;
+  if (!secureUrl) {
+    result.errorMessage = "missing secure_url in Cloudinary response";
+    return result;
+  }
+
+  result.ok = true;
+  result.secureUrl = secureUrl;
+  return result;
 }
