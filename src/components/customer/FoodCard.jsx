@@ -16,7 +16,7 @@ export const FoodCard = ({
 }) => {
   const { t } = usePreferences();
   return (
-    <Card className="group flex flex-col h-full">
+    <Card className="group flex flex-col h-full transition-shadow duration-200 hover:shadow-premium">
       <div className="relative aspect-[4/3] overflow-hidden cursor-pointer" onClick={onView}>
         <img
           src={image}
@@ -38,7 +38,7 @@ export const FoodCard = ({
 
       <div className="p-3 sm:p-4 flex flex-col flex-1">
         <h3
-          className="font-bold text-gray-900 leading-snug cursor-pointer hover:text-primary transition-colors line-clamp-1"
+          className="font-bold text-gray-900 leading-snug cursor-pointer hover:text-primary transition-colors duration-150 line-clamp-2"
           onClick={onView}
         >
           {name}

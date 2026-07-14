@@ -41,12 +41,23 @@ export const CustomerLayout = () => {
       </nav>
 
       {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-gray-100 px-1 py-1.5 flex z-50 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
-        {navItems.map((item) => (
-          <Link key={item.path} to={item.path} aria-label={item.label} className={`flex-1 flex items-center justify-center min-h-[44px] rounded-xl transition-colors ${isActive(item.path) ? 'text-primary' : 'text-gray-300'}`}>
-            <item.icon size={24} />
-          </Link>
-        ))}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-gray-100 px-1 py-1 flex items-stretch z-50 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+        {navItems.map((item) => {
+          const active = isActive(item.path);
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
+              className="flex-1 flex items-center justify-center py-1.5"
+            >
+              <span className={`flex items-center justify-center w-10 h-9 rounded-xl transition-all duration-200 ${active ? 'text-primary bg-primary-light' : 'text-gray-300 hover:text-gray-400'}`}>
+                <item.icon size={22} className={`transition-transform duration-200 ${active ? 'scale-110' : ''}`} />
+              </span>
+            </Link>
+          );
+        })}
       </nav>
 
       <main className="max-w-6xl mx-auto p-4 md:p-8">
