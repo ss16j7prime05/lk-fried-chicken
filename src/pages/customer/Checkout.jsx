@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { MapPin, Map, Upload, X, Copy, Check } from "lucide-react";
+import { MapPin, Map, Upload, X, Copy, Check, Download } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { generateOrderNo } from "../../orderNoUtils";
 import { PAYMENT_STATUS, requiresCountdown, paymentExpireTimestamp, uploadSlip } from "../../payment/paymentUtils";
-import { normalizePayment, enabledMethods, promptPayQrUrl } from "../../payment/paymentSettings";
+import { normalizePayment, enabledMethods } from "../../payment/paymentSettings";
 import { notifyStore, notifyAdmin, NOTIF_TYPE } from "../../notifications/notificationUtils";
-import PromptPayQR from "../../payment/PromptPayQR.jsx";
 import LocationPicker from "../../location/LocationPicker.jsx";
 import MapButton from "../../location/MapButton.jsx";
 import { calcDeliveryFee, getRoute, haversineKm, reverseGeocode } from "../../location/locationUtils";
@@ -312,6 +311,26 @@ export const Checkout = () => {
     setSlipFile(f);
   };
 
+  // Download the store's PromptPay QR image (fetch→blob so it saves rather than
+  // navigating; falls back to opening the image if the fetch is blocked).
+  const saveQrImage = async (url) => {
+    if (!url) return;
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = "promptpay-qr.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objUrl);
+    } catch {
+      window.open(url, "_blank", "noopener");
+    }
+  };
+
   const outOfArea =
     deliveryMethod === "delivery" && distanceKm != null && distanceKm > MAX_RADIUS_KM;
 
@@ -344,12 +363,11 @@ export const Checkout = () => {
     }
 
     // Payment: the selected method must be fully configured by the store.
-    if (paymentMethod === "promptpay" && !promptPayQrUrl(paySettings.promptpayId)) {
+    if (paymentMethod === "promptpay" && !paySettings.promptPayQrUrl) {
       return t("checkout.valPromptpay");
     }
     if (paymentMethod === "transfer") {
-      const b = paySettings.bankTransfer;
-      if (!b.bankName.trim() || !b.accountName.trim() || !b.accountNumber.trim()) {
+      if (!paySettings.bankName.trim() || !paySettings.accountName.trim() || !paySettings.accountNumber.trim()) {
         return t("checkout.valBank");
       }
     }
@@ -758,14 +776,25 @@ export const Checkout = () => {
 
         {paymentMethod === "promptpay" && (
           <div className="space-y-4">
-            {promptPayQrUrl(paySettings.promptpayId) ? (
+            {paySettings.promptPayQrUrl ? (
               <>
-                <PromptPayQR
-                  amount={grandTotal}
-                  promptpayId={paySettings.promptpayId}
-                  accountName={storeLocation.name}
-                />
-                <CopyField label={t("sp.promptpayId")} value={paySettings.promptpayId} t={t} />
+                <div className="flex flex-col items-center gap-3">
+                  <img
+                    src={paySettings.promptPayQrUrl}
+                    alt={t("sp.qrImage")}
+                    className="w-56 h-56 max-w-full rounded-2xl border border-gray-100 bg-white p-3 object-contain"
+                  />
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={() => saveQrImage(paySettings.promptPayQrUrl)}
+                  >
+                    <Download size={18} /> {t("checkout.saveQr")}
+                  </Button>
+                </div>
+                {paySettings.promptPayNumber && (
+                  <CopyField label={t("sp.promptpayNumber")} value={paySettings.promptPayNumber} t={t} />
+                )}
               </>
             ) : (
               <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm font-bold text-secondary">
@@ -779,9 +808,9 @@ export const Checkout = () => {
         {paymentMethod === "transfer" && (
           <div className="space-y-4">
             <div className="space-y-2">
-              <CopyField label={t("sp.bankName")} value={paySettings.bankTransfer.bankName} t={t} />
-              <CopyField label={t("sp.accountName")} value={paySettings.bankTransfer.accountName} t={t} />
-              <CopyField label={t("sp.accountNumber")} value={paySettings.bankTransfer.accountNumber} t={t} />
+              <CopyField label={t("sp.bankName")} value={paySettings.bankName} t={t} />
+              <CopyField label={t("sp.accountName")} value={paySettings.accountName} t={t} />
+              <CopyField label={t("sp.accountNumber")} value={paySettings.accountNumber} t={t} />
             </div>
             <SlipUploadField file={slipFile} onChange={handleSlipChange} onRemove={() => setSlipFile(null)} t={t} />
           </div>

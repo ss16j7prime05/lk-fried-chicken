@@ -22,8 +22,8 @@ import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../sto
 import LocationPicker from "../../location/LocationPicker";
 import MapButton from "../../location/MapButton";
 import {
-  PAYMENT_KEYS, DEFAULT_PAYMENT, normalizePayment,
-  isValidPromptPayId, isValidAccountNumber, promptPayQrUrl,
+  DEFAULT_PAYMENT, normalizePayment, enabledMethods, PAYMENT_ENABLE_FLAG,
+  isValidPromptPayId, isValidAccountNumber,
 } from "../../payment/paymentSettings";
 import BannerCropper from "../../components/store/BannerCropper";
 import { DAY_ORDER, computeStatus } from "../../store/storeStatus";
@@ -628,6 +628,8 @@ export function Settings() {
   const [payErrors, setPayErrors] = useState({});
   const [savingPay, setSavingPay] = useState(false);
   const [savedPay, setSavedPay] = useState(false);
+  const [uploadingQr, setUploadingQr] = useState(false);
+  const [qrErr, setQrErr] = useState("");
 
   /* receipt */
   const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem("store_auto_print") === "1");
@@ -845,26 +847,49 @@ export function Settings() {
   /* ── e-payment: toggle a method (keeps ≥1 on, repoints default if needed) ── */
   const handleTogglePay = (key, v) =>
     setPaySettings((p) => {
-      const next = { ...p, [key]: v };
-      if (PAYMENT_KEYS.filter((k) => next[k]).length === 0) return p; // block turning off the last
+      const next = { ...p, [PAYMENT_ENABLE_FLAG[key]]: v };
+      if (enabledMethods(next).length === 0) return p; // block turning off the last
       return normalizePayment(next);
     });
   const handleDefaultPay = (key) =>
-    setPaySettings((p) => (p[key] ? { ...p, default: key } : p));
-  const setBank = (key, v) =>
-    setPaySettings((p) => ({ ...p, bankTransfer: { ...p.bankTransfer, [key]: v } }));
+    setPaySettings((p) => (p[PAYMENT_ENABLE_FLAG[key]] ? { ...p, default: key } : p));
+  // flat account fields: bankName / accountName / accountNumber
+  const setPay = (key, v) => setPaySettings((p) => ({ ...p, [key]: v }));
+
+  /* ── PromptPay QR: upload to Cloudinary, persist promptPayQrUrl to Firestore
+     immediately (merge) so it survives a refresh even before "Save". ── */
+  const handleUploadQr = async (file) => {
+    if (!file) return;
+    setQrErr("");
+    setUploadingQr(true);
+    try {
+      const url = await uploadImage(file);
+      setPaySettings((p) => ({ ...p, promptPayQrUrl: url }));
+      await setDoc(doc(db, "stores", STORE_ID), { paymentSettings: { promptPayQrUrl: url } }, { merge: true });
+    } catch (e) {
+      setQrErr(e?.message || t("si.uploadError"));
+    } finally {
+      setUploadingQr(false);
+    }
+  };
+  const handleRemoveQr = async () => {
+    setPaySettings((p) => ({ ...p, promptPayQrUrl: "" }));
+    try {
+      await setDoc(doc(db, "stores", STORE_ID), { paymentSettings: { promptPayQrUrl: "" } }, { merge: true });
+    } catch { /* clearing local state is enough; next Save persists it */ }
+  };
 
   /* ── e-payment validation — an enabled method requires its account details;
      a filled field must be well-formed even when its method is off ── */
   const validatePayment = () => {
     const e = {};
-    const { promptpay, transfer, promptpayId, bankTransfer: b } = paySettings;
-    if (promptpay && !promptpayId.trim()) e.promptpayId = t("sp.errRequired");
-    else if (promptpayId.trim() && !isValidPromptPayId(promptpayId)) e.promptpayId = t("sp.errPromptpay");
-    if (transfer && !b.bankName.trim()) e.bankName = t("sp.errRequired");
-    if (transfer && !b.accountName.trim()) e.accountName = t("sp.errRequired");
-    if (transfer && !b.accountNumber.trim()) e.accountNumber = t("sp.errRequired");
-    else if (b.accountNumber.trim() && !isValidAccountNumber(b.accountNumber)) e.accountNumber = t("sp.errAccount");
+    const { promptPayEnabled, bankEnabled, promptPayNumber, bankName, accountName, accountNumber } = paySettings;
+    if (promptPayEnabled && !promptPayNumber.trim()) e.promptPayNumber = t("sp.errRequired");
+    else if (promptPayNumber.trim() && !isValidPromptPayId(promptPayNumber)) e.promptPayNumber = t("sp.errPromptpay");
+    if (bankEnabled && !bankName.trim()) e.bankName = t("sp.errRequired");
+    if (bankEnabled && !accountName.trim()) e.accountName = t("sp.errRequired");
+    if (bankEnabled && !accountNumber.trim()) e.accountNumber = t("sp.errRequired");
+    else if (accountNumber.trim() && !isValidAccountNumber(accountNumber)) e.accountNumber = t("sp.errAccount");
     return e;
   };
 
@@ -877,14 +902,22 @@ export function Settings() {
     try {
       const clean = normalizePayment({
         ...paySettings,
-        promptpayId: paySettings.promptpayId.replace(/\D/g, ""),
-        bankTransfer: {
-          bankName:      paySettings.bankTransfer.bankName.trim(),
-          accountName:   paySettings.bankTransfer.accountName.trim(),
-          accountNumber: paySettings.bankTransfer.accountNumber.replace(/\D/g, ""),
-        },
+        promptPayNumber: paySettings.promptPayNumber.replace(/\D/g, ""),
+        bankName:      paySettings.bankName.trim(),
+        accountName:   paySettings.accountName.trim(),
+        accountNumber: paySettings.accountNumber.replace(/\D/g, ""),
       });
-      await setDoc(doc(db, "stores", STORE_ID), { paymentSettings: clean }, { merge: true });
+      // Write the new shape plus a backward-compat mirror of the legacy fields so
+      // appConfig / healthDashboard / legacy readers keep working unchanged.
+      const payload = {
+        ...clean,
+        cash: clean.cashEnabled,
+        promptpay: clean.promptPayEnabled,
+        transfer: clean.bankEnabled,
+        promptpayId: clean.promptPayNumber,
+        bankTransfer: { bankName: clean.bankName, accountName: clean.accountName, accountNumber: clean.accountNumber },
+      };
+      await setDoc(doc(db, "stores", STORE_ID), { paymentSettings: payload }, { merge: true });
       setSavedPay(true);
       setTimeout(() => setSavedPay(false), 2500);
     } catch { alert(t("ss.saveFailed")); }
@@ -1495,7 +1528,7 @@ export function Settings() {
                   <p className="text-xs text-gray-400 mt-0.5">{t(descKey)}</p>
                 </div>
               </div>
-              <Toggle value={!!paySettings[key]} onChange={(v) => handleTogglePay(key, v)} />
+              <Toggle value={!!paySettings[PAYMENT_ENABLE_FLAG[key]]} onChange={(v) => handleTogglePay(key, v)} />
             </div>
           </div>
         ))}
@@ -1503,50 +1536,75 @@ export function Settings() {
       </SettingSection>
 
       {/* PromptPay configuration — shown when the method is enabled */}
-      {paySettings.promptpay && (
+      {paySettings.promptPayEnabled && (
       <SettingSection icon={QrCode} title={t("sp.secPromptpay")} description={t("sp.secPromptpayDesc")}>
         <div>
-          <LabeledField label={t("sp.promptpayId")}>
+          <LabeledField label={t("sp.promptpayNumber")}>
             <FieldInput
-              value={paySettings.promptpayId}
-              onChange={(v) => setPaySettings((p) => ({ ...p, promptpayId: v }))}
+              value={paySettings.promptPayNumber}
+              onChange={(v) => setPay("promptPayNumber", v)}
               placeholder="08X-XXX-XXXX / 1-XXXX-XXXXX-XX-X"
               type="tel"
             />
           </LabeledField>
-          <FieldError message={payErrors.promptpayId} />
+          <FieldError message={payErrors.promptPayNumber} />
         </div>
-        {promptPayQrUrl(paySettings.promptpayId) && (
-          <div className="flex flex-col items-center gap-2 pt-2">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t("sp.qrPreview")}</span>
-            <img
-              src={promptPayQrUrl(paySettings.promptpayId)}
-              alt={t("sp.qrPreview")}
-              className="w-44 h-44 rounded-xl border border-gray-200 bg-white p-2 object-contain"
-            />
+
+        {/* Upload the store's own PromptPay QR image to Cloudinary */}
+        <LabeledField label={t("sp.qrImage")}>
+          <div className="flex items-center gap-3">
+            <div className="w-28 h-28 rounded-xl border border-gray-200 bg-white p-1.5 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {paySettings.promptPayQrUrl
+                ? <img src={paySettings.promptPayQrUrl} alt={t("sp.qrImage")} className="w-full h-full object-contain" />
+                : <QrCode size={28} className="text-gray-300" />}
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-primary text-gray-600 text-sm font-bold cursor-pointer transition-colors">
+                {uploadingQr ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                {uploadingQr ? t("si.uploading") : paySettings.promptPayQrUrl ? t("si.replace") : t("sp.uploadQr")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingQr}
+                  onChange={(e) => { handleUploadQr(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                />
+              </label>
+              {paySettings.promptPayQrUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemoveQr}
+                  disabled={uploadingQr}
+                  className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-gray-200 hover:border-red-400 text-gray-500 hover:text-red-500 text-sm font-bold transition-colors disabled:opacity-50"
+                >
+                  <Trash2 size={16} /> {t("si.delete")}
+                </button>
+              )}
+            </div>
           </div>
-        )}
+          <UploadError error={qrErr} onRetry={null} t={t} />
+        </LabeledField>
       </SettingSection>
       )}
 
       {/* Bank Transfer configuration — shown when the method is enabled */}
-      {paySettings.transfer && (
+      {paySettings.bankEnabled && (
       <SettingSection icon={Landmark} title={t("sp.secBank")} description={t("sp.secBankDesc")}>
         <div>
           <LabeledField label={t("sp.bankName")}>
-            <FieldInput value={paySettings.bankTransfer.bankName} onChange={(v) => setBank("bankName", v)} placeholder={t("sp.bankNamePh")} />
+            <FieldInput value={paySettings.bankName} onChange={(v) => setPay("bankName", v)} placeholder={t("sp.bankNamePh")} />
           </LabeledField>
           <FieldError message={payErrors.bankName} />
         </div>
         <div>
           <LabeledField label={t("sp.accountName")}>
-            <FieldInput value={paySettings.bankTransfer.accountName} onChange={(v) => setBank("accountName", v)} placeholder={t("sp.accountNamePh")} />
+            <FieldInput value={paySettings.accountName} onChange={(v) => setPay("accountName", v)} placeholder={t("sp.accountNamePh")} />
           </LabeledField>
           <FieldError message={payErrors.accountName} />
         </div>
         <div>
           <LabeledField label={t("sp.accountNumber")}>
-            <FieldInput value={paySettings.bankTransfer.accountNumber} onChange={(v) => setBank("accountNumber", v)} placeholder="XXX-X-XXXXX-X" type="tel" />
+            <FieldInput value={paySettings.accountNumber} onChange={(v) => setPay("accountNumber", v)} placeholder="XXX-X-XXXXX-X" type="tel" />
           </LabeledField>
           <FieldError message={payErrors.accountNumber} />
         </div>
@@ -1556,7 +1614,7 @@ export function Settings() {
       {/* Default method — chosen from the enabled ones only */}
       <SettingSection icon={CheckCircle2} title={t("sp.secDefault")} description={t("sp.secDefaultDesc")}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {PAYMENT_METHODS.filter((m) => paySettings[m.key]).map(({ key, icon: Icon, labelKey }) => {
+          {PAYMENT_METHODS.filter((m) => paySettings[PAYMENT_ENABLE_FLAG[m.key]]).map(({ key, icon: Icon, labelKey }) => {
             const active = paySettings.default === key;
             return (
               <button
