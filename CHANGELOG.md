@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### Fixed (Task 4b — Bank/PromptPay reached error dialog, no order created)
+- **สาเหตุ**: ไล่ flow จริงแบบ end-to-end (คอมโพเนนต์จริง ทั้ง dev + prod build ที่ minify,
+  ทั้ง delivery/pickup) พบว่า `generateOrderNo`, `uploadSlip` (Cloudinary), และ `addDoc`
+  ทำงานสำเร็จหมดกับ input ปกติ → จุดเดียวที่ throw ได้ "ก่อน" `addDoc` คือ `uploadSlip`
+  เมื่อ Cloudinary ปฏิเสธรูปสลิปบางแบบ (ฟอร์แมตไม่รองรับ / เน็ตค้างชั่วคราว) การ throw นั้น
+  ทำให้ทั้งออเดอร์ล้มทั้งยวง (ไม่มีอะไรไปถึง Firestore) เฉพาะวิธีที่แนบสลิป — เงินสดไม่กระทบ
+- **วิธีแก้**: หุ้ม `uploadSlip` ด้วย try/catch ของตัวเองใน `handleConfirmOrder` — ถ้าอัปสลิป
+  ล้มเหลว จะ log แล้วปล่อยให้ `slipImage=""` → logic เดิมสร้างออเดอร์เป็น `WAITING_PAYMENT`
+  (หน้าต่างชำระ 10 นาที) และลูกค้าอัปสลิปใหม่ได้ที่หน้า Order Detail → **ออเดอร์ถูกสร้างเสมอ**
+  ไม่ว่าอัปสลิปจะสำเร็จหรือไม่ ร้านเห็นออเดอร์ทันที (เงินสด/flow เดิมไม่เปลี่ยน)
+- **ยืนยัน**: รัน `<Checkout/>` จริงในเบราว์เซอร์ (พร้อมเพย์ + อัปสลิปจริง) → สร้างออเดอร์สำเร็จ
+  ทั้ง dev และ prod build; ทดสอบ payload ของ fallback (WAITING_PAYMENT) บน Firestore จริง =
+  สร้างสำเร็จ; live chunk บน Vercel (`Checkout-DiO9cp20.js`) = hash ตรงกับ build ที่ทดสอบ
+
 ### Fixed (Task 4 — Bank/PromptPay checkout hung forever, no order created)
 - **สาเหตุที่แท้จริง = deploy ค้าง ไม่ใช่บั๊กในโค้ด**: การแก้ให้อัปสลิปไป Cloudinary
   (commit `5aec774`) ถูกต้องและ build ผ่าน แต่ **Vercel ยัง serve bundle เก่า** ที่ยังอัปสลิป
