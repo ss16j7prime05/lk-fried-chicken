@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { db } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
-import { uploadImage, UPLOAD_ENDPOINT, CLOUD_NAME, UPLOAD_PRESET } from "../../services/cloudinary";
+import { uploadImage } from "../../services/cloudinary";
 import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION, isValidThaiPhone } from "../../constants/address";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -346,39 +346,6 @@ function UploadError({ error, onRetry, t }) {
   );
 }
 
-/* ─── In-app upload debug panel (shown after an upload attempt) — surfaces the
-   full round-trip in the UI itself, not just the browser console. ─── */
-function DebugRow({ k, v, ok }) {
-  return (
-    <div className="flex gap-2">
-      <span className="text-gray-400 shrink-0">{k}</span>
-      <span className={`break-all ${ok === true ? "text-green-400" : ok === false ? "text-red-400" : "text-gray-100"}`}>{v}</span>
-    </div>
-  );
-}
-
-function UploadDebug({ debug }) {
-  if (!debug) return null;
-  const bodyText =
-    debug.body == null
-      ? "—"
-      : typeof debug.body === "string"
-        ? debug.body
-        : JSON.stringify(debug.body, null, 2);
-  return (
-    <div className="mt-2 rounded-xl border border-gray-700 bg-gray-900 text-gray-100 text-[11px] leading-relaxed font-mono p-3 space-y-1 overflow-x-auto">
-      <DebugRow k="Upload URL:" v={debug.url} />
-      <DebugRow k="cloud_name:" v={debug.cloudName} />
-      <DebugRow k="upload_preset:" v={debug.uploadPreset} />
-      <DebugRow k="HTTP status:" v={debug.status ?? "—"} ok={debug.status ? debug.status >= 200 && debug.status < 300 : undefined} />
-      <DebugRow k="Fetch error:" v={debug.error || "—"} ok={debug.error ? false : undefined} />
-      <DebugRow k="Firestore:" v={debug.firestore || "—"} ok={debug.firestore ? debug.firestore.startsWith("OK") : undefined} />
-      <div className="text-gray-400 pt-1">Response body:</div>
-      <pre className="whitespace-pre-wrap break-all text-gray-200 m-0">{bodyText}</pre>
-    </div>
-  );
-}
-
 function ImageUpload({ label, value, previewClass, uploading, error, onSelect, onDelete, onRetry, t }) {
   return (
     <LabeledField label={label}>
@@ -632,9 +599,6 @@ export function Settings() {
   const [bannerPreview, setBannerPreview] = useState("");
   const [logoErr, setLogoErr] = useState("");
   const [bannerErr, setBannerErr] = useState("");
-  // In-app upload diagnostics (URL, HTTP status, response body, errors, Firestore result)
-  const [logoDebug, setLogoDebug] = useState(null);
-  const [bannerDebug, setBannerDebug] = useState(null);
   const [lastLogoFile, setLastLogoFile] = useState(null);
   const [lastBannerBlob, setLastBannerBlob] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
@@ -740,37 +704,17 @@ export function Settings() {
     setLastLogoFile(file);
     setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
     setUploadingLogo(true);
-    // Diagnostics shown in the UI (not just the console).
-    const dbg = { url: UPLOAD_ENDPOINT, cloudName: CLOUD_NAME, uploadPreset: UPLOAD_PRESET, status: null, body: null, error: null, firestore: null };
     try {
-      // Upload straight to Cloudinary, then persist the secure_url to Firestore
-      // immediately (single-field merge) so the logo survives a refresh without the
-      // separate "Save" button — a URL living only in local state disappeared on reload.
-      const r = await uploadImage(file);
-      dbg.status = r.status;
-      dbg.body = r.body;
-      if (!r.ok) {
-        dbg.error = r.errorMessage;
-        setLogoErr(r.errorMessage || t("si.uploadError"));
-        return;
-      }
-      try {
-        await setDoc(doc(db, "stores", STORE_ID), { storeLogo: r.secureUrl }, { merge: true });
-        dbg.firestore = "OK — storeLogo saved";
-      } catch (fe) {
-        dbg.firestore = `FAILED — ${fe?.message || fe}`;
-        dbg.error = `Firestore write failed: ${fe?.message || fe}`;
-        setLogoErr(dbg.error);
-        return;
-      }
-      setStoreLogo(r.secureUrl);
+      // Upload to Cloudinary, then persist the secure_url to Firestore immediately
+      // (single-field merge) so the logo survives a refresh without the separate
+      // "Save" button — a URL living only in local state disappeared on reload.
+      const url = await uploadImage(file);
+      await setDoc(doc(db, "stores", STORE_ID), { storeLogo: url }, { merge: true });
+      setStoreLogo(url);
       setLogoPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
     } catch (e) {
-      // Any unexpected error — show the exact message, never a generic string.
-      dbg.error = e?.message || String(e);
-      setLogoErr(dbg.error);
+      setLogoErr(e?.message || t("si.uploadError"));
     } finally {
-      setLogoDebug(dbg);       // always surface the diagnostics
       setUploadingLogo(false); // never leave "กำลังอัปโหลด..." forever
     }
   };
@@ -797,33 +741,15 @@ export function Settings() {
     setLastBannerBlob(blob);
     setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
     setUploadingBanner(true);
-    const dbg = { url: UPLOAD_ENDPOINT, cloudName: CLOUD_NAME, uploadPreset: UPLOAD_PRESET, status: null, body: null, error: null, firestore: null };
     try {
-      const r = await uploadImage(blob);
-      dbg.status = r.status;
-      dbg.body = r.body;
-      if (!r.ok) {
-        dbg.error = r.errorMessage;
-        setBannerErr(r.errorMessage || t("si.uploadError"));
-        return;
-      }
       // Persist immediately (same reason as the logo) so the banner survives a refresh.
-      try {
-        await setDoc(doc(db, "stores", STORE_ID), { storeBanner: r.secureUrl }, { merge: true });
-        dbg.firestore = "OK — storeBanner saved";
-      } catch (fe) {
-        dbg.firestore = `FAILED — ${fe?.message || fe}`;
-        dbg.error = `Firestore write failed: ${fe?.message || fe}`;
-        setBannerErr(dbg.error);
-        return;
-      }
-      setStoreBanner(r.secureUrl);
+      const url = await uploadImage(blob);
+      await setDoc(doc(db, "stores", STORE_ID), { storeBanner: url }, { merge: true });
+      setStoreBanner(url);
       setBannerPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
     } catch (e) {
-      dbg.error = e?.message || String(e);
-      setBannerErr(dbg.error);
+      setBannerErr(e?.message || t("si.uploadError"));
     } finally {
-      setBannerDebug(dbg);       // always surface the diagnostics
       setUploadingBanner(false); // never leave "กำลังอัปโหลด..." forever
     }
   };
@@ -1034,7 +960,6 @@ export function Settings() {
           onRetry={() => handleUploadLogo(lastLogoFile)}
           t={t}
         />
-        <UploadDebug debug={logoDebug} />
         {/* Banner: full-width preview + crop-on-select */}
         <LabeledField label={t("si.banner")}>
           <div className="space-y-3">
@@ -1057,7 +982,6 @@ export function Settings() {
               </label>
             </div>
             <UploadError error={bannerErr} onRetry={() => lastBannerBlob && handleBannerCropped(lastBannerBlob)} t={t} />
-            <UploadDebug debug={bannerDebug} />
           </div>
         </LabeledField>
       </SettingSection>
