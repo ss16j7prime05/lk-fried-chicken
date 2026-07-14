@@ -30,7 +30,7 @@ export const CustomerLayout = () => {
 
       {/* Desktop Sidebar */}
       <nav className="hidden md:flex flex-col fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-100 p-6">
-        <h1 className="text-2xl font-black text-primary mb-12">FoodFlow</h1>
+        <h1 className="text-2xl font-black text-primary mb-12">LK Fried Chicken</h1>
         <div className="space-y-4">
           {navItems.map((item) => (
             <Link key={item.path} to={item.path} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${isActive(item.path) ? 'bg-primary-light text-primary font-bold' : 'text-gray-400 hover:bg-gray-50'}`}>
