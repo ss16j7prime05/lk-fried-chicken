@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
-import { PROMPTPAY_ACCOUNT_NAME } from "../../config";
+import { useStore } from "../../store/useStore";
 import { normalizeStatus } from "../../store/orderStatus";
 import { useCustomerOrders } from "./useCustomerOrders";
 import { Card } from "../../components/ui/Card";
@@ -49,7 +49,7 @@ const formatDateTime = (timestamp, locale) => {
   });
 };
 
-const OrderCard = ({ order, onViewDetails, onReorder, t, language }) => {
+const OrderCard = ({ order, onViewDetails, onReorder, t, language, storeName }) => {
   const statusKey = normalizeStatus(order.status);
   const statusLabel = t(`status.${statusKey}`);
   const itemCount = (order.items ?? []).reduce(
@@ -70,7 +70,7 @@ const OrderCard = ({ order, onViewDetails, onReorder, t, language }) => {
           <Badge color={STATUS_BADGE_COLOR[statusKey] ?? "blue"}>{statusLabel}</Badge>
         </div>
 
-        <p className="text-sm font-bold text-gray-700">{PROMPTPAY_ACCOUNT_NAME}</p>
+        <p className="text-sm font-bold text-gray-700">{storeName}</p>
         <div className="flex items-center gap-2 flex-wrap mt-1">
           <p className="text-xs text-gray-400 font-medium">
             {itemCount} {itemCount !== 1 ? t("common.items") : t("common.item")} •{" "}
@@ -131,6 +131,8 @@ export const Orders = () => {
   const { profile } = useAuth();
   const { t, language } = usePreferences();
   const navigate = useNavigate();
+  const store = useStore(); // live stores/{STORE_ID} — single source of truth
+  const storeName = store?.storeName || "LK Fried Chicken";
 
   const [retryToken, setRetryToken] = useState(0);
   const { orders, loading, error } = useCustomerOrders(profile?.phone, {
@@ -218,6 +220,7 @@ export const Orders = () => {
               order={order}
               t={t}
               language={language}
+              storeName={storeName}
               onViewDetails={(o) => navigate(`/shop/orders/${o.id}`)}
               onReorder={() => {}}
             />

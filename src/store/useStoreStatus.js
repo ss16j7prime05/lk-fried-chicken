@@ -1,24 +1,16 @@
 import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase";
-import { STORE_ID } from "../config";
 import { computeStatus } from "./storeStatus";
+import { useStore } from "./useStore";
 
-// Subscribes to stores/{STORE_ID} and returns the live open/closed status, re-evaluated
-// every minute so "closing_soon" / "closed" flips on time without a reload.
+// Live open/closed status, re-evaluated every minute so "closing_soon" / "closed"
+// flips on time without a reload. Reads the store doc from the single shared
+// useStore() subscription (one source of truth — no duplicate listener).
 // which: "store" | "delivery"
 export function useStoreStatus(which = "store") {
-  const [store, setStore] = useState(null);
+  const store = useStore();
   // Date.now (bare reference) as the lazy initializer — React calls it, so it isn't an
   // impure call in the render body.
   const [nowTs, setNowTs] = useState(Date.now);
-
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
-      setStore(snap.exists() ? snap.data() : null);
-    });
-    return unsub;
-  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNowTs(Date.now()), 60000);
