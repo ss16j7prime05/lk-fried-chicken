@@ -9,6 +9,7 @@ export const Button = ({
   const variants = {
     primary: "bg-primary text-white hover:bg-primary-dark",
     secondary: "bg-secondary text-white",
+    dark: "bg-gray-900 text-white hover:bg-gray-800",
     outline: "border-2 border-gray-100 hover:border-primary text-gray-700",
     ghost: "bg-transparent hover:bg-gray-100",
   };
