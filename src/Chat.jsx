@@ -10,6 +10,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { uploadImage } from "./services/cloudinary";
+import { notifyChatMessage } from "./notifications/notificationUtils";
+import { logError } from "./errorCenter";
 import { Camera, MessageCircle, Send, X } from "lucide-react";
 
 const formatTime = (createdAt) => {
@@ -45,13 +47,15 @@ const MessageBubble = ({ message, mine }) => (
 );
 
 // แชทแบบ Realtime ระหว่างลูกค้า ↔ ไรเดอร์ ผูกกับ orderId
-function Chat({ orderId, sender }) {
+// `order` (ถ้าส่งมา) ใช้แค่หาปลายทางของการแจ้งเตือน — ไม่ส่งมาก็ยังแชทได้ตามปกติ
+function Chat({ orderId, sender, order }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [preview, setPreview] = useState(null);
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -61,9 +65,19 @@ function Chat({ orderId, sender }) {
       where("orderId", "==", orderId),
       orderBy("createdAt", "asc")
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setMessages(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoadError(null);
+      },
+      // เดิมไม่มี error callback: ถ้า query พัง (ยังไม่มี composite index orderId+createdAt
+      // หรือไม่มีสิทธิ์) แชทจะ "ว่างเปล่าเงียบ ๆ" ตลอดไป เหมือนไม่มีใครส่งข้อความมา
+      (err) => {
+        logError(err, "Chat.subscribe");
+        setLoadError("โหลดแชทไม่สำเร็จ กรุณาลองใหม่");
+      }
+    );
     return () => unsubscribe();
   }, [orderId]);
 
@@ -106,8 +120,10 @@ function Chat({ orderId, sender }) {
       });
       setText("");
       clearAttachment();
+      // ส่งเข้า Firestore สำเร็จแล้วค่อยแจ้งเตือนอีกฝั่ง (emitter SSOT — fail-soft ในตัว)
+      notifyChatMessage(order, sender);
     } catch (err) {
-      console.error(err);
+      logError(err, "Chat.send");
       setSendError("ส่งข้อความไม่สำเร็จ กรุณาลองใหม่");
     } finally {
       setSending(false);
@@ -123,8 +139,13 @@ function Chat({ orderId, sender }) {
 
       {/* message list */}
       <div className="max-h-60 overflow-y-auto flex flex-col gap-2 mb-2.5">
-        {messages.length === 0 && (
-          <p className="text-xs text-gray-400 font-medium">ยังไม่มีข้อความ</p>
+        {/* โหลดไม่ได้ ≠ ไม่มีข้อความ — ต้องแยกให้ชัด ไม่งั้นเข้าใจผิดว่าอีกฝ่ายเงียบ */}
+        {loadError ? (
+          <p className="text-xs font-bold text-secondary">{loadError}</p>
+        ) : (
+          messages.length === 0 && (
+            <p className="text-xs text-gray-400 font-medium">ยังไม่มีข้อความ</p>
+          )
         )}
         {messages.map((m) => (
           <MessageBubble key={m.id} message={m} mine={m.sender === sender} />

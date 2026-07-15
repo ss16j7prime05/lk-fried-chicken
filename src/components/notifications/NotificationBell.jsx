@@ -4,7 +4,7 @@ import {
   Bell, X, Search, CheckCheck, Trash2, Volume2, VolumeX,
   ShoppingBag, CheckCircle2, ChefHat, Bike, Truck, PackageCheck, PackageX,
   CreditCard, Receipt, Clock, XCircle, PartyPopper, Newspaper, UserPlus,
-  AlertTriangle, ShieldAlert, FileText, MapPin, Coins,
+  AlertTriangle, ShieldAlert, FileText, MapPin, Coins, MessageCircle,
 } from "lucide-react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { toDate } from "../../store/orderStatus";
@@ -33,6 +33,7 @@ const ICON = {
   store_signup: UserPlus, rider_signup: UserPlus,
   payment_error: AlertTriangle, system_error: AlertTriangle, security_alert: ShieldAlert,
   low_stock: PackageX,
+  new_message: MessageCircle,
 };
 
 const PRIORITY_TONE = {

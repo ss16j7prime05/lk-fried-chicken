@@ -100,10 +100,32 @@ service cloud.firestore {
     }
 
     // ---------- chats (ลูกค้า <-> ไรเดอร์) ----------
+    // เดิม: ใครก็ได้ที่ล็อกอิน (role ไหนก็ได้) อ่านแชท "ทุกออเดอร์" ได้ทั้งหมด และ create ได้
+    // โดยไม่ตรวจว่า sender ตรงกับ role จริงไหม -> ลูกค้าคนหนึ่งอ่านบทสนทนาของลูกค้าคนอื่นได้
+    // และไรเดอร์ปลอมเป็น sender:"customer" ได้ (ดู CLAUDE.md §8)
+    // ตอนนี้ผูกสิทธิ์กับ "ออเดอร์ของข้อความนั้น" โดยใช้เกณฑ์เดียวกับ /orders ด้านบน
     match /chats/{chatId} {
-      allow read: if role() == "admin" || role() == "store" ||
-                     role() == "customer" || role() == "rider";
-      allow create: if role() == "customer" || role() == "rider";
+      // อ่านออเดอร์ที่ข้อความอ้างถึง (get() ผลลัพธ์ถูก cache ต่อ request และ query แชท
+      // กรองด้วย orderId ค่าเดียวเสมอ จึงเป็น path เดียวกันทุก doc)
+      function chatOrder(orderId) {
+        return get(/databases/$(database)/documents/orders/$(orderId)).data;
+      }
+      // คู่สนทนาของออเดอร์นี้เท่านั้น (+ ร้าน/แอดมินไว้ดูแลเคสมีปัญหา)
+      function isChatParty(o) {
+        return role() == "admin" ||
+               (role() == "store" && isApprovedOrLegacy()) ||
+               (role() == "customer" && o.phone == myPhone()) ||
+               (role() == "rider" && isApprovedOrLegacy() && o.riderId == request.auth.uid);
+      }
+      allow read: if isSignedIn() && isChatParty(chatOrder(resource.data.orderId));
+
+      // ส่งข้อความได้เฉพาะลูกค้าเจ้าของออเดอร์ กับไรเดอร์ที่ถืองานนั้นอยู่จริง
+      // และ sender ต้องตรงกับ role จริงของผู้ส่ง (กันปลอมเป็นอีกฝั่ง)
+      allow create: if isSignedIn() &&
+        (role() == "customer" || role() == "rider") &&
+        request.resource.data.sender == role() &&
+        isChatParty(chatOrder(request.resource.data.orderId));
+
       allow update, delete: if false;
     }
 

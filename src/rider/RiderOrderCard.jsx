@@ -17,6 +17,7 @@ import {
   STATUS_LABEL,
 } from "./riderStatus";
 import { formatDate } from "./riderFormat";
+import { telHref } from "../telUtils";
 import { getDestination } from "./riderLocationService";
 import { notifyCustomer, NOTIF_TYPE } from "../notifications/notificationUtils";
 import { logError } from "../errorCenter";
@@ -151,6 +152,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
 
   const { lat: dLat, lng: dLng, address: dAddress } = getDestination(order);
   const route = useStoreRoute(storeLocation, dLat, dLng);
+  const callHref = telHref(order.phone);
 
   // การกระจายตำแหน่ง GPS ย้ายไปอยู่ที่ Dashboard แล้ว (useDeliveryBroadcast) — การ์ดถูก unmount
   // ทุกครั้งที่ไรเดอร์สลับแท็บ ถ้ายังอยู่ที่นี่ แผนที่ติดตามฝั่งลูกค้าจะค้างทันทีที่สลับแท็บ
@@ -210,14 +212,17 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
           disabledLabel="🧭 ออฟไลน์ — นำทางไม่ได้"
           style={{ flex: 1, minWidth: "130px" }}
         />
+        {/* ไม่มีเบอร์ = เดิมเปิด "tel:undefined" ให้เครื่องโทรออกเป็นค่าว่าง — ปิดปุ่มไปเลยชัดกว่า
+            (ฝั่งลูกค้าเช็ค order.riderPhone ก่อนโชว์ปุ่มโทรอยู่แล้ว ทำให้ตรงกันทั้งสองฝั่ง) */}
         <Button
           className="flex-1"
+          disabled={!callHref}
           onClick={() => {
-            window.location.href = `tel:${order.phone}`;
+            if (callHref) window.location.href = callHref;
           }}
         >
           <Phone size={16} />
-          Call Customer
+          {callHref ? "Call Customer" : "No Phone Number"}
         </Button>
       </div>
 
@@ -288,7 +293,10 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         </div>
       )}
 
-      {effectiveStatus !== READY_STATUS && <Chat orderId={order.id} sender="rider" />}
+      {/* order ส่งไปเพื่อให้แจ้งเตือนลูกค้าได้ว่ามีข้อความใหม่ (ต้องใช้เบอร์จากออเดอร์) */}
+      {effectiveStatus !== READY_STATUS && (
+        <Chat orderId={order.id} sender="rider" order={order} />
+      )}
     </Card>
   );
 }

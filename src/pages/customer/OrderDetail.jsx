@@ -16,6 +16,7 @@ import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
 import TrackingPanel from "../../tracking/TrackingPanel.jsx";
 import MapButton from "../../location/MapButton.jsx";
+import Chat from "../../Chat.jsx";
 import OrderTimeline from "../../components/order/OrderTimeline.jsx";
 import AuditLog from "../../components/order/AuditLog.jsx";
 
@@ -633,6 +634,15 @@ export const OrderDetail = () => {
             )}
           </Card>
         </div>
+      )}
+
+      {/* Chat with the rider — the SAME Chat component the rider's order card renders,
+          so both ends read/write the same chats/{orderId} thread (no second chat UI).
+          Shown once a rider is on the job; before that there is nobody to talk to. */}
+      {order.riderId && (
+        <Card className="p-6">
+          <Chat orderId={order.id} sender="customer" order={order} />
+        </Card>
       )}
 
       {/* Bottom Actions — premium equal-width bar. Sits ABOVE the mobile bottom nav

@@ -41,6 +41,8 @@ export const NOTIF_TYPE = {
   ORDER_CANCELLED: "order_cancelled",
   PROMOTION: "promotion",
   NEWS: "news",
+  // แชท (ใช้ได้ทั้งฝั่งลูกค้าและไรเดอร์ — คู่สนทนามีแค่สองฝั่ง จึงใช้ type เดียวกัน)
+  NEW_MESSAGE: "new_message",
   // store
   NEW_ORDER: "new_order",
   SLIP_UPLOADED: "slip_uploaded",
@@ -102,6 +104,33 @@ export const notifyRider = (uid, args) =>
   createNotification({ ...args, role: ROLE.RIDER, userId: uid || "" });
 export const notifyStore = (args) =>
   createNotification({ ...args, role: ROLE.STORE, userId: "" });
+
+// แชท: แจ้ง "อีกฝั่ง" ว่ามีข้อความใหม่ (ไม่งั้นต้องเปิดหน้าแชทค้างไว้ถึงจะเห็น)
+// อยู่ที่นี่เพราะเป็น emitter เหมือน notifyCustomer/notifyRider — Chat.jsx ไม่ต้องรู้ว่าใครคือปลายทาง
+// ต้องมีข้อมูลออเดอร์ถึงจะรู้ปลายทาง (เบอร์ลูกค้า / uid ไรเดอร์) — ไม่มีก็ข้ามไปเงียบ ๆ
+export function notifyChatMessage(order, sender) {
+  if (!order?.id) return null;
+  const no = order.orderNo || order.id;
+  // ต้องมีปลายทางที่เจาะจงเท่านั้น: userId ว่าง = "broadcast ทั้ง role" ตาม firestore.rules
+  // (isMine() ยอมให้ userId == "") ถ้าปล่อยไป ข้อความแชทจะไปโผล่ที่ลูกค้า "ทุกคน"
+  if (sender === "rider" && order.phone) {
+    return notifyCustomer(order.phone, {
+      type: NOTIF_TYPE.NEW_MESSAGE,
+      orderId: order.id,
+      actionUrl: `/shop/orders/${order.id}`,
+      message: `ไรเดอร์ส่งข้อความถึงคุณ (ออเดอร์ ${no})`,
+    });
+  }
+  if (sender === "customer" && order.riderId) {
+    return notifyRider(order.riderId, {
+      type: NOTIF_TYPE.NEW_MESSAGE,
+      orderId: order.id,
+      actionUrl: "/rider",
+      message: `ลูกค้าส่งข้อความ (ออเดอร์ ${no})`,
+    });
+  }
+  return null;
+}
 export const notifyAdmin = (args) =>
   createNotification({ ...args, role: ROLE.ADMIN, userId: "" });
 

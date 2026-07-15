@@ -3,9 +3,29 @@
 > งานค้างและแผนการทำงาน อัปเดตทุกครั้งหลังจบงาน (ดูกฎใน `CLAUDE.md`)
 
 ## 🔴 กำลังทำ (In Progress)
-- _(ยังไม่มี)_
+- ⚠️ **ต้องรัน deploy เอง (R-05) — ผู้ใช้เท่านั้นที่ทำได้ เพราะ session นี้ไม่มี Firebase login**
+  ```
+  firebase deploy --only firestore:rules      # ปิดช่องโหว่แชท (สำคัญ — ตอนนี้ยังรั่วอยู่)
+  firebase deploy --only firestore:indexes    # index chats(orderId+createdAt) ที่แชทต้องใช้
+  ```
+  **จนกว่าจะรัน 2 คำสั่งนี้: (1) ใครก็ตามที่ล็อกอินยังอ่านแชททุกออเดอร์ได้เหมือนเดิม
+  (2) ถ้า index ยังไม่มีใน console แชทจะโหลดไม่ขึ้น** (ตอนนี้จะขึ้น "โหลดแชทไม่สำเร็จ" ให้เห็น
+  แทนที่จะเงียบเหมือนเดิม) — โค้ดฝั่งเว็บ deploy ผ่าน Vercel แล้วและไม่พังกับ rules ชุดเก่า
+  **rules ชุดใหม่ยังไม่ได้ทดสอบ** (เครื่องนี้ไม่มี firebase-tools/Java จึงรัน emulator ไม่ได้)
+  → แนะนำให้ลองใน **Firebase Console → Rules Playground** ก่อน deploy จริง
 
 ## 🟡 รอทำ (Backlog)
+- **`tel:` ถูกประกอบเองกระจายอยู่ ~15 จุด** (พบตอนทำ R-05) — R-05 สร้าง `src/telUtils.js` (SSOT)
+  แล้วแต่ใช้เฉพาะการ์ดไรเดอร์ ยังเหลือ `pages/store/Settings.jsx` (มี `telHref` ของตัวเอง),
+  `pages/customer/OrderDetail.jsx`/`HelpCenter.jsx`/`Settings.jsx`, `pages/store/Orders.jsx`/
+  `Dashboard.jsx`, `rider/RiderSettings.jsx` → ควรย้ายมาใช้ตัวเดียวกัน (เบอร์ที่มีเว้นวรรค
+  จะโทรไม่ออกบนบางเครื่อง)
+- **แจ้งเตือน lifecycle อื่น ๆ ยังมีโอกาส broadcast ทั้ง role** — `notificationTrigger` ส่ง
+  `notifyCustomer(order.phone, ...)` โดยไม่เช็คว่าเบอร์ว่างไหม ถ้าออเดอร์ไหนไม่มีเบอร์
+  `userId:""` = ตาม `firestore.rules` isMine() ลูกค้า **ทุกคน** อ่านได้ (R-05 กันเฉพาะของแชทแล้ว)
+  → ควรกันที่ `createNotification` ให้ครบทุก type
+- **`Rider.jsx` / `TrackOrder.jsx` (legacy ไม่ถูก route) ยังมี `<Chat>` ของตัวเอง** — ถ้าจะลบ
+  legacy ทิ้งควรลบพร้อมกัน (ตอนนี้ไม่กระทบเพราะไม่ถูก mount)
 - **`cancelOrder` ยังไม่ atomic และไม่ตรวจสถานะปลายทางเลย** (พบตอนทำ R-04, ยังไม่แตะเพราะเป็น
   ฝั่ง Store/Admin ไม่ใช่ R-04 rider) — `orderEngine.cancelOrder` เขียน `status:"cancelled"`
   ทับได้ทุกกรณี **รวมถึงออเดอร์ที่ completed ไปแล้ว** → ร้านกดยกเลิกช้ากว่าไรเดอร์กดส่งสำเร็จ
@@ -47,6 +67,15 @@
   ต้องยกไปที่ระดับ layout/app (งานใหญ่กว่า — ควรทำเป็น task แยก)
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **R-05 Chat & Call** — แชทเดิม **ส่งได้อย่างเดียว ลูกค้าไม่มีทางเห็น**: `<Chat>` มีแค่
+  บนการ์ดไรเดอร์ + `Rider.jsx`/`TrackOrder.jsx` ที่เป็น legacy ไม่ถูก route ส่วนหน้าลูกค้าจริง
+  (`pages/customer/OrderDetail.jsx`) **ไม่มีแชทเลย** → ต่อ `<Chat>` ตัวเดิม (SSOT เดียวกัน)
+  ให้ลูกค้า + เพิ่มแจ้งเตือนข้อความใหม่ (`NOTIF_TYPE.NEW_MESSAGE` + `notifyChatMessage` emitter)
+  + แก้ `onSnapshot` ไม่มี error handler (index/สิทธิ์พัง = แชทว่างเงียบตลอดกาล) + `telUtils`
+  (SSOT) กัน `tel:undefined` + **ปิดช่องโหว่ rules: เดิมใครล็อกอินก็อ่านแชททุกออเดอร์ได้**
+  + เพิ่ม `firestore.indexes.json` (chats orderId+createdAt — query เดียวในแอปที่ต้องใช้ composite
+  index แต่ไม่เคยมีไฟล์ index เลย). build ผ่าน, ESLint คงที่ 64/61, ทดสอบ 35 เคสผ่าน
+  (+ R-01..R-04 ไม่ regress รวม 142 เคส) — **rules/indexes ยังไม่ได้ deploy (ดู In Progress)**
 - 2026-07-16 **R-04 Order Status Flow** — ทำให้การเปลี่ยนสถานะเป็น **atomic** จริง:
   `orderEngine.updateOrderStatus` เดิมตรวจสถานะจาก snapshot ในเครื่องแล้ว `updateDoc` ทับตรง ๆ
   (read-modify-write ไม่มีกันชน) → ร้านกดยกเลิกตอนไรเดอร์กด "ส่งสำเร็จ" = **ออเดอร์ที่ถูกยกเลิก

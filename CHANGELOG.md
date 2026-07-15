@@ -5,6 +5,60 @@
 
 ## [Unreleased]
 
+### Fixed / Added (R-05 Chat & Call — chat was write-only, unnotified, and world-readable)
+- **บั๊กหลัก: แชทส่งได้อย่างเดียว ลูกค้าไม่มีทางเห็น** — `<Chat>` ถูก render แค่บนการ์ดไรเดอร์
+  กับ `Rider.jsx`/`TrackOrder.jsx` ซึ่ง **เป็น legacy และไม่ถูก route ใน `main.jsx`** ส่วนหน้าที่
+  ลูกค้าใช้จริง (`pages/customer/OrderDetail.jsx` ที่ `/shop/orders/:orderId`) **ไม่มีแชทเลย**
+  → ไรเดอร์พิมพ์ข้อความลงไปโดยที่ลูกค้าไม่มีวันเห็นและตอบกลับไม่ได้
+  **วิธีแก้**: ต่อ `<Chat>` **ตัวเดิม** เข้าหน้าลูกค้า (อ่าน/เขียน `chats` เส้นเดียวกัน ไม่ได้ทำ UI
+  แชทชุดที่สอง) แสดงเมื่อมีไรเดอร์รับงานแล้ว (`order.riderId`) ให้ตรงกับฝั่งไรเดอร์
+- **ไม่มีแจ้งเตือนข้อความใหม่เลย** — ต้องเปิดหน้าแชทค้างไว้ถึงจะรู้ → เพิ่ม
+  `NOTIF_TYPE.NEW_MESSAGE` + `notifyChatMessage(order, sender)` เป็น **emitter ใน
+  notificationUtils (SSOT เดียวกับ notifyCustomer/notifyRider)** ไม่ได้สร้างช่องทางแจ้งเตือนใหม่;
+  ไรเดอร์ส่ง → เด้งหาลูกค้า (ลิงก์ไปหน้าออเดอร์), ลูกค้าส่ง → เด้งหาไรเดอร์ (ลิงก์ไป `/rider`);
+  เพิ่มไอคอน `new_message` ใน NotificationBell (มี fallback อยู่แล้วแต่ให้ตรงความหมาย)
+- **ป้องกัน broadcast หลุด (เจอจากเทสต์ตัวเอง)**: `notifyCustomer("")` จะได้ `userId:""` ซึ่งตาม
+  `firestore.rules` `isMine()` แปลว่า **"ส่งถึงลูกค้าทุกคน"** → ถ้าออเดอร์ไม่มีเบอร์
+  ข้อความแจ้งเตือนแชท (พร้อมเลขออเดอร์) จะไปโผล่ที่ลูกค้าทุกคน → `notifyChatMessage`
+  จะไม่ส่งเลยถ้าไม่มีปลายทางเจาะจง
+- **`onSnapshot` ของแชทไม่มี error callback** → ถ้า query พัง (ไม่มี composite index หรือไม่มีสิทธิ์)
+  แชทจะ **"ว่างเปล่าเงียบ ๆ" ตลอดไป** เหมือนอีกฝ่ายไม่ตอบ → เพิ่ม error handler + log ผ่าน
+  ErrorCenter SSOT และ **แยก "โหลดไม่ได้" ออกจาก "ยังไม่มีข้อความ"** ให้ชัดบน UI
+  (`console.error` เดิมใน sendMessage ก็เปลี่ยนมาใช้ ErrorCenter)
+- **`firestore.indexes.json` ไม่เคยมีในโปรเจกต์** ทั้งที่ query แชท
+  (`where(orderId==) + orderBy(createdAt)`) ต้องใช้ **composite index** — และเป็น
+  **query เดียวในทั้งแอปที่ต้องใช้** (ตรวจแล้วทุก query) → เพิ่มไฟล์ index + ผูกใน `firebase.json`
+- **ช่องโหว่ความปลอดภัย (CLAUDE.md §8): `chats` เดิมให้ "ใครก็ตามที่ล็อกอิน role ไหนก็ได้"
+  อ่านแชทของ *ทุกออเดอร์*** และ create ได้โดยไม่ตรวจว่า `sender` ตรงกับ role จริง (ไรเดอร์
+  ปลอมเป็น `sender:"customer"` ได้) → เขียน rules ใหม่ให้ผูกกับ **ออเดอร์ของข้อความนั้น**
+  โดยใช้เกณฑ์เดียวกับ `/orders` (ลูกค้า = เบอร์ตรง, ไรเดอร์ = ถืองานนั้นอยู่, ร้าน/แอดมิน = ดูแลได้)
+  และบังคับ `request.resource.data.sender == role()`
+- **ปุ่มโทร**: `tel:${order.phone}` เมื่อไม่มีเบอร์ = เปิดสมุดโทรศัพท์ด้วย `tel:undefined` →
+  เพิ่ม `src/telUtils.js` (SSOT) ที่ตัดช่องว่าง/ขีด (เบอร์ที่มีเว้นวรรคโทรไม่ออก) และคืน `""`
+  เมื่อไม่มีเบอร์ → ปุ่มขึ้น "No Phone Number" + disabled (ตรงกับฝั่งลูกค้าที่เช็ค `riderPhone` อยู่แล้ว)
+
+### Verified (R-05)
+- `npm run build` ผ่าน; ESLint คงที่ **64 problems / 61 errors** เท่า baseline (0 error ใหม่)
+- **35 เคสผ่านหมด** (รัน `telUtils` + `notificationUtils` ตัวจริง): `telHref` ครบทุกรูปแบบเบอร์
+  (ขีด/เว้นวรรค/วงเล็บ/+66/ว่าง/undefined) และยืนยันว่าของเดิมได้ `tel:undefined` จริง;
+  `notifyChatMessage` ส่งถูกฝั่ง-ถูก userId-ถูก actionUrl ทั้งสองทิศทาง, ไม่ยิงเมื่อยังไม่มีไรเดอร์,
+  **ไม่ broadcast เมื่อไม่มีเบอร์**, และไม่ throw ทุกกรณี (การแจ้งเตือนต้องไม่ทำให้ส่งข้อความพัง)
+- **ตรวจในเบราว์เซอร์จริง**: `telUtils`/`notificationUtils`/`Chat.jsx` โหลดจาก bundle จริงได้,
+  guard ทุกตัวคืน `null` ไม่ throw, และหน้า customer OrderDetail import + render `<Chat>` จริง
+- R-01 (25) + R-02 (24) + R-03 (27) + R-04 (31) รันซ้ำไม่ regress — **รวม 142 เคส**
+- ⚠️ **`firestore.rules` ชุดใหม่ยังไม่ได้ทดสอบและยังไม่ได้ deploy** — เครื่องนี้ไม่มี
+  firebase-tools และไม่มี Java จึง **รัน emulator ไม่ได้เลย** และไม่มีสิทธิ์ deploy
+  → ผู้ใช้ต้องรัน `firebase deploy --only firestore:rules,firestore:indexes` เอง และแนะนำให้ลอง
+  ใน **Rules Playground** ก่อน; **จนกว่าจะ deploy ช่องโหว่ยังเปิดอยู่** (โค้ดเว็บใหม่ทำงานได้
+  ทั้งกับ rules เก่าและใหม่ จึง deploy Vercel ไปก่อนได้อย่างปลอดภัย)
+- ⚠️ **ข้อสมมติที่ต้องยืนยันตอน deploy**: read rule เรียก `get()` อ่านออเดอร์ต่อข้อความ ซึ่งพึ่งพา
+  การที่ Firestore **cache การอ่านเอกสาร path เดิมภายใน request เดียว** (query แชทกรองด้วย
+  `orderId` ค่าเดียว จึงเป็น path เดียวกันทุก doc → ควรนับเป็น 1 access call) ถ้าจริงตามนี้จะไม่ชน
+  ลิมิต 10 calls/query — **ถ้า deploy แล้วแชทที่มีข้อความเยอะโหลดไม่ขึ้น ให้แจ้ง** จะเปลี่ยนไปเก็บ
+  `customerPhone`/`riderId` ลงบนตัวข้อความแทน (ต้องวางแผน migration ของข้อความเก่า)
+- ⚠️ **ยังไม่ได้ QA ด้วยตา** — ทั้ง `/rider` และ `/shop/orders/:id` อยู่หลัง login และไม่มีบัญชีทดสอบ
+  จึงยังไม่ได้เห็นแชทสองฝั่งคุยกันจริง
+
 ### Fixed (R-04 Order Status Flow — non-atomic transitions let status be overwritten/regress)
 - **บั๊กหลัก: การเปลี่ยนสถานะไม่ atomic** — `orderEngine.updateOrderStatus` (ตัวเขียนสถานะ
   ตัวเดียวของทั้งระบบ ใช้จาก **16 จุด ทั้ง 4 บทบาท**) ตรวจ `order.status` จาก **snapshot ที่ค้าง
