@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { Bike, CreditCard, MapPin, Package, Phone, User } from "lucide-react";
+import { Bike, CreditCard, MapPin, Package, Phone, User, X } from "lucide-react";
 import { db } from "../firebase";
 import Chat from "../Chat.jsx";
 import DeliveryMap from "../location/DeliveryMap.jsx";
@@ -201,7 +201,7 @@ const TotalsSection = ({ order }) => (
 );
 
 // การ์ดรายละเอียดออเดอร์ของไรเดอร์: ข้อมูลลูกค้า + รายการอาหาร + แผนที่/ระยะทาง + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
-export default function RiderOrderCard({ order, effectiveStatus, storeLocation, isOnline, onAccept, onStartDelivering, onDelivered }) {
+export default function RiderOrderCard({ order, effectiveStatus, storeLocation, isOnline, busy = false, disabled = false, onAccept, onReject, onStartDelivering, onDelivered }) {
   const [showMap, setShowMap] = useState(false);
   // optimistic เฉพาะหลังกดปุ่ม ระหว่างรอ nearPressed จริงจาก snapshot ของออเดอร์
   const [nearPressedLocally, setNearPressedLocally] = useState(false);
@@ -274,10 +274,21 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
       {/* status actions: ready -> [Accept] -> picked_up -> [Start Delivering] -> delivering -> [Delivered] */}
       <div className="flex flex-wrap gap-2">
         {effectiveStatus === READY_STATUS && (
-          <Button className="flex-1" onClick={() => onAccept(order)}>
-            <Package size={16} />
-            Accept Delivery
-          </Button>
+          <>
+            <Button className="flex-1" onClick={() => onAccept(order)} disabled={busy || disabled}>
+              <Package size={16} />
+              {busy ? "Accepting..." : "Accept Delivery"}
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 text-secondary border-secondary/30 hover:border-secondary"
+              onClick={() => onReject(order)}
+              disabled={busy || disabled}
+            >
+              <X size={16} />
+              Reject
+            </Button>
+          </>
         )}
         {effectiveStatus === PICKED_UP_STATUS && (
           <Button className="flex-1" onClick={() => onStartDelivering(order)}>

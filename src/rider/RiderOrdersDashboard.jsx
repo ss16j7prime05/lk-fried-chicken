@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { Bell, History, LogOut, Power, Settings, User, Wallet } from "lucide-react";
+import { AlertCircle, Bell, History, LogOut, Power, Settings, User, Wallet, WifiOff } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
@@ -14,16 +14,38 @@ import {
   DELIVERED_STATUS,
   DELIVERING_STATUS,
   PICKED_UP_STATUS,
+  READY_QUERY_STATUSES,
   READY_STATUS,
   isReadyForDelivery,
 } from "./riderStatus";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { useStoreStatus } from "../store/useStoreStatus";
-import { assignRider, updateOrderStatus, completeOrder } from "../store/orderEngine";
+import { updateOrderStatus, completeOrder } from "../store/orderEngine";
+import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
+import { logError } from "../errorCenter";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
 const FALLBACK_STORE_LNG = 100.0529543;
+
+// เหตุผลที่รับ/ปฏิเสธงานไม่สำเร็จ (reason จาก riderAcceptReject) -> ข้อความที่ไรเดอร์เข้าใจ
+// ที่สำคัญที่สุดคือ already_taken: ไรเดอร์ต้องรู้ว่าโดนตัดหน้า ไม่ใช่กดแล้วเงียบ
+const ACTION_ERROR = {
+  already_taken: "Another rider just took this delivery.",
+  not_ready: "This delivery is no longer ready for pickup.",
+  offered_to_other: "This delivery is reserved for another rider right now.",
+  not_found: "This delivery no longer exists.",
+  invalid: "Couldn't accept this delivery. Please try again.",
+  error: "Something went wrong. Please try again.",
+};
+
+const actionMessage = (reason) => ACTION_ERROR[reason] || ACTION_ERROR.error;
+
+// feed พังคนละตัวคนละความหมาย: พูลงานว่าง vs คิวงานที่รับไว้แล้ว
+const FEED_ERROR = {
+  available: "Couldn't load available deliveries. Check your connection and refresh.",
+  mine: "Couldn't load your accepted deliveries. Check your connection and refresh.",
+};
 
 // Rider Dashboard ใหม่: เห็นงานพร้อมส่งทั้งหมด, รับงานได้, อัปเดตสถานะแบบ realtime
 export default function RiderOrdersDashboard() {
@@ -36,6 +58,12 @@ export default function RiderOrdersDashboard() {
   const [myJobs, setMyJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("available");
+  // ข้อผิดพลาดจากการกดปุ่ม (รับ/ปฏิเสธ/สลับสถานะ) กับจากตัว feed เอง แยกกันคนละก้อน
+  const [actionError, setActionError] = useState("");
+  // แยกราย feed: feed หนึ่งหายดีต้องไม่ไปล้าง error ของอีก feed ที่ยังพังอยู่
+  const [feedErrors, setFeedErrors] = useState({ available: "", mine: "" });
+  // ออเดอร์ที่กำลังยิง action อยู่ — กันกดซ้ำ/กดหลายใบพร้อมกัน
+  const [busyId, setBusyId] = useState("");
   // ความพร้อมรับงาน อ่านแบบ realtime จาก users/{uid}.riderStatus (ฟิลด์เดียวกับ RiderSettings/Admin)
   const [riderStatus, setRiderStatus] = useState(profile?.riderStatus || "offline");
   const [storeLocation, setStoreLocation] = useState({
@@ -48,26 +76,50 @@ export default function RiderOrdersDashboard() {
     if (!user?.uid) return;
     // แทนการ subscribe ทั้ง collection: ดึงเฉพาะพูลงานว่าง (status พร้อมส่ง) + งานของไรเดอร์คนนี้
     // ใช้ query pattern เดียวกับ History/Earnings/Notifications (where field == value)
-    const availableQ = query(collection(db, "orders"), where("status", "==", READY_STATUS));
+    // สถานะพร้อมส่งรวม alias เดิมด้วย (ออเดอร์เก่ายังเป็นภาษาไทย) — ใช้ "in" แบบเดียวกับ Kitchen
+    const availableQ = query(collection(db, "orders"), where("status", "in", READY_QUERY_STATUSES));
     const mineQ = query(collection(db, "orders"), where("riderId", "==", user.uid));
-    const unsubAvailable = onSnapshot(availableQ, (snapshot) => {
-      setAvailablePool(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const markFeed = (key, msg) =>
+      setFeedErrors((prev) => (prev[key] === msg ? prev : { ...prev, [key]: msg }));
+    // ถ้า feed พัง (สิทธิ์/เน็ต) ต้องเลิกหมุนแล้วบอกเหตุผล ไม่ใช่ค้างที่ Loading ตลอดกาล
+    const onFeedError = (err, key) => {
+      logError(err, `RiderOrdersDashboard.${key}`);
+      markFeed(key, FEED_ERROR[key]);
       setLoading(false);
-    });
-    const unsubMine = onSnapshot(mineQ, (snapshot) => {
-      setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
-    const unsubStore = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setStoreLocation({
-          lat: data.lat ?? FALLBACK_STORE_LAT,
-          lng: data.lng ?? FALLBACK_STORE_LNG,
-          name: data.storeName || "LK Fried Chicken",
-        });
-      }
-    });
+    };
+    const unsubAvailable = onSnapshot(
+      availableQ,
+      (snapshot) => {
+        setAvailablePool(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        markFeed("available", "");
+        setLoading(false);
+      },
+      (err) => onFeedError(err, "available")
+    );
+    const unsubMine = onSnapshot(
+      mineQ,
+      (snapshot) => {
+        setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        markFeed("mine", "");
+        setLoading(false);
+      },
+      (err) => onFeedError(err, "mine")
+    );
+    const unsubStore = onSnapshot(
+      doc(db, "stores", STORE_ID),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setStoreLocation({
+            lat: data.lat ?? FALLBACK_STORE_LAT,
+            lng: data.lng ?? FALLBACK_STORE_LNG,
+            name: data.storeName || "LK Fried Chicken",
+          });
+        }
+      },
+      // ตำแหน่งร้านมี fallback อยู่แล้ว — ล้มเหลวได้โดยไม่ต้องกวนไรเดอร์
+      (err) => logError(err, "RiderOrdersDashboard.store")
+    );
     return () => {
       unsubAvailable();
       unsubMine();
@@ -85,13 +137,15 @@ export default function RiderOrdersDashboard() {
   }, [user?.uid]);
 
   const isOnline = riderStatus === "online";
+  const feedError = feedErrors.available || feedErrors.mine;
 
   // งานว่าง (riderId=="") กับงานของไรเดอร์ (riderId==uid) เป็นเซตที่ไม่ทับกัน รวมได้ตรง ๆ
   const orders = availablePool.concat(myJobs);
 
-  const availableOrders = orders.filter(
-    (o) => !o.riderId && isReadyForDelivery(o.status)
-  );
+  // งานที่ไรเดอร์คนนี้กดปฏิเสธไปแล้ว ไม่ต้องโผล่ในพูลของเขาอีก (ของคนอื่นยังเห็นปกติ)
+  const availableOrders = orders
+    .filter((o) => !o.riderId && isReadyForDelivery(o.status) && !hasRejected(o, user?.uid))
+    .sort(byNewest());
 
   // คิวงานของไรเดอร์คนนี้ แยกตามสถานะเดิม: Assigned (picked_up) / Active (delivering) / Completed
   const mine = orders.filter((o) => o.riderId === user?.uid);
@@ -104,21 +158,47 @@ export default function RiderOrdersDashboard() {
   // สลับความพร้อมรับงาน — เขียน users/{uid}.riderStatus (ฟิลด์เดิม ไม่เพิ่ม schema)
   const toggleAvailability = async () => {
     if (!user) return;
-    await updateDoc(doc(db, "users", user.uid), {
-      riderStatus: isOnline ? "offline" : "online",
-    });
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        riderStatus: isOnline ? "offline" : "online",
+      });
+      setActionError("");
+    } catch (e) {
+      logError(e, "RiderOrdersDashboard.toggleAvailability");
+      setActionError("Couldn't update your availability. Please try again.");
+    }
   };
 
-  // รับงาน: บันทึก riderId/riderName + ย้ายสถานะเป็น "picked_up" (ออเดอร์พร้อมส่งอยู่แล้วที่เคาน์เตอร์)
+  // ตัวตนของไรเดอร์ที่เขียนลงออเดอร์ — รูปแบบเดียวกับที่ assignRider เคยใช้
+  const riderIdentity = () => ({
+    uid: user.uid,
+    name: profile?.name || profile?.riderName || user.email || "ไรเดอร์",
+    phone: profile?.phone || "",
+  });
+
+  // รับงาน: ผ่าน acceptOrder (transaction) เท่านั้น — re-read ออเดอร์ใน transaction แล้วเคลมต่อเมื่อ
+  // ยังพร้อมส่งและยังไม่มีคนรับ จึงกันสองไรเดอร์กดพร้อมกันแล้วได้งานใบเดียวกันทั้งคู่
+  // (assignRider เดิมเป็น updateDoc ตรง ๆ จาก snapshot ในเครื่อง = เขียนทับกันเงียบ ๆ)
   // ต้องออนไลน์ก่อนถึงรับงานได้ (กันแย่งงานทั้งที่ปิดรับ)
-  // All lifecycle writes go through the Shared Order Engine (Phase 3.8).
-  const acceptDelivery = (order) => {
-    if (!user || !isOnline) return;
-    return assignRider(order, {
-      uid: user.uid,
-      name: profile?.name || profile?.riderName || user.email || "ไรเดอร์",
-      phone: profile?.phone || "",
-    });
+  const acceptDelivery = async (order) => {
+    if (!user || !isOnline || busyId) return;
+    setBusyId(order.id);
+    setActionError("");
+    const { ok, reason } = await acceptOrder(order, riderIdentity());
+    // สำเร็จแล้วออเดอร์จะหายจากแท็บ Available ไปโผล่ที่ Assigned — พาไรเดอร์ตามไปเลย
+    if (ok) setTab("assigned");
+    else setActionError(actionMessage(reason));
+    setBusyId("");
+  };
+
+  // ปฏิเสธงาน: ออเดอร์ยังพร้อมส่งและว่างเหมือนเดิม แค่ซ่อนจากพูลของไรเดอร์คนนี้ (rejectedBy)
+  const rejectDelivery = async (order) => {
+    if (!user || busyId) return;
+    setBusyId(order.id);
+    setActionError("");
+    const { ok, reason } = await rejectOrder(order, riderIdentity());
+    if (!ok) setActionError(actionMessage(reason));
+    setBusyId("");
   };
   const startDelivering = (order) => updateOrderStatus(order, DELIVERING_STATUS, { by: user?.uid });
   const markDelivered = (order) => completeOrder(order, user?.uid);
@@ -235,6 +315,33 @@ export default function RiderOrdersDashboard() {
           ))}
         </div>
 
+        {/* feed พัง = ไม่มีข้อมูลให้เชื่อถือ ต้องบอกตรง ๆ แทนที่จะโชว์ "ไม่มีงาน" ทั้งที่อาจมี */}
+        {feedError && (
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
+            <WifiOff size={20} className="shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-black text-sm">Can't load deliveries</p>
+              <p className="text-xs font-medium text-red-500 mt-0.5">{feedError}</p>
+            </div>
+          </div>
+        )}
+
+        {actionError && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600"
+          >
+            <AlertCircle size={20} className="shrink-0 mt-0.5" />
+            <p className="text-sm font-bold min-w-0 flex-1">{actionError}</p>
+            <button
+              onClick={() => setActionError("")}
+              className="text-xs font-black text-red-400 hover:text-red-600 shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {tab === "available" && storeClosed && (
           <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
             <Power size={20} className="shrink-0 mt-0.5" />
@@ -276,7 +383,10 @@ export default function RiderOrdersDashboard() {
                 effectiveStatus={tab === "available" ? READY_STATUS : order.status}
                 storeLocation={storeLocation}
                 isOnline={isOnline}
+                busy={busyId === order.id}
+                disabled={Boolean(busyId) && busyId !== order.id}
                 onAccept={acceptDelivery}
+                onReject={rejectDelivery}
                 onStartDelivering={startDelivering}
                 onDelivered={markDelivered}
               />

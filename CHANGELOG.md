@@ -5,6 +5,50 @@
 
 ## [Unreleased]
 
+### Fixed (R-01 Incoming Orders — double-accept race + silent failures)
+- **บั๊กหลัก: ไรเดอร์ 2 คนรับงานใบเดียวกันได้พร้อมกัน** — `acceptDelivery` ใน
+  `rider/RiderOrdersDashboard.jsx` เรียก `assignRider()` ของ orderEngine ซึ่ง **เขียน `updateDoc`
+  ตรง ๆ โดยเช็คสถานะจาก snapshot ที่ค้างอยู่ในเครื่องไรเดอร์** พูลงานว่างแสดงออเดอร์ใบเดียวกัน
+  ให้ไรเดอร์ทุกคน ทั้งคู่จึงเห็น "ready" แล้วเขียนทับกัน — คนกดทีหลังชนะ คนแรกโดนแย่งงานเงียบ ๆ
+  ทั้งที่ UI บอกว่ารับงานสำเร็จ (ร้านเห็นชื่อไรเดอร์คนสุดท้าย แต่ไรเดอร์ 2 คนวิ่งไปรับของ)
+- **วิธีแก้ — ใช้ SSOT ที่มีอยู่แล้ว ไม่เขียนใหม่**: `rider/riderAcceptReject.js` (transaction,
+  re-read ออเดอร์ใน transaction แล้วเคลมต่อเมื่อยังพร้อมส่ง+ยังไม่มีคนรับ) ถูกเขียนไว้ตั้งแต่
+  Phase 5.3 เพื่อกันเคสนี้โดยเฉพาะ **แต่ไม่เคยถูก import จากที่ไหนเลย (dead code)** → ต่อสายให้
+  dashboard เรียก `acceptOrder` แทน `assignRider` (ฝั่ง Store ที่จ่ายงานให้ไรเดอร์ผ่าน
+  `store/orderAssignment.js` ยังใช้ `assignRider` ตามเดิม ไม่กระทบ)
+- **กดแล้วเงียบ**: เดิม `assignRider` เจอสถานะไม่ผ่านก็ `return` เฉย ๆ ไรเดอร์ไม่รู้ว่าเกิดอะไรขึ้น
+  → map `reason` ทุกแบบเป็นข้อความ (`already_taken` = "Another rider just took this delivery.")
+  แสดงบนแถบ error ที่ปิดเองได้
+- **ค้างหน้า Loading ตลอดกาล**: `onSnapshot` ทั้ง 3 ตัวไม่มี error callback — สิทธิ์/เน็ตพังแล้ว
+  spinner หมุนไม่จบ → เพิ่ม error handler แยกราย feed (available/mine) + log ผ่าน ErrorCenter SSOT
+  (ตำแหน่งร้าน fallback ได้อยู่แล้ว จึง log เงียบไม่กวนไรเดอร์)
+- **ออเดอร์สถานะไทยไม่เคยถึงไรเดอร์**: query เดิม `where("status","==","ready_for_delivery")`
+  แต่ `isReadyForDelivery()` และ `firestore.rules` ตั้งใจรองรับ alias `"ส่งให้ไรเดอร์"` /
+  `"กำลังจัดส่ง"` ด้วย → ตัวกรอง alias ฝั่ง client เป็น dead code เพราะออเดอร์พวกนั้นไม่เคยถูกดึงมา
+  → เพิ่ม `READY_QUERY_STATUSES` (SSOT ใน `riderStatus.js`) แล้วใช้ `where("status","in",...)`
+  แบบเดียวกับ Kitchen (ไม่มี orderBy จึงไม่ต้องสร้าง composite index)
+- **กดซ้ำ/กดหลายใบพร้อมกัน**: เพิ่ม `busyId` — ปุ่มที่กำลังยิงขึ้น "Accepting..." ใบอื่น disabled
+
+### Added (R-01)
+- **ปุ่ม Reject บนงานในพูล** — ต่อ `rejectOrder`/`hasRejected` ที่มีอยู่แล้วใน `riderAcceptReject.js`
+  (เดิมเป็น dead code เช่นกัน): ปฏิเสธแล้วออเดอร์ยังพร้อมส่ง+ว่างสำหรับไรเดอร์คนอื่นตามเดิม
+  แค่ซ่อนจากพูลของคนที่กดปฏิเสธ (ฟิลด์ `rejectedBy` แบบ additive — ไม่เพิ่ม collection ใหม่
+  และ `firestore.rules` เดิมอนุญาต rider เขียนออเดอร์ที่ยังพร้อมส่งอยู่แล้ว)
+- เรียงพูลงานว่างด้วย `byNewest()` ให้ลำดับคงที่เหมือนแท็บอื่น (เดิมไม่เรียง = ลำดับสุ่มตาม snapshot)
+
+### Verified (R-01)
+- `npm run build` ผ่าน; ESLint คงที่ **64 problems / 61 errors** เท่า baseline เดิม (0 error ใหม่,
+  0 ปัญหาในไฟล์ `rider/`)
+- **ทดสอบโค้ดจริง 25 เคสผ่านหมด** — รัน `riderAcceptReject.js` ตัวจริงผ่าน in-memory Firestore
+  ที่จำลอง optimistic concurrency จริง (version check + retry เหมือน SDK): เคส race 2 ไรเดอร์
+  (มีคนเดียวชนะ, คนแพ้ได้ `already_taken`, ข้อมูลผู้ชนะไม่ถูกเขียนทับ), guard ครบ
+  (`not_ready`/`not_found`/`invalid`/`offered_to_other`/offer หมดอายุ/idempotent), reject ครบ
+- **Control test ยืนยันว่าบั๊กมีจริง**: รัน race เดิมกับ path เก่า (`assignRider`) → reproduce ได้
+  ไรเดอร์ A รับงานสำเร็จ ไม่มี error แล้วถูก B เขียนทับ = ทั้งคู่คิดว่าได้งาน
+- ⚠️ **ยังไม่ได้ QA ด้วยตาบนเว็บจริง** — `/rider` อยู่หลัง login และ session นี้ไม่มีบัญชีไรเดอร์
+  (ตรวจแล้วว่า route redirect ไป login ถูกต้อง, Vite compile ทุกไฟล์ที่แก้ผ่าน, ไม่มี console error,
+  bundle ที่ build ออกมามี path ใหม่จริง และ icon ที่เพิ่มมีอยู่จริงใน lucide-react)
+
 ### Changed (Image upload system — unified & hardened, all surfaces)
 - **`src/services/cloudinary.js` เป็นทางเดียวของการอัปโหลดรูปทั้งแอป** — เขียนใหม่ให้:
   รับ JPG/JPEG/PNG/WEBP/GIF และ **HEIC/HEIF** (ตรวจจาก MIME หรือนามสกุล เผื่อมือถือส่ง MIME ว่าง);

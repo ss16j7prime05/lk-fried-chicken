@@ -9,6 +9,12 @@
 - _(ยังไม่มี — เพิ่มรายการเมื่อพบงาน)_
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **R-01 Incoming Orders** — แก้ race condition ตอนรับงาน: `acceptDelivery` เดิมเรียก
+  `assignRider` (updateDoc ตรง ๆ จาก snapshot ในเครื่อง) ไรเดอร์ 2 คนกดพร้อมกันเขียนทับกันเงียบ ๆ
+  ทั้งคู่คิดว่าได้งาน → เปลี่ยนมาใช้ `riderAcceptReject.acceptOrder` (transaction, SSOT ที่มีอยู่แล้ว
+  แต่ไม่เคยถูก import) + ต่อ Reject (`rejectOrder`/`hasRejected`) + แจ้ง error ทุกกรณีแทนกดแล้วเงียบ
+  + กัน onSnapshot error ค้างหน้า Loading + query รวม alias ไทย + กันกดซ้ำ.
+  build ผ่าน, ESLint คงที่ 64/61 (0 error ใหม่), ทดสอบ 25 เคสผ่านหมด (รวมเคส race 2 ไรเดอร์)
 - 2026-07-15 ยกเครื่องระบบอัปโหลดรูปทั้งแอปให้ผ่าน `services/cloudinary.js` ตัวเดียว (HEIC/HEIF,
   บีบอัด+แปลงฝั่ง client, progress, timeout+retry, ไม่ค้าง) และย้ายทุกจุดที่ยังใช้ Firebase Storage
   (เมนู/โปรไฟล์ลูกค้า/เอกสารสมัคร/แชท) มา Cloudinary. ไม่แตะ checkout/order. build ผ่าน, 0 error ใหม่.
@@ -31,6 +37,14 @@
 ## 📝 ตรวจสอบเพิ่มเติมภายหลัง (Follow-up)
 - QA ด้วยตาบนเว็บจริง (Vercel) ทั้ง 4 บทบาท ทุก breakpoint — สภาพแวดล้อมนี้ทำ visual QA ไม่ได้
   (ตรวจได้แค่ build + lint + ความครบของ key EN/TH)
+- **R-01: ยังไม่ได้ QA ด้วยตาบนเว็บจริง** — `/rider` อยู่หลัง login และ session นี้ไม่มีบัญชีไรเดอร์
+  ให้ทดสอบ ผู้ใช้ควรเช็คเอง: ปุ่ม Reject, แถบ error ตอนโดนตัดหน้า (already_taken), แถบ error
+  ตอน feed พัง, ปุ่ม Accept ตอนกำลังกด (Accepting...) ทั้ง Mobile/Tablet/Desktop
+- **R-01 (โครงสร้าง):** `RiderOrderCard` ตอนนี้เป็น English UI ปนกับ `STATUS_LABEL` ภาษาไทย
+  ทั้งหน้ายังไม่ผ่าน i18n เหมือนฝั่ง Store — ควรทำ i18n ของ Rider ทั้งชุดเป็นงานแยก
+- **หมายเหตุขัดกับ CLAUDE.md §5:** `RiderProfile.jsx` ที่ root ถูก route จริงใน `main.jsx`
+  (ไม่ใช่ legacy ตามที่เอกสารระบุ) ส่วน `Rider.jsx` ที่ root คือ legacy จริง (ไม่ถูก mount) —
+  ควรแก้เอกสารตอนทำ R-11 Rider Profile
 
 ## 📌 หมายเหตุ / ประเด็นค้างพิจารณา
 - โปรเจกต์ปัจจุบันเป็น **JavaScript (JSX)** ไม่ใช่ TypeScript ตามที่ระบุใน stack —
