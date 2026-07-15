@@ -39,12 +39,10 @@ export async function transition(order, to, opts = {}) {
       return { ok: false, reason: "error" };
     }
   }
+  // ด่านแรก: ตรวจกับสถานะในเครื่องเพื่อฟันธงเร็ว ๆ โดยไม่ต้องยิง network
   if (!canTransition(from, to)) return { ok: false, reason: "invalid_transition", from, to };
-  try {
-    await updateOrderStatus(order, to, opts);
-    return { ok: true };
-  } catch (e) {
-    logError(e, "transition");
-    return { ok: false, reason: "error" };
-  }
+  // ด่านจริง: updateOrderStatus re-read ใน transaction แล้วตรวจกับสถานะสดอีกที และคืน
+  // { ok, reason } มาเอง (ไม่ throw แล้ว) จึงส่งต่อผลลัพธ์ตรง ๆ — ห้าม return {ok:true} ดื้อ ๆ
+  // ไม่งั้นการเขียนที่ถูกปฏิเสธจะถูกรายงานว่าสำเร็จ
+  return updateOrderStatus(order, to, opts);
 }

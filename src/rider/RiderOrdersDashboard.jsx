@@ -20,7 +20,7 @@ import {
 } from "./riderStatus";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { useStoreStatus } from "../store/useStoreStatus";
-import { updateOrderStatus, completeOrder } from "../store/orderEngine";
+import { transition } from "../store/orderStateMachine";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
 import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
 import { GEO_STATE, useGeolocationStatus } from "../location/mapsService";
@@ -39,6 +39,9 @@ const ACTION_ERROR = {
   offered_to_other: "This delivery is reserved for another rider right now.",
   not_found: "This delivery no longer exists.",
   invalid: "Couldn't accept this delivery. Please try again.",
+  // เปลี่ยนสถานะไม่ผ่าน: ส่วนใหญ่แปลว่ามีคนอื่น (ร้าน/แอดมิน) เปลี่ยนสถานะไปแล้วระหว่างที่หน้าจอยังค้างอยู่
+  invalid_transition: "This delivery already moved on — the store or admin changed it. Pull the latest and try again.",
+  terminal: "This delivery is already finished or cancelled.",
   error: "Something went wrong. Please try again.",
 };
 
@@ -257,8 +260,20 @@ export default function RiderOrdersDashboard() {
     if (!ok) setActionError(actionMessage(reason));
     setBusyId("");
   };
-  const startDelivering = (order) => updateOrderStatus(order, DELIVERING_STATUS, { by: user?.uid });
-  const markDelivered = (order) => completeOrder(order, user?.uid);
+  // เปลี่ยนสถานะงาน: ผ่าน orderStateMachine.transition (SSOT ด่านเดียวของการเปลี่ยนสถานะ)
+  // ซึ่งตรวจกราฟ + กันสถานะปลายทาง แล้วเขียนผ่าน orderEngine ที่เป็น transaction
+  // เดิมเรียก updateOrderStatus/completeOrder ตรง ๆ ซึ่ง "เงียบ" เมื่อ transition ไม่ผ่าน
+  // (แค่ console.warn) ไรเดอร์กดแล้วไม่มีอะไรเกิดขึ้นและไม่รู้ว่าทำไม
+  const runTransition = async (order, to) => {
+    if (!user || busyId) return;
+    setBusyId(order.id);
+    setActionError("");
+    const { ok, reason } = await transition(order, to, { by: user.uid });
+    if (!ok) setActionError(actionMessage(reason));
+    setBusyId("");
+  };
+  const startDelivering = (order) => runTransition(order, DELIVERING_STATUS);
+  const markDelivered = (order) => runTransition(order, DELIVERED_STATUS);
 
   // แท็บทั้งหมด: พูลงานว่าง + คิวงานของไรเดอร์ (ใช้ RiderOrderCard ตัวเดิมทุกแท็บ)
   const TABS = [

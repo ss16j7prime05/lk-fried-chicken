@@ -6,6 +6,20 @@
 - _(ยังไม่มี)_
 
 ## 🟡 รอทำ (Backlog)
+- **`cancelOrder` ยังไม่ atomic และไม่ตรวจสถานะปลายทางเลย** (พบตอนทำ R-04, ยังไม่แตะเพราะเป็น
+  ฝั่ง Store/Admin ไม่ใช่ R-04 rider) — `orderEngine.cancelOrder` เขียน `status:"cancelled"`
+  ทับได้ทุกกรณี **รวมถึงออเดอร์ที่ completed ไปแล้ว** → ร้านกดยกเลิกช้ากว่าไรเดอร์กดส่งสำเร็จ
+  = ออเดอร์ที่ส่งไปแล้วกลายเป็นยกเลิก (ขาฝั่งไรเดอร์กันได้แล้วใน R-04 แต่ขาฝั่งร้านยังเปิดอยู่)
+  → ควรทำเป็น transaction + เช็ค `isTerminal` แบบเดียวกับ `updateOrderStatus`
+- **บั๊ก Admin: ปุ่มยกเลิกไม่ทำงาน** (พบตอนทำ R-04) — `admin/OrdersPanel.jsx:155` เรียก
+  `cancelOrder(o.id)` โดยส่ง **string** แต่ signature คือ `cancelOrder(order, opts)` ที่อ่าน
+  `order?.id` → ได้ `undefined` → `return` ทันที **กดแล้วไม่เกิดอะไรเลย** (ต้องส่ง `o` ทั้งก้อน)
+- **`assignRider` ยังไม่ atomic** — ผู้เรียกเหลือแค่ `store/orderAssignment.js` ซึ่งเป็น dead code
+  (ดูรายการ Phase 5.x ข้างล่าง) ขาไรเดอร์ย้ายไปใช้ `acceptOrder` (transaction) แล้วใน R-01
+- **`completeOrder` กลายเป็น dead code** หลัง R-04 (ไรเดอร์เป็นผู้เรียกรายเดียวและย้ายไปใช้
+  `transition` แล้ว) — ยังคง export ไว้เพราะเป็น public API ของ engine และตอนนี้ atomic ตามไปด้วย
+  ควรตัดสินใจว่าจะลบหรือให้ที่อื่นใช้
+- **`orderStatusSync.js` เป็น dead code** — ไม่มีใคร import (พบตอนทำ R-04)
 - **ย้าย Store Menu/Orders มาใช้ `hooks/useOnlineStatus.js`** (พบตอนทำ R-03) — ทั้งสองไฟล์เขียน
   listener `online`/`offline` เองแบบ inline เหมือนกันเป๊ะ (`pages/store/Menu.jsx` ~บรรทัด 1047,
   `pages/store/Orders.jsx` ~บรรทัด 1683) R-03 สร้าง hook SSOT ไว้แล้วแต่**ไม่ได้แตะไฟล์ Store**
@@ -33,6 +47,15 @@
   ต้องยกไปที่ระดับ layout/app (งานใหญ่กว่า — ควรทำเป็น task แยก)
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **R-04 Order Status Flow** — ทำให้การเปลี่ยนสถานะเป็น **atomic** จริง:
+  `orderEngine.updateOrderStatus` เดิมตรวจสถานะจาก snapshot ในเครื่องแล้ว `updateDoc` ทับตรง ๆ
+  (read-modify-write ไม่มีกันชน) → ร้านกดยกเลิกตอนไรเดอร์กด "ส่งสำเร็จ" = **ออเดอร์ที่ถูกยกเลิก
+  ถูกชุบชีวิตเป็น completed**; หน้าจอค้าง 1 step แล้วกดปุ่ม = **สถานะเดินถอยหลัง**
+  (ready_for_delivery → cooking) ตอนนี้ re-read ใน transaction แล้วตรวจกับสถานะสดก่อนเขียนเสมอ
+  + คืน `{ok, reason}` (เดิม error = unhandled rejection เพราะ**ไม่มีผู้เรียกคนไหน try/catch เลย**)
+  + ไรเดอร์เปลี่ยนมาใช้ `orderStateMachine.transition` (SSOT "ด่านเดียว" ที่เขียนไว้แล้วแต่
+  **ไม่เคยถูกเรียก**) + แจ้ง error + กันกดซ้ำ. build ผ่าน, ESLint คงที่ 64/61,
+  ทดสอบ 31 เคสผ่าน + control reproduce บั๊กเดิมได้ 3/3 + R-01/02/03 ไม่ regress (รวม 107 เคส)
 - 2026-07-16 **R-03 Navigation (Google Maps)** — นำทางจริงแบบ turn-by-turn (`dir_action=navigate`
   แทนที่จะเปิดแค่หน้าพรีวิวเส้นทาง) + แก้บั๊กออเดอร์ที่มีแต่ที่อยู่ไม่มีพิกัด เดิมเปิด Google Maps
   **search** แทน**นำทาง** + ย้ายการสร้าง URL ไป `mapsService` (SSOT) + เพิ่ม `useOnlineStatus`

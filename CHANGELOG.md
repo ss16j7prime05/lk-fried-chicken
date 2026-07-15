@@ -5,6 +5,57 @@
 
 ## [Unreleased]
 
+### Fixed (R-04 Order Status Flow — non-atomic transitions let status be overwritten/regress)
+- **บั๊กหลัก: การเปลี่ยนสถานะไม่ atomic** — `orderEngine.updateOrderStatus` (ตัวเขียนสถานะ
+  ตัวเดียวของทั้งระบบ ใช้จาก **16 จุด ทั้ง 4 บทบาท**) ตรวจ `order.status` จาก **snapshot ที่ค้าง
+  อยู่ในเครื่องผู้เรียก** แล้ว `updateDoc` ทับลงไปตรง ๆ = read-modify-write ที่ไม่มีการกันชน
+  ผลที่เกิดจริงได้ (พิสูจน์ด้วย control test):
+  - **ร้านกดยกเลิกตอนไรเดอร์กด "ส่งสำเร็จ"** → การเขียนของไรเดอร์ทับทับลงไป **ออเดอร์ที่ถูกยกเลิก
+    ถูกชุบชีวิตเป็น `completed`** (ร้านเห็นว่ายกเลิก ลูกค้าถูกนับว่าส่งสำเร็จ)
+  - **สถานะเดินถอยหลัง** → หน้าจอร้านค้างอยู่ที่ `cooking` ทั้งที่ server ไปถึง
+    `ready_for_delivery` แล้ว กดปุ่ม = ดึงกลับเป็น `cooking` **งานหายจากพูลของไรเดอร์**
+    ทั้งที่อาหารเสร็จแล้ว (กราฟไม่อนุญาต แต่ตรวจกับข้อมูลค้างจึงผ่าน)
+- **วิธีแก้**: `updateOrderStatus` ทำงานใน **transaction** — re-read เอกสารแล้วตรวจกับ
+  **สถานะสดจาก server** ก่อนเขียนเสมอ (ทุกบทบาทได้ประโยชน์ทันทีโดยไม่ต้องแก้ call site)
+  `force:true` ยังข้ามกราฟได้เหมือนเดิม (admin / bulk ของร้านใช้อยู่) แต่เขียนแบบ atomic
+- **กดแล้วเงียบ**: เดิม transition ไม่ผ่าน = `console.warn` แล้ว `return` เฉย ๆ ไรเดอร์กด
+  "Start Delivering"/"Delivered" แล้วไม่มีอะไรเกิดขึ้นและไม่รู้สาเหตุ → คืน `{ok, reason}`
+  แล้วแสดงบนแถบ error เดิมจาก R-01 (`invalid_transition` / `terminal` / `not_found`) + กันกดซ้ำ
+- **ไม่มีผู้เรียกคนไหน try/catch เลยแม้แต่จุดเดียว** (ตรวจครบทั้ง 16 จุด) → error จาก
+  `updateDoc` กลายเป็น **unhandled rejection** ทุกครั้ง; ตอนนี้ engine จับเองและลง ErrorCenter SSOT
+- **ไรเดอร์ใช้ `orderStateMachine.transition`** — SSOT ที่คอมเมนต์ตัวเองว่า "The ONE guarded
+  transition" มี `{ok,reason}` + ตรวจ terminal ครบ **แต่ไม่เคยถูกเรียกจากที่ไหนเลย (dead code)**
+  เหมือนกรณี `riderAcceptReject` ใน R-01 → ต่อสายให้ใช้จริง ไม่ได้เขียน logic ใหม่
+- **แก้ `transition()` ไม่ให้รายงานผลเท็จ**: เดิม `await updateOrderStatus(...)` แล้ว
+  `return {ok:true}` เสมอ — พอ engine เปลี่ยนมาคืน `{ok:false}` แทนการ throw มันจะรายงานว่า
+  "สำเร็จ" ทั้งที่ถูกปฏิเสธ → ส่งต่อผลลัพธ์จาก engine ตรง ๆ (มีเทสต์คุมเคสนี้โดยเฉพาะ)
+- **ผลพลอยได้ที่เป็นการแก้บั๊กจริง**: ผู้เรียกที่ส่งมาแค่ `{ id }` (`StoreLayout`/`Kitchen` ตอน
+  `orders.find(...) || { id }` หาไม่เจอ) เดิม `status` เป็น `undefined` → ตรวจกราฟไม่ผ่าน →
+  **ปุ่มไม่ทำงานเลย**; และถึงเขียนได้ `notifyCustomer(order.phone = undefined)` ก็แปลว่า
+  **ลูกค้าไม่ได้รับแจ้ง** → ตอนนี้ transaction อ่านสถานะ+เบอร์จาก server มาเติมให้ ทำงานถูกต้อง
+- **แจ้งเตือนยิงเฉพาะเมื่อ commit สำเร็จจริง** (เดิมยิงหลัง `await` โดยไม่รู้ว่าถูกปฏิเสธไหม)
+
+### Verified (R-04)
+- `npm run build` ผ่าน; ESLint คงที่ **64 problems / 61 errors** เท่า baseline (0 error ใหม่)
+- **31 เคสผ่านหมด** (รัน `orderEngine` + `orderStateMachine` ตัวจริง บน in-memory Firestore ที่
+  จำลอง optimistic concurrency จริง): flow ไรเดอร์ครบ (picked_up→delivering→completed),
+  **เคส race ร้านยกเลิกชนไรเดอร์กดส่งสำเร็จ** (ไรเดอร์ถูกปฏิเสธ ออเดอร์ยังเป็น cancelled
+  และ**ไม่มีแจ้งเตือน "จัดส่งสำเร็จ" หลุดออกไป**), กันสถานะถอยหลัง, ข้ามขั้นไม่ได้,
+  same→same idempotent (กดซ้ำปลอดภัย), `force` ยังข้ามกราฟได้, แจ้งเตือนเฉพาะตอน commit,
+  เคส `{id}` ล้วน, `transition()` ไม่ปั้น `{ok:true}`, และ**ไม่ throw** ทุกกรณี
+- **Control test พิสูจน์บั๊กเดิมจริง 3/3**: cancelled→completed ถูกชุบชีวิต, ready_for_delivery→
+  cooking เดินถอยหลัง, `{id}` ล้วนแล้วปุ่มไม่ทำงาน — รันกับโค้ดเดิมแบบ verbatim
+- **ตรวจในเบราว์เซอร์จริง**: import `orderEngine`/`orderStateMachine` จาก bundle จริง →
+  กราฟถูก (picked_up→delivering ✓, ข้ามขั้น ✗, cancelled→completed ✗, same→same ✓,
+  สถานะไทย `ส่งให้ไรเดอร์`→picked_up ✓), `isTerminal`/`nextStates` ถูก และ `transition()`
+  คืนเหตุผลมีโครงสร้าง (`invalid`/`terminal`/`invalid_transition`) โดยไม่ต้องยิง network
+- ตรวจครบทั้ง 16 call site ว่าไม่มีใครใช้ค่า return แบบ truthiness (จุดเดียวที่ `return` คือ
+  `acceptOrderWithETA` ซึ่งผู้เรียกทิ้งค่าไป) → เปลี่ยนจาก `undefined` เป็น `{ok,reason}` ปลอดภัย
+- R-01 (25) + R-02 (24) + R-03 (27) รันซ้ำไม่ regress — **รวม 107 เคส**
+- ⚠️ **ยังไม่ได้ QA ด้วยตาบนเว็บจริง** — `/rider` และ `/store` อยู่หลัง login และไม่มีบัญชีทดสอบ
+  จึงไม่ได้กดปุ่มจริง โดยเฉพาะ**ฝั่ง Store ที่ได้รับผลจากการแก้ engine ด้วย** (แม้เทสต์จะยืนยันว่า
+  `force`/bulk/notification ยังทำงานเหมือนเดิม) — ควรทดสอบ flow ของร้านให้ครบก่อนถือว่าปิดงาน
+
 ### Fixed / Added (R-03 Navigation — real turn-by-turn + permission / GPS / offline handling)
 - **นำทางจริง (turn-by-turn)**: ลิงก์เดิม `maps/dir/?api=1&destination=..&travelmode=driving`
   เปิด Google Maps มาที่**หน้าพรีวิวเส้นทาง** ไรเดอร์ต้องกด "เริ่ม" เองอีกที → เพิ่ม

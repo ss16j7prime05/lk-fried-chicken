@@ -9,8 +9,9 @@
 // timeline/audit are additive array fields on the existing order doc (arrayUnion),
 // exactly like editHistory in orderEdit — not a new Firestore collection.
 
-import { doc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { doc, updateDoc, runTransaction, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db } from "../firebase";
+import { logError } from "../errorCenter";
 import { normalizeStatus } from "./orderStatus";
 import { recalcOrder } from "./orderTotals";
 import { saveOrderEdit } from "./orderEdit";
@@ -74,20 +75,48 @@ const stampFor = (to) => {
 
 // The ONLY place order.status changes for the delivery lifecycle. One write
 // carries status + milestone timestamp + timeline + audit; notifications fire after.
+//
+// ATOMIC (transaction): เดิมตรวจ `order.status` จาก snapshot ในเครื่องผู้เรียกแล้ว updateDoc ทับลงไปตรง ๆ
+// ซึ่งเป็น read-modify-write ที่ไม่มีการกันชน — สองบทบาทกดพร้อมกันเขียนทับกันเงียบ ๆ ได้ เช่น
+// ร้านกดยกเลิกตอนไรเดอร์กด "ส่งสำเร็จ" หรือ list ในเครื่องล้าหลังอยู่ 1 step แล้วกดปุ่ม
+// = สถานะ "เดินถอยหลัง" (ready_for_delivery -> cooking) ทั้งที่กราฟไม่อนุญาต
+// ตอนนี้ re-read เอกสารใน transaction แล้วตรวจกับสถานะ "สด" จาก server ก่อนเขียนเสมอ
+//
+// คืน { ok, reason } เหมือน riderAcceptReject/orderStateMachine (ไม่ throw) — ผู้เรียกเดิม
+// ไม่มีใคร try/catch อยู่แล้ว ของเดิม error จึงกลายเป็น unhandled rejection; ตอนนี้ลง ErrorCenter
 export async function updateOrderStatus(order, to, { by = "", patch = {}, event = to, force = false } = {}) {
-  if (!order?.id) return;
-  if (!force && !validateTransition(order.status, to)) {
-    console.warn(`orderEngine: invalid transition ${order.status} -> ${to}`);
-    return;
+  if (!order?.id || !to) return { ok: false, reason: "invalid" };
+  const ref = doc(db, "orders", order.id);
+  try {
+    const outcome = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return { ok: false, reason: "not_found" };
+      const current = snap.data();
+      // ตรวจกับสถานะสดเสมอ (force = ข้ามกราฟ เช่น admin/bulk ของร้าน — พฤติกรรมเดิมคงไว้)
+      if (!force && !validateTransition(current.status, to)) {
+        return { ok: false, reason: "invalid_transition", from: current.status, to };
+      }
+      tx.update(ref, {
+        status: to,
+        ...stampFor(to),
+        ...patch,
+        timeline: arrayUnion(timelineTrigger(to, by)),
+        audit: arrayUnion(auditTrigger(`status:${to}`, by)),
+      });
+      return { ok: true, current };
+    });
+    // แจ้งเตือนเฉพาะเมื่อเขียนสำเร็จจริง และใช้ข้อมูลสดจาก server เติมให้ด้วย —
+    // ผู้เรียกบางที่ส่งมาแค่ { id } (StoreLayout/Kitchen ตอนหาในลิสต์ไม่เจอ) ซึ่งเดิมทำให้
+    // notifyCustomer(order.phone = undefined) = ลูกค้าไม่ได้รับแจ้งเลย
+    if (outcome.ok) {
+      notificationTrigger({ ...order, ...outcome.current, id: order.id, status: to }, event);
+      return { ok: true };
+    }
+    return outcome;
+  } catch (e) {
+    logError(e, "updateOrderStatus");
+    return { ok: false, reason: "error" };
   }
-  await updateDoc(doc(db, "orders", order.id), {
-    status: to,
-    ...stampFor(to),
-    ...patch,
-    timeline: arrayUnion(timelineTrigger(to, by)),
-    audit: arrayUnion(auditTrigger(`status:${to}`, by)),
-  });
-  notificationTrigger({ ...order, status: to }, event);
 }
 
 // Rider takes a ready job: ready_for_delivery -> picked_up (+ rider identity).
