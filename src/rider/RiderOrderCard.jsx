@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { Bike, CreditCard, MapPin, Package, Phone, User, X } from "lucide-react";
 import { db } from "../firebase";
 import Chat from "../Chat.jsx";
@@ -17,11 +17,11 @@ import {
   STATUS_LABEL,
 } from "./riderStatus";
 import { formatDate } from "./riderFormat";
+import { getDestination } from "./riderLocationService";
 import { notifyCustomer, NOTIF_TYPE } from "../notifications/notificationUtils";
+import { logError } from "../errorCenter";
 import OrderTimeline from "../components/order/OrderTimeline.jsx";
 import AuditLog from "../components/order/AuditLog.jsx";
-
-const GPS_UPDATE_INTERVAL_MS = 5000;
 
 const STATUS_BADGE_COLOR = {
   [READY_STATUS]: "blue",
@@ -37,13 +37,6 @@ const optionLabel = (value) => {
   if (typeof value === "object") return value.name || "";
   return value;
 };
-
-// จุดส่งของออเดอร์ รองรับทั้ง schema ใหม่ (deliveryLocation) และฟิลด์เดิม
-const getDestination = (order) => ({
-  lat: order.deliveryLocation?.lat ?? order.lat ?? order.latitude,
-  lng: order.deliveryLocation?.lng ?? order.lng ?? order.longitude,
-  address: order.deliveryLocation?.address || order.deliveryAddress || order.address,
-});
 
 const itemOptions = (item) =>
   [item.top_chicken, item.spicy, item.Sauce, item.sauce, item.powder, item.tableCheese]
@@ -72,58 +65,6 @@ function useStoreRoute(storeLocation, dLat, dLng) {
   }, [dLat, dLng, storeLocation]);
 
   return route;
-}
-
-// อัปเดตตำแหน่ง GPS ของไรเดอร์ทุก 5 วินาที เฉพาะตอนสถานะ "delivering", ไรเดอร์ออนไลน์ และเป็นไรเดอร์ที่รับงานนี้เท่านั้น
-// (ความปลอดภัย: Firestore rule อนุญาตแก้ไข order นี้เฉพาะ riderId == auth.uid)
-// ออฟไลน์ = cleanup ทำงาน หยุดกระจายตำแหน่งทันที
-function useRiderGpsBroadcast(effectiveStatus, orderId, dLat, dLng, isOnline) {
-  useEffect(() => {
-    if (!isOnline) return;
-    if (effectiveStatus !== DELIVERING_STATUS) return;
-    if (!navigator.geolocation) return;
-
-    let cancelled = false;
-
-    const updateLocation = () => {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          if (cancelled) return;
-          const { latitude, longitude, heading, speed } = pos.coords;
-          let remainingDistance;
-          let estimatedArrival = null;
-          try {
-            const r = await getRoute(latitude, longitude, dLat, dLng);
-            remainingDistance = r.distanceKm;
-            estimatedArrival = new Date(Date.now() + r.durationMin * 60000).toISOString();
-          } catch {
-            remainingDistance = haversineKm(latitude, longitude, dLat, dLng);
-          }
-          if (cancelled) return;
-          await updateDoc(doc(db, "orders", orderId), {
-            riderLocation: {
-              lat: latitude,
-              lng: longitude,
-              heading: heading ?? null,
-              speed: speed ?? null,
-              updatedAt: serverTimestamp(),
-              estimatedArrival,
-              remainingDistance,
-            },
-          });
-        },
-        (err) => console.warn("ดึงตำแหน่ง GPS ไม่สำเร็จ", err),
-        { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 }
-      );
-    };
-
-    updateLocation();
-    const interval = setInterval(updateLocation, GPS_UPDATE_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [effectiveStatus, orderId, dLat, dLng, isOnline]);
 }
 
 /* ── presentational sections ── */
@@ -201,23 +142,35 @@ const TotalsSection = ({ order }) => (
 );
 
 // การ์ดรายละเอียดออเดอร์ของไรเดอร์: ข้อมูลลูกค้า + รายการอาหาร + แผนที่/ระยะทาง + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
-export default function RiderOrderCard({ order, effectiveStatus, storeLocation, isOnline, busy = false, disabled = false, onAccept, onReject, onStartDelivering, onDelivered }) {
+export default function RiderOrderCard({ order, effectiveStatus, storeLocation, busy = false, disabled = false, onAccept, onReject, onStartDelivering, onDelivered }) {
   const [showMap, setShowMap] = useState(false);
   // optimistic เฉพาะหลังกดปุ่ม ระหว่างรอ nearPressed จริงจาก snapshot ของออเดอร์
   const [nearPressedLocally, setNearPressedLocally] = useState(false);
+  const [nearPressing, setNearPressing] = useState(false);
   const nearNotified = nearPressedLocally || Boolean(order.nearPressed);
 
   const { lat: dLat, lng: dLng, address: dAddress } = getDestination(order);
   const route = useStoreRoute(storeLocation, dLat, dLng);
-  useRiderGpsBroadcast(effectiveStatus, order.id, dLat, dLng, isOnline);
+
+  // การกระจายตำแหน่ง GPS ย้ายไปอยู่ที่ Dashboard แล้ว (useDeliveryBroadcast) — การ์ดถูก unmount
+  // ทุกครั้งที่ไรเดอร์สลับแท็บ ถ้ายังอยู่ที่นี่ แผนที่ติดตามฝั่งลูกค้าจะค้างทันทีที่สลับแท็บ
 
   const markNear = async () => {
-    await updateDoc(doc(db, "orders", order.id), { nearPressed: true });
-    setNearPressedLocally(true);
-    notifyCustomer(order.phone, {
-      type: NOTIF_TYPE.RIDER_ARRIVED, orderId: order.id, actionUrl: `/shop/orders/${order.id}`,
-      message: `ไรเดอร์กำลังจะถึง ออเดอร์ ${order.orderNo || order.id}`,
-    });
+    if (nearPressing || nearNotified) return;
+    setNearPressing(true);
+    try {
+      await updateDoc(doc(db, "orders", order.id), { nearPressed: true });
+      setNearPressedLocally(true);
+      notifyCustomer(order.phone, {
+        type: NOTIF_TYPE.RIDER_ARRIVED, orderId: order.id, actionUrl: `/shop/orders/${order.id}`,
+        message: `ไรเดอร์กำลังจะถึง ออเดอร์ ${order.orderNo || order.id}`,
+      });
+    } catch (e) {
+      // เขียนไม่สำเร็จ = ห้ามขึ้นว่า "แจ้งแล้ว" ให้ไรเดอร์กดใหม่ได้
+      logError(e, "RiderOrderCard.markNear");
+    } finally {
+      setNearPressing(false);
+    }
   };
 
   return (
@@ -298,9 +251,9 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
         )}
         {effectiveStatus === DELIVERING_STATUS && (
           <>
-            <Button variant="outline" className="flex-1" onClick={markNear} disabled={nearNotified}>
+            <Button variant="outline" className="flex-1" onClick={markNear} disabled={nearNotified || nearPressing}>
               <MapPin size={16} />
-              {nearNotified ? "Customer Notified" : "I'm Near"}
+              {nearNotified ? "Customer Notified" : nearPressing ? "Notifying..." : "I'm Near"}
             </Button>
             <Button className="flex-1" onClick={() => onDelivered(order)}>
               Delivered

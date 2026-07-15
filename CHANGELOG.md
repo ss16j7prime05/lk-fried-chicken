@@ -5,6 +5,46 @@
 
 ## [Unreleased]
 
+### Fixed (R-02 Current Order — customer tracking froze when the rider switched tabs)
+- **บั๊กหลัก: แผนที่ติดตามของลูกค้าค้างทันทีที่ไรเดอร์สลับแท็บ** — `useRiderGpsBroadcast` (ยิงพิกัด
+  ทุก 5 วิ ลง `orders/{id}.riderLocation`) ฝังอยู่ใน `RiderOrderCard` แต่ Dashboard render
+  **เฉพาะการ์ดของแท็บที่เลือกอยู่** พอไรเดอร์สลับจาก Active ไป Available เพื่อหางานใบถัดไป
+  (พฤติกรรมปกติที่สุด) การ์ดถูก unmount → effect cleanup → **หยุดกระจายพิกัดทันที** →
+  หน้า `/shop/orders/:orderId` ของลูกค้าค้างที่ตำแหน่งเดิม, ETA/ระยะทางที่เหลือค้างตาม
+  ลูกค้าเห็นเหมือนไรเดอร์จอดนิ่ง ทั้งที่กำลังวิ่งอยู่ (กลับมาแท็บ Active ถึงจะเริ่มส่งใหม่)
+- **วิธีแก้**: ย้ายการกระจายพิกัดขึ้นไปที่ `RiderOrdersDashboard` (`useDeliveryBroadcast`)
+  ซึ่งอยู่ตลอดไม่ว่าจะเลือกแท็บไหน โดยผูกกับ `activeOrders` (งานสถานะ `delivering` ของไรเดอร์คนนี้)
+  — **เงื่อนไขเดิมครบเหมือนเดิม**: ต้องออนไลน์ + สถานะ delivering + เป็นงานของตัวเอง
+- **รวม logic ตำแหน่งไว้ที่ SSOT เดียว**: ย้ายเข้า `rider/riderLocationService.js` (โมดูลที่เป็น
+  SSOT ของตำแหน่งไรเดอร์อยู่แล้ว) และเลิกเรียก `navigator.geolocation.getCurrentPosition` เอง
+  หันไปใช้ `mapsService.getCurrentLocation()` ซึ่งเป็น wrapper SSOT ที่มี**ตัวเลือกเหมือนกันเป๊ะ**
+  (`enableHighAccuracy:true, timeout:8000, maximumAge:4000`) → ไม่มี geolocation ซ้ำอีกชุด
+  และ `getDestination` (fallback schema จุดส่ง) ย้ายมาที่นี่ให้การ์ด+Dashboard ใช้ตัวเดียวกัน
+- **Unhandled promise rejection ทุก 5 วินาที**: เดิม `await updateDoc(...)` อยู่ใน async callback
+  ของ `getCurrentPosition` โดย**ไม่มี try/catch** เขียนพลาด (สิทธิ์/ออฟไลน์) = rejection ลอยทุกรอบ
+  → ตอนนี้ครอบ try/catch + log ผ่าน ErrorCenter SSOT และออเดอร์ใบหนึ่งพังไม่ทำให้ใบอื่นไม่อัปเดต
+- **อ่าน GPS รอบเดียวต่อรอบ**: เดิมการ์ดแต่ละใบอ่านพิกัดแยกกัน (multi-drop = อ่าน N ครั้ง/5 วิ)
+  ตอนนี้อ่านครั้งเดียวแล้วเขียนให้ทุกออเดอร์ที่กำลังส่ง
+- **`markNear` ("I'm Near")**: เดิมไม่มี try/catch — เขียนพลาดจะเป็น rejection ลอย และ optimistic
+  state ขึ้นว่า "Customer Notified" ทั้งที่ลูกค้าไม่เคยได้รับแจ้ง → ตอนนี้ตั้งสถานะเฉพาะเมื่อเขียน
+  สำเร็จ + กันกดซ้ำ (ระหว่างส่งขึ้น "Notifying...")
+- **ไม่เปลี่ยน schema / ไม่เปลี่ยนรูปร่างฟิลด์**: `orders/{id}.riderLocation` เขียนฟิลด์เดิมทุกตัว
+  (lat/lng/heading/speed/updatedAt/estimatedArrival/remainingDistance) หน้าลูกค้าอ่านได้เหมือนเดิม
+
+### Verified (R-02)
+- `npm run build` ผ่าน; ESLint คงที่ **64 problems / 61 errors** เท่า baseline (0 error ใหม่)
+- **ทดสอบโค้ดจริง 24 เคสผ่านหมด** (รัน `riderLocationService.js` ตัวจริง): `getDestination`
+  ครบทุก schema (ใหม่/legacy/เก่าสุด/ของว่าง), `updateOrderLocation` เขียนรูปร่างถูก + ETA จาก
+  OSRM + **fallback เป็นเส้นตรงเมื่อ OSRM ล่ม (ไม่ปั้น ETA ปลอม)** + ไม่ทับฟิลด์อื่นของออเดอร์
+- **เคสสำคัญที่กันไว้: interval รีเซ็ตไม่รู้จบ** — การเขียน `riderLocation` ทุก 5 วิ ทำให้ order
+  snapshot เด้ง → array ถูกสร้างใหม่ทุกครั้ง ถ้า effect ผูกกับ array identity ตรง ๆ interval จะถูก
+  clear/set ใหม่ทุกรอบ → ผูกกับ `broadcastSignature` (id+จุดส่ง) แทน และทดสอบว่า snapshot ใหม่
+  ที่เนื้อหาเดิม = signature เดิม (ไม่ restart) ส่วนจุดส่งเปลี่ยน/มีงานเพิ่ม/งานจบ = signature ใหม่
+- R-01 (25 เคส) รันซ้ำแล้วไม่ regress
+- ⚠️ **ยังไม่ได้ QA ด้วยตาบนเว็บจริง** — `/rider` อยู่หลัง login และ session นี้ไม่มีบัญชีไรเดอร์
+  จึง**ไม่ได้ทดสอบการสลับแท็บจริงในเบราว์เซอร์** (ตรวจได้แค่ Vite compile ผ่าน, ไม่มี console error,
+  ตัวเลือก geolocation ตรงกับของเดิมเป๊ะ, และ hook ถูกเรียกก่อน early return จึงไม่ผิดกฎ hooks)
+
 ### Fixed (R-01 Incoming Orders — double-accept race + silent failures)
 - **บั๊กหลัก: ไรเดอร์ 2 คนรับงานใบเดียวกันได้พร้อมกัน** — `acceptDelivery` ใน
   `rider/RiderOrdersDashboard.jsx` เรียก `assignRider()` ของ orderEngine ซึ่ง **เขียน `updateDoc`

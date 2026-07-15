@@ -22,6 +22,7 @@ import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { useStoreStatus } from "../store/useStoreStatus";
 import { updateOrderStatus, completeOrder } from "../store/orderEngine";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
+import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
 import { logError } from "../errorCenter";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
@@ -154,6 +155,17 @@ export default function RiderOrdersDashboard() {
   const completedOrders = mine
     .filter((o) => normalizeStatus(o.status) === DELIVERED_STATUS)
     .sort(byNewest());
+
+  // งานที่กำลังส่งอยู่จริง = สิ่งที่ต้องกระจายตำแหน่งให้ลูกค้าติดตาม
+  // อยู่ที่ระดับ Dashboard (ไม่ใช่ในการ์ด) เพราะการ์ดจะถูก unmount ทันทีที่ไรเดอร์สลับไปแท็บอื่น
+  // เงื่อนไขเดิมยังอยู่ครบ: ต้องออนไลน์ + สถานะ delivering + เป็นงานของไรเดอร์คนนี้ (mine)
+  const deliveries = activeOrders
+    .map((o) => {
+      const { lat, lng } = getDestination(o);
+      return { id: o.id, lat, lng };
+    })
+    .filter((d) => d.lat != null && d.lng != null);
+  useDeliveryBroadcast(deliveries, isOnline);
 
   // สลับความพร้อมรับงาน — เขียน users/{uid}.riderStatus (ฟิลด์เดิม ไม่เพิ่ม schema)
   const toggleAvailability = async () => {
@@ -382,7 +394,6 @@ export default function RiderOrdersDashboard() {
                 order={order}
                 effectiveStatus={tab === "available" ? READY_STATUS : order.status}
                 storeLocation={storeLocation}
-                isOnline={isOnline}
                 busy={busyId === order.id}
                 disabled={Boolean(busyId) && busyId !== order.id}
                 onAccept={acceptDelivery}

@@ -6,9 +6,30 @@
 - _(ยังไม่มี)_
 
 ## 🟡 รอทำ (Backlog)
-- _(ยังไม่มี — เพิ่มรายการเมื่อพบงาน)_
+- **Phase 5.x ทั้งชั้นเป็น dead code — ไม่ถูก mount ที่ไหนเลย** (พบตอนทำ R-02, ยังไม่แตะ):
+  `store/autoDispatch.js`, `store/orderAssignment.js`, `tracking/adminFleetMap.js`,
+  `tracking/customerTracking.js`, `tracking/storeLiveMap.js` ไม่มี component ไหน import
+  → ฟีเจอร์จ่ายงานอัตโนมัติ / แผนที่ fleet ของแอดมิน / แผนที่ไรเดอร์ของร้าน **ยังไม่ได้เปิดใช้จริง**
+  และ `users/{uid}.currentLocation` ที่โมดูลพวกนี้อ่าน **ไม่มีใครเขียนเลย** (`startTracking`/
+  `useRiderLocation` ไม่ถูกเรียก) → ถ้าจะเปิดใช้ต้องต่อ broadcast ฝั่งไรเดอร์ด้วย
+  ไม่งั้น `findAvailableRiders` จะกรองไรเดอร์ออกหมดเสมอ (auto-dispatch หาไรเดอร์ไม่เจอตลอด)
+  — ควรตัดสินใจว่าจะ "เปิดใช้" หรือ "ลบทิ้ง" (ถามผู้ใช้ก่อน)
+- **GPS ยิง OSRM ทุก 5 วินาที ต่อ 1 ออเดอร์** (`useDeliveryBroadcast`) — public OSRM มี rate limit
+  และกินแบตมือถือ ควรพิจารณาลดความถี่/throttle เมื่อไรเดอร์ไม่ขยับ (คงพฤติกรรมเดิมไว้ใน R-02
+  เพราะไม่อยากเปลี่ยน behavior โดยไม่ได้ทดสอบจริง)
+- **ตำแหน่งหยุดกระจายเมื่อไรเดอร์ออกจากหน้า Dashboard** (ไปหน้า Profile/Earnings/Settings) —
+  R-02 แก้เคสสลับ "แท็บ" แล้ว แต่การออกจาก "หน้า" ยัง unmount อยู่ ถ้าต้องการติดตามต่อเนื่องจริง
+  ต้องยกไปที่ระดับ layout/app (งานใหญ่กว่า — ควรทำเป็น task แยก)
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **R-02 Current Order** — แก้แผนที่ติดตามฝั่งลูกค้าค้างเมื่อไรเดอร์สลับแท็บ: การกระจาย
+  GPS (`useRiderGpsBroadcast`) ฝังอยู่ใน `RiderOrderCard` ซึ่ง render เฉพาะแท็บที่เลือก พอไรเดอร์
+  สลับไปแท็บ Available (พฤติกรรมปกติมาก) การ์ด unmount → หยุดส่งพิกัด → หน้า `/shop/orders/:id`
+  ของลูกค้าค้างที่ตำแหน่งเดิม + ETA ค้าง → ย้ายไปที่ระดับ Dashboard (`useDeliveryBroadcast`)
+  ที่ไม่ unmount ตามแท็บ + รวม logic ตำแหน่งไว้ที่ `riderLocationService` (SSOT) ใช้
+  `mapsService.getCurrentLocation` แทน `navigator.geolocation` ที่เขียนซ้ำ + แก้ unhandled
+  rejection ทุก 5 วิ + แก้ `markNear` เขียนพลาดแล้วขึ้นว่า "แจ้งแล้ว".
+  build ผ่าน, ESLint คงที่ 64/61, ทดสอบ 24 เคสผ่าน (+ R-01 25 เคสไม่ regress)
 - 2026-07-16 **R-01 Incoming Orders** — แก้ race condition ตอนรับงาน: `acceptDelivery` เดิมเรียก
   `assignRider` (updateDoc ตรง ๆ จาก snapshot ในเครื่อง) ไรเดอร์ 2 คนกดพร้อมกันเขียนทับกันเงียบ ๆ
   ทั้งคู่คิดว่าได้งาน → เปลี่ยนมาใช้ `riderAcceptReject.acceptOrder` (transaction, SSOT ที่มีอยู่แล้ว
