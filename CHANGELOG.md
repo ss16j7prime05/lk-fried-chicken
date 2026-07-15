@@ -5,6 +5,52 @@
 
 ## [Unreleased]
 
+### Fixed / Added (R-03 Navigation — real turn-by-turn + permission / GPS / offline handling)
+- **นำทางจริง (turn-by-turn)**: ลิงก์เดิม `maps/dir/?api=1&destination=..&travelmode=driving`
+  เปิด Google Maps มาที่**หน้าพรีวิวเส้นทาง** ไรเดอร์ต้องกด "เริ่ม" เองอีกที → เพิ่ม
+  **`dir_action=navigate`** ตาม Google Maps URLs API → กดครั้งเดียวเข้าโหมดนำทางมีเสียงทันที
+  (ยังไม่ส่ง `origin` โดยตั้งใจ — ให้ Google Maps ใช้ตำแหน่งจริงของเครื่อง แม่นกว่าและไม่ต้อง
+  ขอสิทธิ์ GPS ในแอปเรา; ลิงก์ https นี้เปิด "แอป" Google Maps บนมือถือได้อยู่แล้ว ไม่ต้องแยก scheme)
+- **บั๊ก: ออเดอร์ที่มีแต่ที่อยู่ (ไม่มีพิกัด) กดนำทางแล้วได้หน้า "ค้นหา" ไม่ใช่ "นำทาง"** — logic เดิม
+  ตกไปที่ branch `address` ซึ่ง hardcode เป็น `maps/search/?api=1&query=...` ทั้งที่อยู่ใน
+  mode `navigate` → ตอนนี้สร้างเป็น `maps/dir/` + `dir_action=navigate` จากที่อยู่ (encode แล้ว)
+- **ย้ายการสร้าง URL ไปที่ `location/mapsService.js` (SSOT)**: `buildNavigationUrl` /
+  `buildViewUrl` / `hasCoords` — `MapButton.jsx` เหลือหน้าที่แสดงผลอย่างเดียว ไม่ประกอบ URL เอง
+  → **view mode ไม่เปลี่ยนพฤติกรรมแม้แต่นิดเดียว** (Store Settings / Admin Orders / Customer
+  Checkout+HelpCenter+OrderDetail / Store.jsx legacy ใช้ mode="view" ทั้งหมด)
+- **จงใจคง semantics ของ `hasCoords` ไว้เหมือนเดิม** (`!Number.isNaN`) แทนที่จะเปลี่ยนไปใช้
+  `Number.isFinite` เพราะบางเอกสารเก็บ lat/lng เป็น **string** — ถ้าเปลี่ยนจะทำให้ปุ่มแผนที่ของ
+  ร้าน/ลูกค้าที่ข้อมูลเป็น string พังทันที
+- **จัดการ "สิทธิ์ถูกปฏิเสธ / GPS ปิด / ออฟไลน์"** (เดิมพังเงียบสนิท): `useDeliveryBroadcast`
+  อ่าน GPS ไม่ได้ก็แค่ log — ลูกค้าไม่เห็นไรเดอร์บนแผนที่เลย แต่**ไรเดอร์ไม่รู้ตัว** → เพิ่ม
+  - `classifyGeoError` แปลง error code ตามสเปก (1=denied, 2=GPS ปิด, 3=timeout)
+  - `getGeolocationPermission` / `useGeolocationStatus` อ่านสิทธิ์แบบไม่เด้ง prompt +
+    ฟัง `change` เพื่ออัปเดตทันทีเมื่อผู้ใช้สลับสิทธิ์ (มี fallback เป็น `unknown` เพราะ
+    **Safari/iOS ไม่มี Permissions API** — ห้าม assume denied ไม่งั้น iPhone จะขึ้นเตือนผิด ๆ)
+  - `useDeliveryBroadcast` คืน `geoError` (ความจริงจากการอ่าน GPS จริง ซึ่งเป็นแหล่งเดียว
+    ที่เชื่อได้บน iOS) และเคลียร์เองเมื่ออ่านได้
+  - แถบเตือนบน Rider Dashboard เรียงตามความจริงมากสุด: ออฟไลน์ → error จริงจาก GPS → สิทธิ์
+    จาก Permissions API พร้อมปุ่ม **Retry** ที่เด้งขอสิทธิ์จริง และบอกวิธีแก้ (เปิด GPS / อนุญาตสิทธิ์)
+- **`hooks/useOnlineStatus.js` (SSOT ใหม่)** สำหรับสถานะเน็ต — ออฟไลน์แล้ว: ปุ่มนำทางขึ้น
+  "ออฟไลน์ — นำทางไม่ได้" (Google Maps เปิดไม่ขึ้นอยู่ดี) และ **หยุดอ่าน GPS/เขียนพิกัด**
+  (ประหยัดแบต + ไม่กองคิวเขียนไว้ยิงรัวตอนเน็ตกลับมา)
+
+### Verified (R-03)
+- `npm run build` ผ่าน; ESLint คงที่ **64 problems / 61 errors** เท่า baseline (0 error ใหม่)
+- **27 เคสผ่านหมด** (รัน `mapsService.js` ตัวจริง) — เคสสำคัญสุด: เทียบ `buildViewUrl` กับ
+  **โค้ด MapButton เดิมแบบ verbatim** บน 10 ชุด input → **URL เหมือนกันทุกตัว** = 4 บทบาทที่ใช้
+  mode="view" ไม่ได้รับผลกระทบ; และพิสูจน์บั๊กเดิมจริง (navigate+address = `/maps/search/`)
+- **ทดสอบในเบราว์เซอร์จริง**: import `mapsService` + เรียก `MapButton` ตรง ๆ แล้วตรวจ element ที่คืนมา
+  → navigate = `<a>` ลิงก์ turn-by-turn, address-only = `/maps/dir/` (ไม่ใช่ `/maps/search/`),
+  ออฟไลน์ = `<button disabled>` พร้อมเหตุผล, ไม่มีปลายทาง = "ไม่มีตำแหน่ง", view mode เหมือนเดิม;
+  `getGeolocationPermission()` ในเบราว์เซอร์จริงคืน `"denied"` (เครื่องนี้บล็อกตำแหน่งอยู่จริง)
+  = เส้นทาง permission-denied ถูกรันจริง ไม่ใช่แค่ mock
+- **URL ที่สร้างใช้ได้จริง**: Google ตอบ HTTP 200 ทั้งแบบพิกัดและแบบที่อยู่
+- R-01 (25) + R-02 (24) รันซ้ำแล้วไม่ regress — รวม 76 เคส
+- ⚠️ **ยังไม่ได้ QA ด้วยตาบนเว็บจริง** — `/rider` อยู่หลัง login และไม่มีบัญชีไรเดอร์ จึง**ไม่ได้เห็น
+  แถบเตือนจริงบนหน้า Dashboard** และไม่ได้กดปุ่มนำทางบนมือถือจริง (ตรวจได้ถึงระดับ component +
+  URL + สิทธิ์จริงในเบราว์เซอร์)
+
 ### Fixed (R-02 Current Order — customer tracking froze when the rider switched tabs)
 - **บั๊กหลัก: แผนที่ติดตามของลูกค้าค้างทันทีที่ไรเดอร์สลับแท็บ** — `useRiderGpsBroadcast` (ยิงพิกัด
   ทุก 5 วิ ลง `orders/{id}.riderLocation`) ฝังอยู่ใน `RiderOrderCard` แต่ Dashboard render

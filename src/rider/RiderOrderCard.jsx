@@ -142,7 +142,7 @@ const TotalsSection = ({ order }) => (
 );
 
 // การ์ดรายละเอียดออเดอร์ของไรเดอร์: ข้อมูลลูกค้า + รายการอาหาร + แผนที่/ระยะทาง + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
-export default function RiderOrderCard({ order, effectiveStatus, storeLocation, busy = false, disabled = false, onAccept, onReject, onStartDelivering, onDelivered }) {
+export default function RiderOrderCard({ order, effectiveStatus, storeLocation, networkOnline = true, busy = false, disabled = false, onAccept, onReject, onStartDelivering, onDelivered }) {
   const [showMap, setShowMap] = useState(false);
   // optimistic เฉพาะหลังกดปุ่ม ระหว่างรอ nearPressed จริงจาก snapshot ของออเดอร์
   const [nearPressedLocally, setNearPressedLocally] = useState(false);
@@ -199,7 +199,17 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
 
       {/* navigate + call */}
       <div className="flex flex-wrap gap-2 mb-2">
-        <MapButton lat={dLat} lng={dLng} mode="navigate" style={{ flex: 1, minWidth: "130px" }} />
+        {/* ออฟไลน์ = Google Maps เปิดไม่ขึ้นอยู่ดี บอกไปตรง ๆ ดีกว่าปล่อยให้กดแล้วเจอหน้าเปล่า
+            ไม่มีพิกัด = ยังนำทางด้วยที่อยู่ได้ (mapsService จะสร้างลิงก์นำทางจาก address ให้) */}
+        <MapButton
+          lat={dLat}
+          lng={dLng}
+          address={dAddress}
+          mode="navigate"
+          disabled={!networkOnline}
+          disabledLabel="🧭 ออฟไลน์ — นำทางไม่ได้"
+          style={{ flex: 1, minWidth: "130px" }}
+        />
         <Button
           className="flex-1"
           onClick={() => {

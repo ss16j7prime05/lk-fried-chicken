@@ -7,7 +7,12 @@
 import { useEffect, useRef, useState } from "react";
 import { doc, updateDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import { getCurrentLocation, watchLocation, stopWatching } from "../location/mapsService";
+import {
+  classifyGeoError,
+  getCurrentLocation,
+  watchLocation,
+  stopWatching,
+} from "../location/mapsService";
 import { getRoute, haversineKm } from "../location/locationUtils";
 import { useFeatureFlags } from "../featureFlags";
 import { logError } from "../errorCenter";
@@ -117,6 +122,10 @@ export const broadcastSignature = (deliveries = []) =>
 // สำคัญ: ต้องถูกเรียกจากที่ที่ไม่ unmount ตามแท็บ ไม่งั้นไรเดอร์สลับแท็บแล้วแผนที่ลูกค้าค้าง
 // อ่านพิกัดครั้งเดียวต่อรอบแล้วเขียนให้ทุกออเดอร์ (เดิมการ์ดแต่ละใบอ่าน GPS แยกกันเอง)
 export function useDeliveryBroadcast(deliveries, enabled = true) {
+  // สาเหตุที่อ่าน GPS ไม่ได้ (denied / unavailable / timeout) — คืนออกไปให้ UI บอกไรเดอร์
+  // เดิมล้มเหลวแบบเงียบสนิท: ลูกค้าไม่เห็นไรเดอร์บนแผนที่ แต่ไรเดอร์ไม่รู้ว่าตัวเองส่งพิกัดไม่ออก
+  const [geoError, setGeoError] = useState(null);
+
   // เก็บ list ล่าสุดไว้ใน ref: ออเดอร์ถูกเขียน riderLocation ทุก 5 วิ -> snapshot เด้ง ->
   // array identity เปลี่ยนทุกครั้ง ถ้า effect ผูกกับ identity ตรง ๆ interval จะถูกรีเซ็ตไม่รู้จบ
   const latest = useRef(deliveries);
@@ -135,6 +144,7 @@ export function useDeliveryBroadcast(deliveries, enabled = true) {
       try {
         const coords = await getCurrentLocation();
         if (cancelled) return;
+        setGeoError((prev) => (prev === null ? prev : null)); // อ่านได้แล้ว = เคลียร์คำเตือน
         // ออเดอร์ใบไหนพังไม่ควรทำให้ใบอื่นไม่ได้อัปเดต
         await Promise.all(
           latest.current.map((d) =>
@@ -144,7 +154,10 @@ export function useDeliveryBroadcast(deliveries, enabled = true) {
           )
         );
       } catch (e) {
-        // GPS ปฏิเสธ/หมดเวลา — log แล้วปล่อยให้รอบถัดไปลองใหม่ (เดิม await ลอย = unhandled rejection)
+        // GPS ปฏิเสธ/ปิด/หมดเวลา — log + บอกสาเหตุออกไปให้ UI (เดิม await ลอย = unhandled rejection)
+        if (cancelled) return;
+        const kind = classifyGeoError(e);
+        setGeoError((prev) => (prev === kind ? prev : kind));
         logError(e, "useDeliveryBroadcast.position");
       }
     };
@@ -156,6 +169,8 @@ export function useDeliveryBroadcast(deliveries, enabled = true) {
       clearInterval(id);
     };
   }, [enabled, signature]);
+
+  return { geoError };
 }
 
 // Hook: read a rider's live location, and optionally broadcast this device's GPS.

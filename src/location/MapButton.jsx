@@ -1,38 +1,41 @@
 // ปุ่มเปิด Google Maps แบบ reusable
 // mode="view" เปิดดูตำแหน่งบนแผนที่ / mode="navigate" เปิดนำทางขับรถไปยังตำแหน่งนั้น
-export default function MapButton({ lat, lng, address, mapLink, mode = "view", label, style }) {
-  const hasCoords = lat != null && lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
+// URL ทั้งหมดสร้างที่ mapsService (SSOT) — ที่นี่ทำหน้าที่แสดงผลอย่างเดียว
+import { buildNavigationUrl, buildViewUrl } from "./mapsService";
 
-  // A saved Google Maps link wins in view mode (lets the store point to an exact
-  // place page); navigation still uses coords for turn-by-turn.
-  const href = mode === "view" && mapLink
-    ? mapLink
-    : hasCoords
-    ? mode === "navigate"
-      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`
-      : `https://www.google.com/maps?q=${lat},${lng}`
-    : address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
-    : null;
+const DISABLED_STYLE = {
+  padding: "10px 16px",
+  borderRadius: "10px",
+  border: "none",
+  background: "#444",
+  color: "#888",
+  fontWeight: "bold",
+  cursor: "not-allowed",
+};
+
+export default function MapButton({
+  lat,
+  lng,
+  address,
+  mapLink,
+  mode = "view",
+  label,
+  style,
+  disabled = false,
+  disabledLabel,
+}) {
+  const href =
+    mode === "navigate"
+      ? buildNavigationUrl({ lat, lng, address })
+      : buildViewUrl({ lat, lng, address, mapLink });
 
   const defaultLabel = mode === "navigate" ? "🧭 นำทาง Google Maps" : "🗺️ เปิด Google Maps";
 
-  if (!href) {
+  // ไม่มีปลายทาง = กดไปก็ไม่มีอะไรให้เปิด / ผู้เรียกสั่งปิดเอง (เช่น ออฟไลน์ — Maps โหลดไม่ได้อยู่ดี)
+  if (!href || disabled) {
     return (
-      <button
-        disabled
-        style={{
-          padding: "10px 16px",
-          borderRadius: "10px",
-          border: "none",
-          background: "#444",
-          color: "#888",
-          fontWeight: "bold",
-          cursor: "not-allowed",
-          ...style,
-        }}
-      >
-        🗺️ ไม่มีตำแหน่ง
+      <button disabled style={{ ...DISABLED_STYLE, ...style }}>
+        {!href ? "🗺️ ไม่มีตำแหน่ง" : disabledLabel || defaultLabel}
       </button>
     );
   }

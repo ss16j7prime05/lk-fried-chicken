@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { AlertCircle, Bell, History, LogOut, Power, Settings, User, Wallet, WifiOff } from "lucide-react";
+import { AlertCircle, Bell, History, LogOut, Navigation, Power, Settings, User, Wallet, WifiOff } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
@@ -23,6 +23,8 @@ import { useStoreStatus } from "../store/useStoreStatus";
 import { updateOrderStatus, completeOrder } from "../store/orderEngine";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
 import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
+import { GEO_STATE, useGeolocationStatus } from "../location/mapsService";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { logError } from "../errorCenter";
 
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
@@ -46,6 +48,44 @@ const actionMessage = (reason) => ACTION_ERROR[reason] || ACTION_ERROR.error;
 const FEED_ERROR = {
   available: "Couldn't load available deliveries. Check your connection and refresh.",
   mine: "Couldn't load your accepted deliveries. Check your connection and refresh.",
+};
+
+// ปัญหาตำแหน่ง/เน็ต ที่ทำให้ "นำทาง + ให้ลูกค้าติดตาม" ใช้ไม่ได้ — ต้องบอกไรเดอร์ว่าเกิดอะไรและแก้ยังไง
+// (ไม่มีอันไหน block การส่งอาหาร จึงเป็นคำเตือน ไม่ใช่ error ที่ขวางงาน)
+const LOCATION_ALERT = {
+  offline: {
+    title: "You're offline",
+    desc: "Google Maps navigation won't open and the customer can't see your location until you're back online.",
+  },
+  [GEO_STATE.DENIED]: {
+    title: "Location is blocked",
+    desc: "The customer can't track you. Allow location for this site in your browser settings, then tap Retry.",
+    retry: true,
+  },
+  [GEO_STATE.UNAVAILABLE]: {
+    title: "Can't get your location",
+    desc: "Turn on GPS / Location Services on your phone, then tap Retry.",
+    retry: true,
+  },
+  [GEO_STATE.TIMEOUT]: {
+    title: "Location is taking too long",
+    desc: "Your GPS signal is weak. Move somewhere with a clearer view of the sky.",
+    retry: true,
+  },
+  [GEO_STATE.UNSUPPORTED]: {
+    title: "This device can't share location",
+    desc: "The customer won't be able to track your delivery on this device.",
+  },
+};
+
+// เลือกคำเตือนที่ "จริงที่สุด" อันเดียว: ออฟไลน์มาก่อน -> ข้อผิดพลาดจริงจากการอ่าน GPS ->
+// สิทธิ์ที่ Permissions API บอก (ท้ายสุดเพราะ iOS ไม่มี API นี้ ค่าจะเป็น unknown)
+const pickLocationAlert = (online, geoError, permission) => {
+  if (!online) return LOCATION_ALERT.offline;
+  if (geoError) return LOCATION_ALERT[geoError] || null;
+  if (permission === GEO_STATE.DENIED) return LOCATION_ALERT[GEO_STATE.DENIED];
+  if (permission === GEO_STATE.UNSUPPORTED) return LOCATION_ALERT[GEO_STATE.UNSUPPORTED];
+  return null;
 };
 
 // Rider Dashboard ใหม่: เห็นงานพร้อมส่งทั้งหมด, รับงานได้, อัปเดตสถานะแบบ realtime
@@ -139,6 +179,9 @@ export default function RiderOrdersDashboard() {
 
   const isOnline = riderStatus === "online";
   const feedError = feedErrors.available || feedErrors.mine;
+  // networkOnline = มีเน็ตไหม (คนละเรื่องกับ isOnline ที่แปลว่า "ไรเดอร์เปิดรับงาน")
+  const networkOnline = useOnlineStatus();
+  const geoPermission = useGeolocationStatus();
 
   // งานว่าง (riderId=="") กับงานของไรเดอร์ (riderId==uid) เป็นเซตที่ไม่ทับกัน รวมได้ตรง ๆ
   const orders = availablePool.concat(myJobs);
@@ -165,7 +208,9 @@ export default function RiderOrdersDashboard() {
       return { id: o.id, lat, lng };
     })
     .filter((d) => d.lat != null && d.lng != null);
-  useDeliveryBroadcast(deliveries, isOnline);
+  // ออฟไลน์ = เขียนไม่ถึง Firestore อยู่แล้ว หยุดอ่าน GPS ไปเลย (ประหยัดแบต + ไม่กองคิวเขียนไว้ยิงรัวตอนเน็ตกลับมา)
+  const { geoError } = useDeliveryBroadcast(deliveries, isOnline && networkOnline);
+  const locationAlert = pickLocationAlert(networkOnline, geoError, geoPermission.state);
 
   // สลับความพร้อมรับงาน — เขียน users/{uid}.riderStatus (ฟิลด์เดิม ไม่เพิ่ม schema)
   const toggleAvailability = async () => {
@@ -327,6 +372,29 @@ export default function RiderOrdersDashboard() {
           ))}
         </div>
 
+        {/* ตำแหน่ง/เน็ตมีปัญหา = นำทางไม่ได้ + ลูกค้าติดตามไม่ได้ ไรเดอร์ต้องรู้ตัว (เดิมพังเงียบ) */}
+        {locationAlert && (
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-700">
+            {networkOnline ? (
+              <Navigation size={20} className="shrink-0 mt-0.5" />
+            ) : (
+              <WifiOff size={20} className="shrink-0 mt-0.5" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-sm">{locationAlert.title}</p>
+              <p className="text-xs font-medium text-amber-600 mt-0.5">{locationAlert.desc}</p>
+            </div>
+            {locationAlert.retry && (
+              <button
+                onClick={geoPermission.request}
+                className="text-xs font-black text-amber-700 underline shrink-0 mt-0.5"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
+
         {/* feed พัง = ไม่มีข้อมูลให้เชื่อถือ ต้องบอกตรง ๆ แทนที่จะโชว์ "ไม่มีงาน" ทั้งที่อาจมี */}
         {feedError && (
           <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
@@ -394,6 +462,7 @@ export default function RiderOrdersDashboard() {
                 order={order}
                 effectiveStatus={tab === "available" ? READY_STATUS : order.status}
                 storeLocation={storeLocation}
+                networkOnline={networkOnline}
                 busy={busyId === order.id}
                 disabled={Boolean(busyId) && busyId !== order.id}
                 onAccept={acceptDelivery}

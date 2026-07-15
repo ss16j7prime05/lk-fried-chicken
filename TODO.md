@@ -6,6 +6,17 @@
 - _(ยังไม่มี)_
 
 ## 🟡 รอทำ (Backlog)
+- **ย้าย Store Menu/Orders มาใช้ `hooks/useOnlineStatus.js`** (พบตอนทำ R-03) — ทั้งสองไฟล์เขียน
+  listener `online`/`offline` เองแบบ inline เหมือนกันเป๊ะ (`pages/store/Menu.jsx` ~บรรทัด 1047,
+  `pages/store/Orders.jsx` ~บรรทัด 1683) R-03 สร้าง hook SSOT ไว้แล้วแต่**ไม่ได้แตะไฟล์ Store**
+  เพราะอยู่นอกขอบเขต → ควรย้ายทีหลังให้เหลือชุดเดียว
+- **บั๊ก Store: `<EmptyState type="offline" />` ไม่มีผล** (พบตอนทำ R-03) — `EmptyState` รับแค่
+  `title`/`description`/`icon` ไม่มี prop `type` → ตอนเน็ตหลุด `pages/store/Orders.jsx:1891`
+  จะโชว์ค่า default "No Data / Nothing to display 📦" แทนข้อความออฟไลน์ (`Menu.jsx:1223` ใช้
+  `PageState type="offline"` ต้องเช็คด้วยว่ารองรับจริงไหม) — งานของโมดูล Store
+- **Google Maps JS SDK loader ยังเป็น dead code** (`mapsService.loadGoogleMaps`/`useGoogleMaps`
+  ไม่ถูกเรียกจากที่ไหน) — แอปวาดแผนที่ด้วย Leaflet ส่วนการ "นำทาง" ใช้ deep link ของ Google Maps
+  ซึ่งถูกต้องแล้วและไม่ต้องใช้ API key → ถ้าไม่มีแผนใช้ ควรลบทิ้ง (ต้องถามผู้ใช้ก่อน)
 - **Phase 5.x ทั้งชั้นเป็น dead code — ไม่ถูก mount ที่ไหนเลย** (พบตอนทำ R-02, ยังไม่แตะ):
   `store/autoDispatch.js`, `store/orderAssignment.js`, `tracking/adminFleetMap.js`,
   `tracking/customerTracking.js`, `tracking/storeLiveMap.js` ไม่มี component ไหน import
@@ -22,6 +33,13 @@
   ต้องยกไปที่ระดับ layout/app (งานใหญ่กว่า — ควรทำเป็น task แยก)
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **R-03 Navigation (Google Maps)** — นำทางจริงแบบ turn-by-turn (`dir_action=navigate`
+  แทนที่จะเปิดแค่หน้าพรีวิวเส้นทาง) + แก้บั๊กออเดอร์ที่มีแต่ที่อยู่ไม่มีพิกัด เดิมเปิด Google Maps
+  **search** แทน**นำทาง** + ย้ายการสร้าง URL ไป `mapsService` (SSOT) + เพิ่ม `useOnlineStatus`
+  (SSOT) และ `useGeolocationStatus`/`classifyGeoError` → แจ้งไรเดอร์เมื่อ ออฟไลน์ / สิทธิ์ตำแหน่ง
+  ถูกบล็อก / GPS ปิด / หา GPS ไม่เจอ พร้อมปุ่ม Retry (เดิมพังเงียบสนิท ลูกค้าไม่เห็นไรเดอร์
+  แต่ไรเดอร์ไม่รู้ตัว). build ผ่าน, ESLint คงที่ 64/61, ทดสอบ 27 เคสผ่าน
+  (+ ยืนยัน view-mode URL ของ Store/Admin/Customer ไม่เปลี่ยนแม้แต่ตัวเดียว) + R-01/R-02 ไม่ regress
 - 2026-07-16 **R-02 Current Order** — แก้แผนที่ติดตามฝั่งลูกค้าค้างเมื่อไรเดอร์สลับแท็บ: การกระจาย
   GPS (`useRiderGpsBroadcast`) ฝังอยู่ใน `RiderOrderCard` ซึ่ง render เฉพาะแท็บที่เลือก พอไรเดอร์
   สลับไปแท็บ Available (พฤติกรรมปกติมาก) การ์ด unmount → หยุดส่งพิกัด → หน้า `/shop/orders/:id`
