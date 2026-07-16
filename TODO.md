@@ -67,6 +67,12 @@
   ต้องยกไปที่ระดับ layout/app (งานใหญ่กว่า — ควรทำเป็น task แยก)
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **Rider UI/UX polish** — design system (Button focus-visible/loading/danger,
+  Badge red/gray, Skeleton compositions — additive), RiderLayout sidebar ย่อได้บน tablet/desktop
+  + a11y (48px targets, focus-visible, aria), Order History การ์ดใหม่ (รายได้เป็นพระเอก),
+  skeleton loading ทุกหน้า list, Profile เพิ่มทะเบียน+logout. build ผ่าน, 0 ESLint error ใหม่.
+  **ไม่ได้ทำ (ติดกฎห้ามเพิ่ม feature/แก้ backend/schema): Map เต็มจอ, chat typing/receipt/location/
+  retry, countdown timer** → ถ้าต้องการต้องเปิดให้แตะ backend/schema ก่อน. รอ QA จริงบนเว็บ (auth-gated)
 - 2026-07-16 **R-06 Order History** — `useRiderOrders` (แหล่งข้อมูลของ Order History + Earnings/
   Notifications/Profile) **ไม่มี error handler ใน `onSnapshot`** → feed พัง = `loading` ค้าง true
   ตลอดกาล หน้า Order History หมุน Loading ค้างเงียบ ๆ (คลาสเดียวกับที่ R-01/R-05 แก้ feed อื่น)

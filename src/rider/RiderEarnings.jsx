@@ -14,7 +14,7 @@ import { byNewest, normalizeStatus, toDate } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Loading } from "../components/ui/Loading";
+import { RiderCardGridSkeleton } from "../components/ui/Skeleton";
 
 const RECENT_LIMIT = 10;
 
@@ -128,7 +128,12 @@ export default function RiderEarnings() {
   }, [orders]);
 
   if (loading) {
-    return <Loading text={t("ro.loading.earnings")} />;
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-black text-gray-900">{t("ro.earnings.title")}</h1>
+        <RiderCardGridSkeleton count={4} />
+      </div>
+    );
   }
 
   return (

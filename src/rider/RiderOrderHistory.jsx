@@ -1,16 +1,20 @@
 import { useMemo, useState } from "react";
-import { MapPin, User, Package, Calendar, WifiOff } from "lucide-react";
+import { Store, User, Package, Calendar, Navigation, CreditCard, WifiOff } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
+import { PROMPTPAY_ACCOUNT_NAME } from "../config";
 import { useRiderOrders } from "./useRiderOrders";
 import { formatDate } from "./riderFormat";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Loading } from "../components/ui/Loading";
+import { RiderCardGridSkeleton } from "../components/ui/Skeleton";
 
 const PAGE_SIZE = 20;
+
+// Single-store app — the "restaurant" on every delivery is the store itself.
+const STORE_NAME = PROMPTPAY_ACCOUNT_NAME;
 
 const FILTERS = [
   { key: "all", labelKey: "ro.filter.all" },
@@ -32,23 +36,41 @@ const STATUS_STYLE = {
 };
 const styleFor = (status) => STATUS_STYLE[status] || STATUS_STYLE.pending;
 
-const itemCount = (order) => (order.items || []).reduce((s, i) => s + (i.qty || 1), 0);
+// Payment-method pill colour — matches the Store/checkout method colours (cash green,
+// promptpay blue, transfer orange).
+const PAYMENT_PILL = {
+  cash: "bg-emerald-50 text-emerald-600",
+  promptpay: "bg-blue-50 text-blue-600",
+  transfer: "bg-orange-50 text-orange-600",
+};
 
-// แถวประวัติ 1 ออเดอร์: แบบย่อ อ่านอย่างเดียว (งานที่ยังทำอยู่ไปจัดการที่หน้า Jobs)
+const itemCount = (order) => (order.items || []).reduce((s, i) => s + (i.qty || 1), 0);
+const orderIncome = (order) => Number(order.deliveryFee || 0);
+const orderDistanceKm = (order) => {
+  const km = order.distanceKm ?? order.distance ?? order.deliveryDistance;
+  return typeof km === "number" && Number.isFinite(km) ? km : null;
+};
+const fmtMoney = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
+
+// One history row. Hierarchy per spec: income is the hero, status second, restaurant
+// third, then customer / distance / payment / date — all aligned to a single grid.
 const HistoryCard = ({ order, t }) => {
   const status = normalizeStatus(order.status);
   const s = styleFor(status);
-  const count = itemCount(order);
+  const km = orderDistanceKm(order);
+  const method = order.paymentMethod;
+
   return (
-    <Card className="p-0 overflow-hidden flex">
+    <Card className="p-0 flex">
       {/* status accent rail — instant colour cue */}
-      <div className={`w-1.5 shrink-0 ${s.accent}`} />
+      <div className={`w-1.5 shrink-0 ${s.accent}`} aria-hidden="true" />
       <div className="flex-1 min-w-0 p-4 sm:p-5">
+        {/* order id + date  ·  status (second most important) */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-black text-gray-900 truncate leading-tight">{order.orderNo || order.id}</p>
-            <p className="flex items-center gap-1.5 text-xs font-medium text-gray-400 mt-1">
-              <Calendar size={12} className="shrink-0" />
+            <p className="text-xs font-bold text-gray-400 truncate">{order.orderNo || order.id}</p>
+            <p className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 mt-0.5">
+              <Calendar size={11} className="shrink-0" />
               {formatDate(order.createdAt)}
             </p>
           </div>
@@ -57,25 +79,44 @@ const HistoryCard = ({ order, t }) => {
           </span>
         </div>
 
-        <div className="space-y-1.5 mt-3 text-sm">
-          <p className="flex items-center gap-2 text-gray-700 font-medium">
+        {/* income — the hero number */}
+        <div className="flex items-end justify-between gap-3 mt-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t("ro.earningsCol")}</p>
+            <p className="text-2xl font-black text-primary leading-tight">{fmtMoney(orderIncome(order))}</p>
+          </div>
+          {km != null && (
+            <p className="flex items-center gap-1 text-xs font-bold text-gray-500 shrink-0 pb-1">
+              <Navigation size={13} className="text-gray-400 shrink-0" />
+              {km.toFixed(1)} km
+            </p>
+          )}
+        </div>
+
+        {/* restaurant (third) + customer */}
+        <div className="space-y-1.5 mt-3 pt-3 border-t border-gray-50 text-sm">
+          <p className="flex items-center gap-2 text-gray-700 font-bold">
+            <Store size={14} className="text-gray-400 shrink-0" />
+            <span className="truncate">{STORE_NAME}</span>
+          </p>
+          <p className="flex items-center gap-2 text-gray-500 font-medium">
             <User size={14} className="text-gray-400 shrink-0" />
             <span className="truncate">{order.customerName || "-"}</span>
           </p>
-          <p className="flex items-start gap-2 text-gray-500">
-            <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
-            <span className="line-clamp-2">
-              {order.deliveryLocation?.address || order.deliveryAddress || order.address || "-"}
-            </span>
-          </p>
         </div>
 
-        <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-gray-50">
+        {/* payment + item count */}
+        <div className="flex items-center justify-between gap-3 mt-3">
+          {method ? (
+            <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg ${PAYMENT_PILL[method] || "bg-gray-100 text-gray-500"}`}>
+              <CreditCard size={12} className="shrink-0" />
+              {t(`payment.${method}`)}
+            </span>
+          ) : <span />}
           <p className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
             <Package size={13} className="shrink-0" />
-            {t("ro.items", { count })}
+            {t("ro.items", { count: itemCount(order) })}
           </p>
-          <p className="font-black text-primary text-base">฿{order.grandTotal ?? order.subtotal ?? 0}</p>
         </div>
       </div>
     </Card>
@@ -108,10 +149,6 @@ export default function RiderOrderHistory() {
     setVisibleCount(PAGE_SIZE);
   };
 
-  if (loading) {
-    return <Loading text={t("ro.loading.history")} />;
-  }
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-black text-gray-900">{t("ro.history.title")}</h1>
@@ -122,7 +159,7 @@ export default function RiderOrderHistory() {
           <button
             key={key}
             onClick={() => selectFilter(key)}
-            className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
+            className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
               filter === key
                 ? "bg-primary text-white border-primary"
                 : "bg-white text-gray-500 border-gray-100 hover:border-primary"
@@ -133,10 +170,9 @@ export default function RiderOrderHistory() {
         ))}
       </div>
 
-      {/* feed พัง = ไม่มีข้อมูลให้เชื่อถือ ต้องบอกตรง ๆ แทนที่จะหมุน Loading ค้าง หรือโชว์
-          "ยังไม่มีงาน" ทั้งที่จริง ๆ โหลดไม่ขึ้น (R-06 — ใช้แถบ error แบบเดียวกับ Dashboard) */}
+      {/* feed พัง = ไม่มีข้อมูลให้เชื่อถือ ต้องบอกตรง ๆ แทนที่จะหมุน Loading ค้าง (R-06) */}
       {error && (
-        <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
+        <div role="alert" className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
           <WifiOff size={20} className="shrink-0 mt-0.5" />
           <div className="min-w-0">
             <p className="font-black text-sm">{t("ro.history.loadErrTitle")}</p>
@@ -145,7 +181,9 @@ export default function RiderOrderHistory() {
         </div>
       )}
 
-      {error ? null : filtered.length === 0 ? (
+      {loading ? (
+        <RiderCardGridSkeleton />
+      ) : error ? null : filtered.length === 0 ? (
         <EmptyState
           icon="🛵"
           title={t("ro.history.emptyTitle")}

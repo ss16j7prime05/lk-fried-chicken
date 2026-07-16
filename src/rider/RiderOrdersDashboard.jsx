@@ -8,7 +8,7 @@ import { usePreferences } from "../context/PreferencesContext";
 import RiderOrderCard from "./RiderOrderCard.jsx";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Loading } from "../components/ui/Loading";
+import { RiderCardGridSkeleton } from "../components/ui/Skeleton";
 import {
   DELIVERED_STATUS,
   DELIVERING_STATUS,
@@ -244,10 +244,6 @@ export default function RiderOrdersDashboard() {
   const activeTab = TABS.find((tb) => tb.key === tab) ?? TABS[0];
   const list = activeTab.list;
 
-  if (loading) {
-    return <Loading text={t("ro.loading.deliveries")} />;
-  }
-
   return (
     <div className="space-y-6">
       {/* Header: title + availability toggle (nav + notifications live in RiderLayout) */}
@@ -339,7 +335,9 @@ export default function RiderOrdersDashboard() {
         </div>
       )}
 
-      {tab === "available" && !isOnline ? (
+      {loading ? (
+        <RiderCardGridSkeleton />
+      ) : tab === "available" && !isOnline ? (
         <div className="space-y-4">
           <EmptyState icon="🌙" title={t("ro.offlineTitle")} description={t("ro.offlineDesc")} />
           <div className="flex justify-center">

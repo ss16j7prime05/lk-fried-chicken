@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail, Package } from "lucide-react";
+import { User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail, Package, IdCard, LogOut } from "lucide-react";
 import { useAuth } from "./AuthContext.jsx";
 import { usePreferences } from "./context/PreferencesContext";
 import { useRiderOrders } from "./rider/useRiderOrders";
 import { Card } from "./components/ui/Card";
 import { Badge } from "./components/ui/Badge";
-import { Loading } from "./components/ui/Loading";
+import { Button } from "./components/ui/Button";
+import { RiderCardGridSkeleton } from "./components/ui/Skeleton";
 
 const toDate = (createdAt) => {
   if (!createdAt) return null;
@@ -45,7 +46,7 @@ const InfoRow = ({ icon: Icon, label, value }) => (
 );
 
 function RiderProfile() {
-  const { profile } = useAuth();
+  const { profile, logout } = useAuth();
   const { t } = usePreferences();
   // ไม่มี uid (ปกติไม่เกิด เพราะผ่าน ProtectedRoute มาแล้ว) = ไม่มีอะไรให้โหลด
   const { orders, loading } = useRiderOrders(auth.currentUser?.uid);
@@ -74,7 +75,12 @@ function RiderProfile() {
   const displayName = profile?.name || profile?.riderName || "-";
 
   if (loading) {
-    return <Loading text={t("ro.loading.profile")} />;
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-black text-gray-900">{t("ro.profile.title")}</h1>
+        <RiderCardGridSkeleton count={4} />
+      </div>
+    );
   }
 
   return (
@@ -106,7 +112,18 @@ function RiderProfile() {
         <InfoRow icon={Phone} label={t("ro.phone")} value={profile?.phone || "-"} />
         <InfoRow icon={Mail} label={t("ro.email")} value={profile?.email || "-"} />
         <InfoRow icon={Bike} label={t("ro.vehicle")} value={vehicleLabel(profile?.vehicleType, t)} />
+        <InfoRow icon={IdCard} label={t("ro.licensePlate")} value={profile?.licensePlate || "-"} />
       </Card>
+
+      {/* Logout — reachable from Profile too (mobile bottom nav has no logout) */}
+      <Button
+        variant="outline"
+        className="w-full text-secondary border-secondary/30 hover:border-secondary"
+        onClick={logout}
+      >
+        <LogOut size={18} />
+        {t("ro.logout")}
+      </Button>
     </div>
   );
 }

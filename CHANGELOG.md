@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### Changed (Rider UI/UX polish — design system, a11y, responsiveness; no backend/schema/API/feature changes)
+- **Design system (additive, backward-compatible — shared primitives, ทุก role ได้ประโยชน์)**:
+  `Button` เพิ่ม `focus-visible` ring (คีย์บอร์ด a11y), state `loading` (spinner), variant `danger`
+  ; `Badge` เพิ่มสี `red`/`gray` ; `Skeleton` เพิ่ม `RiderCardSkeleton`/`RiderCardGridSkeleton`
+  (ของเดิมไม่ถูกแตะ)
+- **RiderLayout**: sidebar **ย่อได้** (icon rail ↔ เต็ม) บน tablet/desktop จำค่าใน localStorage,
+  main padding ขยับตาม (ไม่ทับ/ไม่ล้น) ; bottom nav มือถือ touch target ≥ 48px, `focus-visible`,
+  `aria-current`/`aria-label`, safe-area ; floating notification bell คงเดิม
+- **Order History**: ออกแบบการ์ดใหม่ตามลำดับความสำคัญ — **รายได้เป็นพระเอก** → สถานะ → ร้าน →
+  ลูกค้า/ระยะทาง/วิธีชำระ/วันที่ (Order ID, Date, Restaurant, Customer, Distance, Income, Status,
+  Payment ครบ, จัดเรียงตรงกริดเดียว) + skeleton ตอนโหลด
+- **Skeleton loading** แทน spinner เปล่าในหน้า list: Jobs / History / Earnings / Profile
+  (Notifications มี skeleton อยู่แล้ว) — ลด layout shift, perceived performance ดีขึ้น
+- **Profile**: เพิ่มแถวทะเบียนรถ + ปุ่ม Logout (จัดกลุ่มชัดขึ้น เข้าถึง logout บนมือถือได้)
+- **Accessibility**: focus-visible rings ทั่ว nav/tabs/ปุ่ม, aria labels, touch target ที่ nav ≥ 48px
+- **หมายเหตุขอบเขต**: หน้า Map เต็มจอ, chat typing/read-receipt/location/retry, countdown timer
+  ในการ์ด Jobs — **ไม่ได้ทำเพราะต้องเพิ่ม feature/แก้ backend/schema** ซึ่งผู้ใช้สั่งห้ามในงานนี้
+- build ผ่าน, ESLint 0 error ใหม่ — Rider ทุกหน้ายังใช้ i18n `ro.*` (EN/TH) + dark mode ครบ
+
 ### Fixed (R-06 Order History — feed failed silently, page spun forever)
 - **บั๊กหลัก: `useRiderOrders` ไม่มี error handler ใน `onSnapshot`** — hook นี้เป็นแหล่งข้อมูล
   ของหน้า Order History (และ Earnings / Notifications / Profile) ถ้า feed พัง (สิทธิ์ / index /
