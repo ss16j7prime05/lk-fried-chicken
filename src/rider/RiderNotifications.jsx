@@ -1,22 +1,17 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   Bike,
   CheckCheck,
   CheckCircle2,
   ChefHat,
-  History,
-  LogOut,
   Package,
   PackageCheck,
-  Settings,
   ShoppingBag,
   Truck,
-  User,
-  Wallet,
   XCircle,
 } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
+import { usePreferences } from "../context/PreferencesContext";
 import { useRiderOrders } from "./useRiderOrders";
 import { normalizeStatus, toDate } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
@@ -29,49 +24,39 @@ import { EmptyState } from "../components/ui/EmptyState";
 // ใน localStorage ด้วยแนวทางเดียวกัน แต่แยก key ของไรเดอร์
 const READ_STORAGE_KEY = "lkfc_rider_read_notifications";
 
-// หมวดแจ้งเตือนมุมไรเดอร์ จากสถานะจริงของออเดอร์ที่ไรเดอร์รับ (riderId == uid)
+// สถานะจริงของออเดอร์ -> หมวดแจ้งเตือน (key แปลภาษาผ่าน ro.cat.* / ro.msg.*)
 const STATUS_CATEGORY = {
-  pending: "New Order",
-  accepted: "Accepted",
-  cooking: "Preparing",
-  ready_for_delivery: "Ready for Pickup",
-  picked_up: "Delivering",
-  delivering: "Delivering",
-  completed: "Completed",
-  cancelled: "Cancelled",
+  pending: "newOrder",
+  accepted: "accepted",
+  cooking: "preparing",
+  ready_for_delivery: "readyPickup",
+  picked_up: "delivering",
+  delivering: "delivering",
+  completed: "completed",
+  cancelled: "cancelled",
 };
 
 const CATEGORY_ICON = {
-  "New Order": ShoppingBag,
-  Accepted: CheckCircle2,
-  Preparing: ChefHat,
-  "Ready for Pickup": Bike,
-  Delivering: Truck,
-  Completed: PackageCheck,
-  Cancelled: XCircle,
+  newOrder: ShoppingBag,
+  accepted: CheckCircle2,
+  preparing: ChefHat,
+  readyPickup: Bike,
+  delivering: Truck,
+  completed: PackageCheck,
+  cancelled: XCircle,
 };
 
-const CATEGORY_MESSAGE = {
-  "New Order": (o) => `Order ${o.orderNo} has been placed and is awaiting the store.`,
-  Accepted: (o) => `The store accepted order ${o.orderNo}.`,
-  Preparing: (o) => `The store is preparing order ${o.orderNo}.`,
-  "Ready for Pickup": (o) => `Order ${o.orderNo} is ready to pick up at the store.`,
-  Delivering: (o) => `You are delivering order ${o.orderNo}.`,
-  Completed: (o) => `Order ${o.orderNo} was delivered successfully.`,
-  Cancelled: (o) => `Order ${o.orderNo} was cancelled.`,
-};
-
-// เวลาแบบ relative เช่น "5 นาทีที่แล้ว" — สั้น อ่านง่ายบนมือถือ
-const timeAgo = (d) => {
+// เวลาแบบ relative เช่น "5 นาทีที่แล้ว" — สั้น อ่านง่ายบนมือถือ (แปลภาษาผ่าน t)
+const timeAgo = (d, t) => {
   if (!d) return "-";
   const diffMs = Date.now() - d.getTime();
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1) return t("ro.justNow");
+  if (mins < 60) return t("ro.minAgo", { n: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} hr ago`;
+  if (hours < 24) return t("ro.hrAgo", { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (days < 7) return t("ro.dayAgo", { n: days });
   return d.toLocaleDateString("th-TH");
 };
 
@@ -117,7 +102,7 @@ const NotificationCardSkeleton = () => (
   </Card>
 );
 
-const NotificationCard = ({ notification, onRead }) => {
+const NotificationCard = ({ notification, onRead, t }) => {
   const Icon = CATEGORY_ICON[notification.category] ?? Package;
 
   return (
@@ -136,14 +121,14 @@ const NotificationCard = ({ notification, onRead }) => {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="font-bold text-gray-900">{notification.category}</h3>
+            <h3 className="font-bold text-gray-900">{t(`ro.cat.${notification.category}`)}</h3>
             <Badge color={notification.read ? "blue" : "green"}>
-              {notification.read ? "Read" : "Unread"}
+              {notification.read ? t("ro.read") : t("ro.unread")}
             </Badge>
           </div>
           <p className="text-sm text-gray-500 mt-1">{notification.message}</p>
           <p className="text-xs text-gray-400 font-bold mt-2">
-            {notification.orderNo} · {timeAgo(notification.when)}
+            {notification.orderNo} · {timeAgo(notification.when, t)}
           </p>
         </div>
       </Card>
@@ -158,7 +143,8 @@ const SectionTitle = ({ children }) => (
 // แจ้งเตือนของไรเดอร์: derive จากออเดอร์จริงที่ riderId == uid (ไม่มี collection notifications)
 // 1 ออเดอร์ = 1 แจ้งเตือนตามสถานะปัจจุบัน เหมือนแนวทางหน้า Notifications ของลูกค้า
 export default function RiderNotifications() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { t } = usePreferences();
   const { orders, loading } = useRiderOrders(user?.uid);
   const [readMap, setReadMap] = useState(() => loadReadMap());
 
@@ -166,19 +152,20 @@ export default function RiderNotifications() {
     return orders
       .map((order) => {
         const normalized = normalizeStatus(order.status);
-        const category = STATUS_CATEGORY[normalized] ?? "New Order";
+        const category = STATUS_CATEGORY[normalized] ?? "newOrder";
         const key = `${order.id}__${normalized}`;
+        const orderNo = order.orderNo || order.id;
         return {
           id: key,
-          orderNo: order.orderNo || order.id,
+          orderNo,
           category,
-          message: CATEGORY_MESSAGE[category]?.(order) ?? `Order ${order.orderNo} was updated.`,
+          message: t(`ro.msg.${category}`, { orderNo }),
           when: notificationTime(order),
           read: Boolean(readMap[key]),
         };
       })
       .sort((a, b) => (b.when?.getTime() ?? 0) - (a.when?.getTime() ?? 0));
-  }, [orders, readMap]);
+  }, [orders, readMap, t]);
 
   const todayList = notifications.filter((n) => isToday(n.when));
   const earlierList = notifications.filter((n) => !isToday(n.when));
@@ -205,93 +192,50 @@ export default function RiderNotifications() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto p-4 sm:p-8 space-y-6">
-        {/* header — same pattern as the other rider pages */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-black text-gray-900">Notifications</h1>
-            {unreadCount > 0 && <Badge color="green">{unreadCount} New</Badge>}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="!px-4 !py-2 text-sm" onClick={markAllRead}>
-              <CheckCheck size={16} />
-              Mark All Read
-            </Button>
-            <Link to="/rider">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Package size={16} />
-                Jobs
-              </Button>
-            </Link>
-            <Link to="/rider/profile">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <User size={16} />
-                Profile
-              </Button>
-            </Link>
-            <Link to="/rider/history">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <History size={16} />
-                History
-              </Button>
-            </Link>
-            <Link to="/rider/earnings">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Wallet size={16} />
-                Earnings
-              </Button>
-            </Link>
-            <Link to="/rider/settings">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Settings size={16} />
-                Settings
-              </Button>
-            </Link>
-            <Button
-              variant="outline"
-              className="!px-4 !py-2 text-sm text-secondary border-secondary/30 hover:border-secondary"
-              onClick={logout}
-            >
-              <LogOut size={16} />
-              Logout
-            </Button>
-          </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-black text-gray-900">{t("ro.notif.title")}</h1>
+          {unreadCount > 0 && <Badge color="green">{t("ro.new", { count: unreadCount })}</Badge>}
         </div>
-
-        {loading ? (
-          <div className="space-y-3">
-            <NotificationCardSkeleton />
-            <NotificationCardSkeleton />
-            <NotificationCardSkeleton />
-          </div>
-        ) : notifications.length === 0 ? (
-          <EmptyState
-            icon="🔔"
-            title="No notifications yet"
-            description="Updates about your deliveries will show up here once you take a job."
-          />
-        ) : (
-          <>
-            {todayList.length > 0 && (
-              <div className="space-y-3">
-                <SectionTitle>Today</SectionTitle>
-                {todayList.map((n) => (
-                  <NotificationCard key={n.id} notification={n} onRead={markRead} />
-                ))}
-              </div>
-            )}
-            {earlierList.length > 0 && (
-              <div className="space-y-3">
-                <SectionTitle>Earlier</SectionTitle>
-                {earlierList.map((n) => (
-                  <NotificationCard key={n.id} notification={n} onRead={markRead} />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        <Button variant="outline" className="!px-4 !py-2 text-sm" onClick={markAllRead}>
+          <CheckCheck size={16} />
+          {t("ro.markAllRead")}
+        </Button>
       </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          <NotificationCardSkeleton />
+          <NotificationCardSkeleton />
+          <NotificationCardSkeleton />
+        </div>
+      ) : notifications.length === 0 ? (
+        <EmptyState
+          icon="🔔"
+          title={t("ro.notif.emptyTitle")}
+          description={t("ro.notif.emptyDesc")}
+        />
+      ) : (
+        <>
+          {todayList.length > 0 && (
+            <div className="space-y-3">
+              <SectionTitle>{t("ro.today")}</SectionTitle>
+              {todayList.map((n) => (
+                <NotificationCard key={n.id} notification={n} onRead={markRead} t={t} />
+              ))}
+            </div>
+          )}
+          {earlierList.length > 0 && (
+            <div className="space-y-3">
+              <SectionTitle>{t("ro.earlier")}</SectionTitle>
+              {earlierList.map((n) => (
+                <NotificationCard key={n.id} notification={n} onRead={markRead} t={t} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

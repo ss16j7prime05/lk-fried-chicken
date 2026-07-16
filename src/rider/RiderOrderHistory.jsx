@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Bell, LogOut, MapPin, Package, Settings, User, Wallet } from "lucide-react";
+import { MapPin, User, Package, Calendar } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
+import { usePreferences } from "../context/PreferencesContext";
 import { useRiderOrders } from "./useRiderOrders";
 import { formatDate } from "./riderFormat";
-import { byNewest, normalizeStatus, STATUS_LABEL } from "../store/orderStatus";
+import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
-import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Loading } from "../components/ui/Loading";
@@ -14,48 +13,70 @@ import { Loading } from "../components/ui/Loading";
 const PAGE_SIZE = 20;
 
 const FILTERS = [
-  { key: "all", label: "All" },
-  { key: "completed", label: "Completed" },
-  { key: "cancelled", label: "Cancelled" },
+  { key: "all", labelKey: "ro.filter.all" },
+  { key: "completed", labelKey: "ro.filter.completed" },
+  { key: "cancelled", labelKey: "ro.filter.cancelled" },
 ];
 
-const STATUS_BADGE_COLOR = { completed: "green", cancelled: "orange" };
+// Consistent status styling across the whole history list — one accent + pill per
+// normalized status (green = done, red = cancelled, blue = in-progress, amber = early).
+const STATUS_STYLE = {
+  completed: { accent: "bg-emerald-500", pill: "bg-emerald-50 text-emerald-600" },
+  cancelled: { accent: "bg-rose-500", pill: "bg-rose-50 text-rose-600" },
+  delivering: { accent: "bg-blue-500", pill: "bg-blue-50 text-blue-600" },
+  picked_up: { accent: "bg-blue-500", pill: "bg-blue-50 text-blue-600" },
+  ready_for_delivery: { accent: "bg-sky-500", pill: "bg-sky-50 text-sky-600" },
+  cooking: { accent: "bg-amber-500", pill: "bg-amber-50 text-amber-600" },
+  accepted: { accent: "bg-amber-500", pill: "bg-amber-50 text-amber-600" },
+  pending: { accent: "bg-gray-400", pill: "bg-gray-100 text-gray-500" },
+};
+const styleFor = (status) => STATUS_STYLE[status] || STATUS_STYLE.pending;
 
 const itemCount = (order) => (order.items || []).reduce((s, i) => s + (i.qty || 1), 0);
 
 // แถวประวัติ 1 ออเดอร์: แบบย่อ อ่านอย่างเดียว (งานที่ยังทำอยู่ไปจัดการที่หน้า Jobs)
-const HistoryCard = ({ order }) => {
+const HistoryCard = ({ order, t }) => {
   const status = normalizeStatus(order.status);
+  const s = styleFor(status);
+  const count = itemCount(order);
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-black text-gray-900 truncate">{order.orderNo || order.id}</p>
-          <p className="text-xs font-medium text-gray-400 mt-0.5">{formatDate(order.createdAt)}</p>
-        </div>
-        <Badge color={STATUS_BADGE_COLOR[status] ?? "blue"}>
-          {STATUS_LABEL[status] || status}
-        </Badge>
-      </div>
-
-      <div className="space-y-1 mt-3 text-sm">
-        <p className="flex items-center gap-1.5 text-gray-700 font-medium">
-          <User size={14} className="text-gray-400 shrink-0" />
-          <span className="truncate">{order.customerName || "-"}</span>
-        </p>
-        <p className="flex items-start gap-1.5 text-gray-500">
-          <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
-          <span className="line-clamp-2">
-            {order.deliveryLocation?.address || order.deliveryAddress || order.address || "-"}
+    <Card className="p-0 overflow-hidden flex">
+      {/* status accent rail — instant colour cue */}
+      <div className={`w-1.5 shrink-0 ${s.accent}`} />
+      <div className="flex-1 min-w-0 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-black text-gray-900 truncate leading-tight">{order.orderNo || order.id}</p>
+            <p className="flex items-center gap-1.5 text-xs font-medium text-gray-400 mt-1">
+              <Calendar size={12} className="shrink-0" />
+              {formatDate(order.createdAt)}
+            </p>
+          </div>
+          <span className={`shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full ${s.pill}`}>
+            {t(`ro.status.${status}`)}
           </span>
-        </p>
-      </div>
+        </div>
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-        <p className="text-xs font-medium text-gray-400">
-          {itemCount(order)} item{itemCount(order) === 1 ? "" : "s"}
-        </p>
-        <p className="font-black text-primary">฿{order.grandTotal ?? order.subtotal ?? 0}</p>
+        <div className="space-y-1.5 mt-3 text-sm">
+          <p className="flex items-center gap-2 text-gray-700 font-medium">
+            <User size={14} className="text-gray-400 shrink-0" />
+            <span className="truncate">{order.customerName || "-"}</span>
+          </p>
+          <p className="flex items-start gap-2 text-gray-500">
+            <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
+            <span className="line-clamp-2">
+              {order.deliveryLocation?.address || order.deliveryAddress || order.address || "-"}
+            </span>
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-gray-50">
+          <p className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
+            <Package size={13} className="shrink-0" />
+            {t("ro.items", { count })}
+          </p>
+          <p className="font-black text-primary text-base">฿{order.grandTotal ?? order.subtotal ?? 0}</p>
+        </div>
       </div>
     </Card>
   );
@@ -63,7 +84,8 @@ const HistoryCard = ({ order }) => {
 
 // ประวัติงานส่งของไรเดอร์: ทุกออเดอร์ที่ riderId == uid เรียงใหม่->เก่า พร้อมฟิลเตอร์สถานะ
 export default function RiderOrderHistory() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { t } = usePreferences();
   const { orders, loading } = useRiderOrders(user?.uid);
   const [filter, setFilter] = useState("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -87,103 +109,54 @@ export default function RiderOrderHistory() {
   };
 
   if (loading) {
-    return <Loading text="Loading order history..." />;
+    return <Loading text={t("ro.loading.history")} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-6">
-        {/* header — same pattern as the other rider pages */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-black text-gray-900">Order History</h1>
-          <div className="flex gap-2">
-            <Link to="/rider">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Package size={16} />
-                Jobs
-              </Button>
-            </Link>
-            <Link to="/rider/profile">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <User size={16} />
-                Profile
-              </Button>
-            </Link>
-            <Link to="/rider/earnings">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Wallet size={16} />
-                Earnings
-              </Button>
-            </Link>
-            <Link to="/rider/notifications">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Bell size={16} />
-                Notifications
-              </Button>
-            </Link>
-            <Link to="/rider/settings">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Settings size={16} />
-                Settings
-              </Button>
-            </Link>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-black text-gray-900">{t("ro.history.title")}</h1>
+
+      {/* status filter tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {FILTERS.map(({ key, labelKey }) => (
+          <button
+            key={key}
+            onClick={() => selectFilter(key)}
+            className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
+              filter === key
+                ? "bg-primary text-white border-primary"
+                : "bg-white text-gray-500 border-gray-100 hover:border-primary"
+            }`}
+          >
+            {t(labelKey)} ({countFor(key)})
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon="🛵"
+          title={t("ro.history.emptyTitle")}
+          description={filter === "all" ? t("ro.history.emptyDesc") : t("ro.history.emptyDescFiltered")}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {visible.map((order) => (
+              <HistoryCard key={order.id} order={order} t={t} />
+            ))}
+          </div>
+          {hasMore && (
             <Button
               variant="outline"
-              className="!px-4 !py-2 text-sm text-secondary border-secondary/30 hover:border-secondary"
-              onClick={logout}
+              className="w-full"
+              onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
             >
-              <LogOut size={16} />
-              Logout
+              {t("ro.showMore", { count: filtered.length - visibleCount })}
             </Button>
-          </div>
-        </div>
-
-        {/* status filter tabs — same style as the dashboard tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {FILTERS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => selectFilter(key)}
-              className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
-                filter === key
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-gray-500 border-gray-100 hover:border-primary"
-              }`}
-            >
-              {label} ({countFor(key)})
-            </button>
-          ))}
-        </div>
-
-        {filtered.length === 0 ? (
-          <EmptyState
-            icon="🛵"
-            title="No orders yet"
-            description={
-              filter === "all"
-                ? "Deliveries you take will show up here."
-                : `No ${filter} deliveries yet.`
-            }
-          />
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visible.map((order) => (
-                <HistoryCard key={order.id} order={order} />
-              ))}
-            </div>
-            {hasMore && (
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-              >
-                Show More ({filtered.length - visibleCount} remaining)
-              </Button>
-            )}
-          </>
-        )}
-      </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

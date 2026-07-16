@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { Bike, CreditCard, MapPin, Package, Phone, User, X } from "lucide-react";
 import { db } from "../firebase";
+import { usePreferences } from "../context/PreferencesContext";
 import Chat from "../Chat.jsx";
 import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
@@ -14,7 +15,6 @@ import {
   DELIVERING_STATUS,
   PICKED_UP_STATUS,
   READY_STATUS,
-  STATUS_LABEL,
 } from "./riderStatus";
 import { formatDate } from "./riderFormat";
 import { telHref } from "../telUtils";
@@ -30,8 +30,6 @@ const STATUS_BADGE_COLOR = {
   [DELIVERING_STATUS]: "blue",
   [DELIVERED_STATUS]: "green",
 };
-
-const PAYMENT_LABEL = { cash: "Cash", promptpay: "PromptPay", transfer: "Transfer" };
 
 const optionLabel = (value) => {
   if (!value) return "";
@@ -77,7 +75,7 @@ const InfoRow = ({ icon: Icon, children, top = false }) => (
   </p>
 );
 
-const CustomerSection = ({ order, address }) => (
+const CustomerSection = ({ order, address, t }) => (
   <div className="space-y-1.5 mb-3">
     <InfoRow icon={User}>{order.customerName || "-"}</InfoRow>
     <InfoRow icon={Phone}>{order.phone || "-"}</InfoRow>
@@ -86,18 +84,18 @@ const CustomerSection = ({ order, address }) => (
     </InfoRow>
     <InfoRow icon={CreditCard}>
       <span className="text-gray-500">
-        {PAYMENT_LABEL[order.paymentMethod] || order.paymentMethod || "-"}
+        {order.paymentMethod ? t(`payment.${order.paymentMethod}`) : "-"}
       </span>
     </InfoRow>
     {order.note && (
       <p className="text-xs text-gray-500 bg-yellow-50 border border-yellow-100 rounded-xl px-3 py-2">
-        Note: {order.note}
+        {t("ro.note")}: {order.note}
       </p>
     )}
   </div>
 );
 
-const ItemsSection = ({ items }) => (
+const ItemsSection = ({ items, t }) => (
   <div className="mb-3 divide-y divide-gray-50">
     {(items || []).map((item, index) => {
       const options = itemOptions(item);
@@ -110,7 +108,7 @@ const ItemsSection = ({ items }) => (
             {options.length > 0 && (
               <p className="text-gray-400 mt-0.5">{options.join(" • ")}</p>
             )}
-            {item.note && <p className="text-gray-400 mt-0.5">Note: {item.note}</p>}
+            {item.note && <p className="text-gray-400 mt-0.5">{t("ro.note")}: {item.note}</p>}
           </div>
           <span className="text-gray-500 whitespace-nowrap">
             ฿{(item.price || 0) * (item.qty || 1)}
@@ -121,22 +119,22 @@ const ItemsSection = ({ items }) => (
   </div>
 );
 
-const TotalsSection = ({ order }) => (
+const TotalsSection = ({ order, t }) => (
   <div className="rounded-2xl bg-gray-50 p-3 space-y-1 mb-3 text-sm">
     {order.subtotal != null && (
       <div className="flex justify-between text-gray-500 font-medium">
-        <span>Subtotal</span>
+        <span>{t("ro.subtotal")}</span>
         <span>฿{order.subtotal}</span>
       </div>
     )}
     {order.deliveryFee != null && (
       <div className="flex justify-between text-gray-500 font-medium">
-        <span>Delivery Fee</span>
+        <span>{t("ro.deliveryFee")}</span>
         <span>฿{order.deliveryFee}</span>
       </div>
     )}
     <div className="flex justify-between font-black text-gray-900">
-      <span>Total</span>
+      <span>{t("ro.total")}</span>
       <span className="text-primary text-lg">฿{order.grandTotal ?? order.subtotal ?? 0}</span>
     </div>
   </div>
@@ -144,6 +142,7 @@ const TotalsSection = ({ order }) => (
 
 // การ์ดรายละเอียดออเดอร์ของไรเดอร์: ข้อมูลลูกค้า + รายการอาหาร + แผนที่/ระยะทาง + ปุ่ม Maps/โทร/แชท + ปุ่มเปลี่ยนสถานะ
 export default function RiderOrderCard({ order, effectiveStatus, storeLocation, networkOnline = true, busy = false, disabled = false, onAccept, onReject, onStartDelivering, onDelivered }) {
+  const { t } = usePreferences();
   const [showMap, setShowMap] = useState(false);
   // optimistic เฉพาะหลังกดปุ่ม ระหว่างรอ nearPressed จริงจาก snapshot ของออเดอร์
   const [nearPressedLocally, setNearPressedLocally] = useState(false);
@@ -184,17 +183,17 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
           <p className="text-xs font-medium text-gray-400 mt-0.5">{formatDate(order.createdAt)}</p>
         </div>
         <Badge color={STATUS_BADGE_COLOR[effectiveStatus] ?? "blue"}>
-          {STATUS_LABEL[effectiveStatus] || effectiveStatus}
+          {t(`ro.status.${effectiveStatus}`)}
         </Badge>
       </div>
 
-      <CustomerSection order={order} address={dAddress} />
-      <ItemsSection items={order.items} />
-      <TotalsSection order={order} />
+      <CustomerSection order={order} address={dAddress} t={t} />
+      <ItemsSection items={order.items} t={t} />
+      <TotalsSection order={order} t={t} />
 
       {route && (
         <p className="text-xs text-gray-400 font-medium mb-3">
-          {route.distanceKm.toFixed(1)} km from store
+          {t("ro.kmFromStore", { km: route.distanceKm.toFixed(1) })}
           {route.durationMin != null && <> · ~{route.durationMin} min</>}
         </p>
       )}
@@ -209,7 +208,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
           address={dAddress}
           mode="navigate"
           disabled={!networkOnline}
-          disabledLabel="🧭 ออฟไลน์ — นำทางไม่ได้"
+          disabledLabel={t("ro.offlineNav")}
           style={{ flex: 1, minWidth: "130px" }}
         />
         {/* ไม่มีเบอร์ = เดิมเปิด "tel:undefined" ให้เครื่องโทรออกเป็นค่าว่าง — ปิดปุ่มไปเลยชัดกว่า
@@ -222,7 +221,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
           }}
         >
           <Phone size={16} />
-          {callHref ? "Call Customer" : "No Phone Number"}
+          {callHref ? t("ro.callCustomer") : t("ro.noPhone")}
         </Button>
       </div>
 
@@ -230,7 +229,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
       {dLat != null && dLng != null && (
         <Button variant="outline" className="w-full !py-2 text-sm mb-2" onClick={() => setShowMap((v) => !v)}>
           <MapPin size={16} />
-          {showMap ? "Hide Map" : "View Customer Map"}
+          {showMap ? t("ro.hideMap") : t("ro.viewMap")}
         </Button>
       )}
       {showMap && (
@@ -245,7 +244,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
           <>
             <Button className="flex-1" onClick={() => onAccept(order)} disabled={busy || disabled}>
               <Package size={16} />
-              {busy ? "Accepting..." : "Accept Delivery"}
+              {busy ? t("ro.accepting") : t("ro.acceptDelivery")}
             </Button>
             <Button
               variant="outline"
@@ -254,24 +253,24 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
               disabled={busy || disabled}
             >
               <X size={16} />
-              Reject
+              {t("ro.reject")}
             </Button>
           </>
         )}
         {effectiveStatus === PICKED_UP_STATUS && (
           <Button className="flex-1" onClick={() => onStartDelivering(order)}>
             <Bike size={16} />
-            Start Delivering
+            {t("ro.startDelivering")}
           </Button>
         )}
         {effectiveStatus === DELIVERING_STATUS && (
           <>
             <Button variant="outline" className="flex-1" onClick={markNear} disabled={nearNotified || nearPressing}>
               <MapPin size={16} />
-              {nearNotified ? "Customer Notified" : nearPressing ? "Notifying..." : "I'm Near"}
+              {nearNotified ? t("ro.customerNotified") : nearPressing ? t("ro.notifying") : t("ro.imNear")}
             </Button>
             <Button className="flex-1" onClick={() => onDelivered(order)}>
-              Delivered
+              {t("ro.delivered")}
             </Button>
           </>
         )}
@@ -280,7 +279,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
       {/* Global Timeline (Phase 4.0) — order.timeline event history, shared component */}
       {Array.isArray(order.timeline) && order.timeline.length > 0 && (
         <div className="mt-3 pt-3 border-t border-gray-100">
-          <p className="text-xs font-black text-gray-400 mb-2">History</p>
+          <p className="text-xs font-black text-gray-400 mb-2">{t("ro.historyLabel")}</p>
           <OrderTimeline order={order} />
         </div>
       )}
@@ -288,7 +287,7 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
       {/* Audit Log (Phase 4.1) — read-only order.audit trail, shared component */}
       {Array.isArray(order.audit) && order.audit.length > 0 && (
         <div className="mt-3 pt-3 border-t border-gray-100">
-          <p className="text-xs font-black text-gray-400 mb-2">Audit Log</p>
+          <p className="text-xs font-black text-gray-400 mb-2">{t("ro.auditLabel")}</p>
           <AuditLog order={order} />
         </div>
       )}

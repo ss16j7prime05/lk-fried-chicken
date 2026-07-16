@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Link } from "react-router-dom";
-import { Package, LogOut, User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail, Settings, History, Wallet, Bell } from "lucide-react";
+import { User, Phone, Bike, CalendarCheck, Star, MessageSquare, Mail, Package } from "lucide-react";
 import { useAuth } from "./AuthContext.jsx";
+import { usePreferences } from "./context/PreferencesContext";
 import { useRiderOrders } from "./rider/useRiderOrders";
 import { Card } from "./components/ui/Card";
-import { Button } from "./components/ui/Button";
 import { Badge } from "./components/ui/Badge";
 import { Loading } from "./components/ui/Loading";
 
@@ -20,8 +19,8 @@ const isToday = (d, ref) =>
   d.getMonth() === ref.getMonth() &&
   d.getFullYear() === ref.getFullYear();
 
-const vehicleLabel = (v) =>
-  v === "car" ? "รถยนต์" : v === "motorcycle" ? "มอเตอร์ไซค์" : v || "-";
+const vehicleLabel = (v, t) =>
+  v === "car" ? t("ro.vehicle.car") : v === "motorcycle" ? t("ro.vehicle.motorcycle") : v === "bicycle" ? t("ro.vehicle.bicycle") : v || "-";
 
 const StatCard = ({ icon: Icon, label, value }) => (
   <Card className="p-5 flex items-center gap-4">
@@ -36,17 +35,18 @@ const StatCard = ({ icon: Icon, label, value }) => (
 );
 
 const InfoRow = ({ icon: Icon, label, value }) => (
-  <div className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-    <div className="flex items-center gap-3">
-      <Icon size={18} className="text-gray-400" />
+  <div className="flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0">
+    <div className="flex items-center gap-3 min-w-0">
+      <Icon size={18} className="text-gray-400 shrink-0" />
       <span className="font-bold text-gray-700 text-sm">{label}</span>
     </div>
-    <span className="font-bold text-gray-900 text-sm">{value}</span>
+    <span className="font-bold text-gray-900 text-sm text-right truncate">{value}</span>
   </div>
 );
 
 function RiderProfile() {
-  const { profile, logout } = useAuth();
+  const { profile } = useAuth();
+  const { t } = usePreferences();
   // ไม่มี uid (ปกติไม่เกิด เพราะผ่าน ProtectedRoute มาแล้ว) = ไม่มีอะไรให้โหลด
   const { orders, loading } = useRiderOrders(auth.currentUser?.uid);
   const [reviews, setReviews] = useState([]);
@@ -74,83 +74,39 @@ function RiderProfile() {
   const displayName = profile?.name || profile?.riderName || "-";
 
   if (loading) {
-    return <Loading text="Loading profile..." />;
+    return <Loading text={t("ro.loading.profile")} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto p-4 sm:p-8 space-y-6">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-black text-gray-900">Rider Profile</h1>
-          <div className="flex gap-2">
-            <Link to="/rider">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Package size={16} />
-                Jobs
-              </Button>
-            </Link>
-            <Link to="/rider/history">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <History size={16} />
-                History
-              </Button>
-            </Link>
-            <Link to="/rider/earnings">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Wallet size={16} />
-                Earnings
-              </Button>
-            </Link>
-            <Link to="/rider/notifications">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Bell size={16} />
-                Notifications
-              </Button>
-            </Link>
-            <Link to="/rider/settings">
-              <Button variant="outline" className="!px-4 !py-2 text-sm">
-                <Settings size={16} />
-                Settings
-              </Button>
-            </Link>
-            <Button
-              variant="outline"
-              className="!px-4 !py-2 text-sm text-secondary border-secondary/30 hover:border-secondary"
-              onClick={logout}
-            >
-              <LogOut size={16} />
-              Logout
-            </Button>
-          </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-black text-gray-900">{t("ro.profile.title")}</h1>
+
+      <Card className="p-6 flex items-center gap-5">
+        <div className="w-16 h-16 rounded-full bg-primary-light text-primary flex items-center justify-center text-2xl font-black ring-4 ring-primary-light shrink-0">
+          {displayName.charAt(0).toUpperCase()}
         </div>
-
-        <Card className="p-6 flex items-center gap-5">
-          <div className="w-16 h-16 rounded-full bg-primary-light text-primary flex items-center justify-center text-2xl font-black ring-4 ring-primary-light shrink-0">
-            {displayName.charAt(0).toUpperCase()}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-black text-gray-900 truncate">{displayName}</h2>
+            {profile?.status === "approved" && <Badge color="green">{t("ro.approved")}</Badge>}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xl font-black text-gray-900 truncate">{displayName}</h2>
-              {profile?.status === "approved" && <Badge color="green">Approved</Badge>}
-            </div>
-            <p className="text-sm text-gray-500 font-medium mt-1">{profile?.phone || "-"}</p>
-          </div>
-        </Card>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard icon={Package} label="Total Jobs" value={totalJobs} />
-          <StatCard icon={CalendarCheck} label="Today" value={todayJobs} />
-          <StatCard icon={Star} label="Rating" value={rating} />
-          <StatCard icon={MessageSquare} label="Reviews" value={reviewCount} />
+          <p className="text-sm text-gray-500 font-medium mt-1">{profile?.phone || "-"}</p>
         </div>
+      </Card>
 
-        <Card className="p-6">
-          <InfoRow icon={User} label="Name" value={displayName} />
-          <InfoRow icon={Phone} label="Phone" value={profile?.phone || "-"} />
-          <InfoRow icon={Mail} label="Email" value={profile?.email || "-"} />
-          <InfoRow icon={Bike} label="Vehicle" value={vehicleLabel(profile?.vehicleType)} />
-        </Card>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard icon={Package} label={t("ro.totalJobs")} value={totalJobs} />
+        <StatCard icon={CalendarCheck} label={t("ro.today")} value={todayJobs} />
+        <StatCard icon={Star} label={t("ro.rating")} value={rating} />
+        <StatCard icon={MessageSquare} label={t("ro.reviews")} value={reviewCount} />
       </div>
+
+      <Card className="p-6">
+        <InfoRow icon={User} label={t("ro.name")} value={displayName} />
+        <InfoRow icon={Phone} label={t("ro.phone")} value={profile?.phone || "-"} />
+        <InfoRow icon={Mail} label={t("ro.email")} value={profile?.email || "-"} />
+        <InfoRow icon={Bike} label={t("ro.vehicle")} value={vehicleLabel(profile?.vehicleType, t)} />
+      </Card>
     </div>
   );
 }

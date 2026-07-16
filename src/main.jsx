@@ -24,6 +24,7 @@ const SignupStore = lazy(() => import('./signup/SignupStore.jsx'))
 const SignupRider = lazy(() => import('./signup/SignupRider.jsx'))
 
 // Rider — production UI
+const RiderLayout = lazy(() => import('./layouts/RiderLayout.jsx').then((m) => ({ default: m.RiderLayout })))
 const RiderProfile = lazy(() => import('./RiderProfile.jsx'))
 const RiderOrdersDashboard = lazy(() => import('./rider/RiderOrdersDashboard.jsx'))
 const RiderSettings = lazy(() => import('./rider/RiderSettings.jsx'))
@@ -95,55 +96,21 @@ createRoot(document.getElementById('root')).render(
             }
           />
 
-          {/* Rider — production UI */}
+          {/* Rider — production UI (RiderLayout: sidebar on desktop, bottom nav on mobile) */}
           <Route
-            path="/rider"
             element={
               <ProtectedRoute role="rider" loginPath="/login">
-                <RiderOrdersDashboard />
+                <RiderLayout />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/rider/profile"
-            element={
-              <ProtectedRoute role="rider" loginPath="/login">
-                <RiderProfile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rider/settings"
-            element={
-              <ProtectedRoute role="rider" loginPath="/login">
-                <RiderSettings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rider/history"
-            element={
-              <ProtectedRoute role="rider" loginPath="/login">
-                <RiderOrderHistory />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rider/earnings"
-            element={
-              <ProtectedRoute role="rider" loginPath="/login">
-                <RiderEarnings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rider/notifications"
-            element={
-              <ProtectedRoute role="rider" loginPath="/login">
-                <RiderNotifications />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route path="/rider" element={<RiderOrdersDashboard />} />
+            <Route path="/rider/profile" element={<RiderProfile />} />
+            <Route path="/rider/settings" element={<RiderSettings />} />
+            <Route path="/rider/history" element={<RiderOrderHistory />} />
+            <Route path="/rider/earnings" element={<RiderEarnings />} />
+            <Route path="/rider/notifications" element={<RiderNotifications />} />
+          </Route>
 
           {/* Store — production UI (StoreLayout dashboard at /store) */}
           <Route
