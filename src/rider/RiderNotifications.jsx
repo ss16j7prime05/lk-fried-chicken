@@ -18,6 +18,7 @@ import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
+import { SectionTitle } from "./riderUi";
 
 // เหมือนหน้า Notifications ของลูกค้า: read-flag ไม่มีที่เก็บใน Firestore
 // (rules ไม่มี collection notifications และห้ามเพิ่ม schema) จึงเก็บ per-device
@@ -135,10 +136,6 @@ const NotificationCard = ({ notification, onRead, t }) => {
     </div>
   );
 };
-
-const SectionTitle = ({ children }) => (
-  <h2 className="text-base font-black text-gray-900">{children}</h2>
-);
 
 // แจ้งเตือนของไรเดอร์: derive จากออเดอร์จริงที่ riderId == uid (ไม่มี collection notifications)
 // 1 ออเดอร์ = 1 แจ้งเตือนตามสถานะปัจจุบัน เหมือนแนวทางหน้า Notifications ของลูกค้า

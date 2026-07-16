@@ -9,6 +9,8 @@ import { Card } from "./components/ui/Card";
 import { Badge } from "./components/ui/Badge";
 import { Button } from "./components/ui/Button";
 import { RiderCardGridSkeleton } from "./components/ui/Skeleton";
+import { StatCard } from "./rider/riderUi";
+import { vehicleLabel } from "./rider/riderFormat";
 
 const toDate = (createdAt) => {
   if (!createdAt) return null;
@@ -19,21 +21,6 @@ const isToday = (d, ref) =>
   d.getDate() === ref.getDate() &&
   d.getMonth() === ref.getMonth() &&
   d.getFullYear() === ref.getFullYear();
-
-const vehicleLabel = (v, t) =>
-  v === "car" ? t("ro.vehicle.car") : v === "motorcycle" ? t("ro.vehicle.motorcycle") : v === "bicycle" ? t("ro.vehicle.bicycle") : v || "-";
-
-const StatCard = ({ icon: Icon, label, value }) => (
-  <Card className="p-5 flex items-center gap-4">
-    <div className="p-3 rounded-2xl bg-primary-light text-primary shrink-0">
-      <Icon size={22} />
-    </div>
-    <div className="min-w-0">
-      <p className="text-xs font-bold text-gray-400 uppercase truncate">{label}</p>
-      <p className="text-lg font-black text-gray-900 truncate">{value}</p>
-    </div>
-  </Card>
-);
 
 const InfoRow = ({ icon: Icon, label, value }) => (
   <div className="flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0">

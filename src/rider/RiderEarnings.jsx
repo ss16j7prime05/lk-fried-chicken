@@ -15,6 +15,7 @@ import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
 import { RiderCardGridSkeleton } from "../components/ui/Skeleton";
+import { SectionTitle, StatCard } from "./riderUi";
 
 const RECENT_LIMIT = 10;
 
@@ -51,23 +52,6 @@ const fmtKm = (n) => `${Number(n || 0).toFixed(1)} km`;
 
 const sumBy = (list, fn) => list.reduce((s, o) => s + fn(o), 0);
 const avgPer = (total, count) => (count > 0 ? total / count : 0);
-
-/* ── UI bits (same look as RiderProfile stat cards) ── */
-const SectionTitle = ({ children }) => (
-  <h2 className="text-base font-black text-gray-900">{children}</h2>
-);
-
-const StatCard = ({ icon: Icon, label, value }) => (
-  <Card className="p-5 flex items-center gap-4">
-    <div className="p-3 rounded-2xl bg-primary-light text-primary shrink-0">
-      <Icon size={22} />
-    </div>
-    <div className="min-w-0">
-      <p className="text-xs font-bold text-gray-400 uppercase truncate">{label}</p>
-      <p className="text-lg font-black text-gray-900 truncate">{value}</p>
-    </div>
-  </Card>
-);
 
 const RecentDeliveryCard = ({ order, t }) => {
   const status = normalizeStatus(order.status);

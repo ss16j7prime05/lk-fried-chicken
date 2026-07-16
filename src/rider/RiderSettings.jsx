@@ -22,10 +22,12 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 import { Loading } from "../components/ui/Loading";
+import { SectionTitle as BaseSectionTitle } from "./riderUi";
+import { vehicleLabel } from "./riderFormat";
 
-const SectionTitle = ({ children }) => (
-  <h2 className="text-base font-black text-gray-900 mb-4">{children}</h2>
-);
+// Settings groups sit directly on the card (no space-y wrapper), so the heading
+// carries its own bottom margin — thin alias over the shared SectionTitle markup.
+const SectionTitle = ({ children }) => <BaseSectionTitle className="mb-4">{children}</BaseSectionTitle>;
 
 const Toggle = ({ checked, onChange }) => (
   <button
@@ -97,9 +99,6 @@ const Segmented = ({ options, value, onChange }) => (
     ))}
   </div>
 );
-
-const vehicleLabel = (v, t) =>
-  v === "car" ? t("ro.vehicle.car") : v === "motorcycle" ? t("ro.vehicle.motorcycle") : v === "bicycle" ? t("ro.vehicle.bicycle") : v || "-";
 
 // โชว์เฉพาะเลขท้ายบัญชี ป้องกันเลขเต็มค้างบนหน้าจอ
 const maskAccountNumber = (num) => {

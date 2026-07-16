@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### Changed (Rider UI dedup + headless visual verification)
+- **Refactor duplication → reusable components**: `StatCard` (Profile+Earnings) และ `SectionTitle`
+  (Earnings+Settings+Notifications) ย้ายไป `src/rider/riderUi.jsx` ตัวเดียว ; `vehicleLabel`
+  (Profile+Settings) ย้ายไป `rider/riderFormat.js` — ตัดโค้ดซ้ำ byte-for-byte ออกหมด, มาร์กอัป
+  spacing/typography เป็น SSOT
+- **ตรวจด้วยตาแบบ headless จริง** (Chromium ผ่าน playwright-core, dev tool ชั่วคราว ไม่ commit):
+  ทุกหน้าไรเดอร์ × 3 breakpoint (390 / 768 / 1280) → **horizontal overflow = 0 ทั้ง 20 เคส**,
+  ไม่มี console error ของแอป, ตรวจ light + dark + ภาษาไทย: การ์ด/ปุ่ม/badge/skeleton/empty/error
+  + ตาราง Earnings (scroll ในกล่องตัวเอง) + Settings toggle/segmented + dark mode ครบ ไม่มี defect
+
 ### Changed (Rider UI/UX polish — design system, a11y, responsiveness; no backend/schema/API/feature changes)
 - **Design system (additive, backward-compatible — shared primitives, ทุก role ได้ประโยชน์)**:
   `Button` เพิ่ม `focus-visible` ring (คีย์บอร์ด a11y), state `loading` (spinner), variant `danger`
