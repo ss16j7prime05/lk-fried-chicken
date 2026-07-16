@@ -67,6 +67,16 @@
   ต้องยกไปที่ระดับ layout/app (งานใหญ่กว่า — ควรทำเป็น task แยก)
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **R-06 Order History** — `useRiderOrders` (แหล่งข้อมูลของ Order History + Earnings/
+  Notifications/Profile) **ไม่มี error handler ใน `onSnapshot`** → feed พัง = `loading` ค้าง true
+  ตลอดกาล หน้า Order History หมุน Loading ค้างเงียบ ๆ (คลาสเดียวกับที่ R-01/R-05 แก้ feed อื่น)
+  → เพิ่ม error callback (`logError` + `error` + หยุด loading) คืน `{ orders, loading, error }`
+  + หน้า Order History โชว์แถบ error แบบเดียวกับ Dashboard (ไม่ redesign UI ที่ล็อกไว้).
+  build ผ่าน, 0 ESLint error ใหม่ — **รอ QA จริงบนเว็บ (auth-gated) + ยืนยัน Vercel production**
+- 2026-07-16 **Rider UI/UX pass (ล็อกแล้ว)** — RiderLayout (sidebar เดสก์ท็อป / bottom nav มือถือ:
+  Jobs/History/Earnings/Profile/Settings), Settings ต่อ theme+ภาษาเข้า PreferencesContext (ใช้ทันที
+  + เก็บ users/{uid} + คืนค่าหลังรีเฟรช), History cards ใหม่, i18n ทั้งชุด (`ro.*` EN+TH). QA ผ่าน
+  → **ล็อก UI ไรเดอร์ ห้าม redesign อีกจนกว่าจะเจอบั๊ก production**
 - 2026-07-16 **R-05 Chat & Call** — แชทเดิม **ส่งได้อย่างเดียว ลูกค้าไม่มีทางเห็น**: `<Chat>` มีแค่
   บนการ์ดไรเดอร์ + `Rider.jsx`/`TrackOrder.jsx` ที่เป็น legacy ไม่ถูก route ส่วนหน้าลูกค้าจริง
   (`pages/customer/OrderDetail.jsx`) **ไม่มีแชทเลย** → ต่อ `<Chat>` ตัวเดิม (SSOT เดียวกัน)

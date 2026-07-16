@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Fixed (R-06 Order History — feed failed silently, page spun forever)
+- **บั๊กหลัก: `useRiderOrders` ไม่มี error handler ใน `onSnapshot`** — hook นี้เป็นแหล่งข้อมูล
+  ของหน้า Order History (และ Earnings / Notifications / Profile) ถ้า feed พัง (สิทธิ์ / index /
+  ออฟไลน์) `loading` ค้าง `true` ตลอดกาล → หน้า Order History **หมุน Loading ค้างเงียบ ๆ**
+  ไม่มีการแจ้งเตือน (คลาสเดียวกับ "พังเงียบ / ค้างหน้า Loading" ที่ R-01/R-05 แก้ให้ feed อื่นแล้ว)
+  → เพิ่ม error callback: `logError` + set `error` + หยุด `loading` และคืน `{ orders, loading, error }`
+- **หน้า Order History แสดงแถบ error จริง** — เดิมไม่มี error state เลย ตอนนี้โชว์แถบแดง
+  (ใช้ pattern/มาร์กอัปเดียวกับแถบ error ของ Rider Dashboard — ไม่ได้ redesign) แทนการหมุนค้าง
+  หรือขึ้น "ยังไม่มีงาน" ทั้งที่โหลดไม่สำเร็จ ; หน้าอื่นที่ใช้ hook เดียวกันหยุดหมุนค้างตามไปด้วย
+- build ผ่าน, ESLint คงที่ (0 error ใหม่) — Rider UI ที่ QA ผ่านแล้วไม่ถูกแตะ (เพิ่มเฉพาะ data path
+  + แถบ error) ; keys `ro.history.loadErrTitle/Desc` ครบทั้ง EN/TH
+
 ### Fixed / Added (R-05 Chat & Call — chat was write-only, unnotified, and world-readable)
 - **บั๊กหลัก: แชทส่งได้อย่างเดียว ลูกค้าไม่มีทางเห็น** — `<Chat>` ถูก render แค่บนการ์ดไรเดอร์
   กับ `Rider.jsx`/`TrackOrder.jsx` ซึ่ง **เป็น legacy และไม่ถูก route ใน `main.jsx`** ส่วนหน้าที่

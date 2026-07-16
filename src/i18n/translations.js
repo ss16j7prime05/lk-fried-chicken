@@ -1253,6 +1253,8 @@ export const translations = {
     "ro.history.emptyTitle": "No orders yet",
     "ro.history.emptyDesc": "Deliveries you take will show up here.",
     "ro.history.emptyDescFiltered": "No deliveries in this category yet.",
+    "ro.history.loadErrTitle": "Can't load order history",
+    "ro.history.loadErrDesc": "Check your connection and try again.",
     "ro.showMore": "Show More ({count})",
 
     "ro.earnings.title": "Earnings",
@@ -2622,6 +2624,8 @@ export const translations = {
     "ro.history.emptyTitle": "ยังไม่มีงาน",
     "ro.history.emptyDesc": "งานที่คุณรับจะแสดงที่นี่",
     "ro.history.emptyDescFiltered": "ยังไม่มีงานในหมวดนี้",
+    "ro.history.loadErrTitle": "โหลดประวัติงานไม่สำเร็จ",
+    "ro.history.loadErrDesc": "ตรวจสอบการเชื่อมต่อแล้วลองใหม่",
     "ro.showMore": "ดูเพิ่ม ({count})",
 
     "ro.earnings.title": "รายได้",

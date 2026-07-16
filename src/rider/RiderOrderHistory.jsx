@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { MapPin, User, Package, Calendar } from "lucide-react";
+import { MapPin, User, Package, Calendar, WifiOff } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
 import { useRiderOrders } from "./useRiderOrders";
@@ -86,7 +86,7 @@ const HistoryCard = ({ order, t }) => {
 export default function RiderOrderHistory() {
   const { user } = useAuth();
   const { t } = usePreferences();
-  const { orders, loading } = useRiderOrders(user?.uid);
+  const { orders, loading, error } = useRiderOrders(user?.uid);
   const [filter, setFilter] = useState("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -133,7 +133,19 @@ export default function RiderOrderHistory() {
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {/* feed พัง = ไม่มีข้อมูลให้เชื่อถือ ต้องบอกตรง ๆ แทนที่จะหมุน Loading ค้าง หรือโชว์
+          "ยังไม่มีงาน" ทั้งที่จริง ๆ โหลดไม่ขึ้น (R-06 — ใช้แถบ error แบบเดียวกับ Dashboard) */}
+      {error && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
+          <WifiOff size={20} className="shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="font-black text-sm">{t("ro.history.loadErrTitle")}</p>
+            <p className="text-xs font-medium text-red-500 mt-0.5">{t("ro.history.loadErrDesc")}</p>
+          </div>
+        </div>
+      )}
+
+      {error ? null : filtered.length === 0 ? (
         <EmptyState
           icon="🛵"
           title={t("ro.history.emptyTitle")}
