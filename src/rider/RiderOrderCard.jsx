@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { doc, updateDoc } from "firebase/firestore";
-import { Bike, CreditCard, MapPin, Package, Phone, User, X } from "lucide-react";
+import { Bike, ChevronRight, CreditCard, MapPin, Package, Phone, User, X } from "lucide-react";
 import { db } from "../firebase";
 import { usePreferences } from "../context/PreferencesContext";
 import Chat from "../Chat.jsx";
@@ -275,6 +276,14 @@ export default function RiderOrderCard({ order, effectiveStatus, storeLocation, 
           </>
         )}
       </div>
+
+      {/* Open the premium Job Details view (LINE MAN-style flow) */}
+      <Link
+        to={`/rider/job/${order.id}`}
+        className="mt-3 flex items-center justify-center gap-1 text-sm font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg py-1"
+      >
+        {t("ro.jobDetails.title")} <ChevronRight size={16} />
+      </Link>
 
       {/* Global Timeline (Phase 4.0) — order.timeline event history, shared component */}
       {Array.isArray(order.timeline) && order.timeline.length > 0 && (

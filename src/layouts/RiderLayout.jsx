@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import {
-  Package, History, Wallet, User, Settings as SettingsIcon, LogOut,
+  Home, Map as MapIcon, History, Wallet, Settings as SettingsIcon, LogOut,
   PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { usePreferences } from "../context/PreferencesContext";
@@ -25,8 +25,9 @@ const readCollapsed = () => {
 export const RiderLayout = () => {
   const { pathname } = useLocation();
   const { t } = usePreferences();
-  const { logout } = useAuth();
+  const { logout, profile } = useAuth();
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const avatarChar = (profile?.name || profile?.riderName || "R").charAt(0).toUpperCase();
 
   useEffect(() => {
     try {
@@ -36,17 +37,20 @@ export const RiderLayout = () => {
     }
   }, [collapsed]);
 
+  // LINE MAN-style 5-menu bottom nav. Profile lives on the avatar (top-right), not the nav.
   const navItems = [
-    { icon: Package, label: t("ro.nav.jobs"), path: "/rider" },
+    { icon: Home, label: t("ro.nav.home"), path: "/rider" },
+    { icon: MapIcon, label: t("ro.nav.jobMap"), path: "/rider/map" },
     { icon: History, label: t("ro.nav.history"), path: "/rider/history" },
-    { icon: Wallet, label: t("ro.nav.earnings"), path: "/rider/earnings" },
-    { icon: User, label: t("ro.nav.profile"), path: "/rider/profile" },
+    { icon: Wallet, label: t("ro.nav.finance"), path: "/rider/earnings" },
     { icon: SettingsIcon, label: t("ro.nav.settings"), path: "/rider/settings" },
   ];
 
-  // Exact match for "/rider", prefix match for the sub-routes.
+  // Home is active on "/rider" and the job-detail sub-flow; others prefix-match.
   const isActive = (path) =>
-    path === "/rider" ? pathname === "/rider" : pathname === path || pathname.startsWith(`${path}/`);
+    path === "/rider"
+      ? pathname === "/rider" || pathname.startsWith("/rider/job")
+      : pathname === path || pathname.startsWith(`${path}/`);
 
   return (
     <div
@@ -54,8 +58,15 @@ export const RiderLayout = () => {
         collapsed ? "md:pl-20" : "md:pl-64"
       }`}
     >
-      {/* Notification Center bell — floating, all breakpoints */}
-      <div className="fixed top-3 right-3 z-[55]">
+      {/* Floating top-right: profile avatar + notification bell (all breakpoints) */}
+      <div className="fixed top-3 right-3 z-[55] flex items-center gap-2">
+        <Link
+          to="/rider/profile"
+          aria-label={t("ro.nav.profile")}
+          className="w-11 h-11 rounded-full bg-white shadow-soft border border-gray-50 flex items-center justify-center font-black text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        >
+          {avatarChar}
+        </Link>
         <NotificationBell className="bg-white shadow-soft border border-gray-50" />
       </div>
 

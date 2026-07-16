@@ -27,6 +27,8 @@ const SignupRider = lazy(() => import('./signup/SignupRider.jsx'))
 const RiderLayout = lazy(() => import('./layouts/RiderLayout.jsx').then((m) => ({ default: m.RiderLayout })))
 const RiderProfile = lazy(() => import('./RiderProfile.jsx'))
 const RiderOrdersDashboard = lazy(() => import('./rider/RiderOrdersDashboard.jsx'))
+const RiderJobDetails = lazy(() => import('./rider/RiderJobDetails.jsx'))
+const RiderJobMap = lazy(() => import('./rider/RiderJobMap.jsx'))
 const RiderSettings = lazy(() => import('./rider/RiderSettings.jsx'))
 const RiderOrderHistory = lazy(() => import('./rider/RiderOrderHistory.jsx'))
 const RiderEarnings = lazy(() => import('./rider/RiderEarnings.jsx'))
@@ -105,6 +107,8 @@ createRoot(document.getElementById('root')).render(
             }
           >
             <Route path="/rider" element={<RiderOrdersDashboard />} />
+            <Route path="/rider/map" element={<RiderJobMap />} />
+            <Route path="/rider/job/:id" element={<RiderJobDetails />} />
             <Route path="/rider/profile" element={<RiderProfile />} />
             <Route path="/rider/settings" element={<RiderSettings />} />
             <Route path="/rider/history" element={<RiderOrderHistory />} />

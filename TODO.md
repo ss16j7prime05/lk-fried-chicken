@@ -67,6 +67,11 @@
   ต้องยกไปที่ระดับ layout/app (งานใหญ่กว่า — ควรทำเป็น task แยก)
 
 ## 🟢 เสร็จแล้ว (Done)
+- 2026-07-16 **Rider UI/UX Phase 2 (LINE MAN reference)** — Job Map เต็มจอ (Leaflet + เขต 8 กม.),
+  Job Details (timeline + stop cards + payment card + sticky action bar map ลงสถานะเดิม), bottom nav
+  5 เมนู (Home/Job Map/History/Finance/Settings + avatar), RiderTimeline/RiderPaymentCard/riderJobFlow.
+  ไม่แตะ backend/schema/API/logic — map UI ลง state เดิมเท่านั้น. build/lint ผ่าน, ตรวจ headless overflow=0.
+  **รอ QA เครื่องจริง**: map tiles/GPS สด, flow accept→ส่งสำเร็จ (auth-gated)
 - 2026-07-16 **Rider UI/UX polish** — design system (Button focus-visible/loading/danger,
   Badge red/gray, Skeleton compositions — additive), RiderLayout sidebar ย่อได้บน tablet/desktop
   + a11y (48px targets, focus-visible, aria), Order History การ์ดใหม่ (รายได้เป็นพระเอก),

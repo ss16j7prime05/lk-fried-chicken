@@ -5,6 +5,26 @@
 
 ## [Unreleased]
 
+### Added (Rider UI/UX Phase 2 — LINE MAN-style flow; presentation only, no backend/schema/API/logic)
+- **Job Map** (`/rider/map`, ใหม่): แผนที่ Leaflet เต็มจอ + **เขตจัดส่ง 8 กม.** (Circle เขียวโปร่ง
+  รอบร้าน จาก `stores/{STORE_ID}`), หมุดร้าน, ตำแหน่งไรเดอร์ (geolocation), หมุดงานว่าง (อ่านจาก
+  query เดิม status in READY_QUERY_STATUSES → เปิด Job Details), การ์ดตัวกรอง + ปุ่มลอย รีเฟรช/
+  เลเยอร์/ตำแหน่งฉัน + legend, bottom nav ทับแผนที่. ไม่ใช้ Google Maps API (Leaflet เท่านั้น)
+- **Job Details** (`/rider/job/:id`, ใหม่): timeline สถานะ + แผนที่รวม + การ์ดร้าน/ลูกค้า (โทร/แชท/
+  นำทาง) + payment card + notes + รายการ (collapse) + แชท + **แถบปุ่มติดล่าง** ที่ map ลง
+  **สถานะเดิม** (picked_up→"รับอาหารแล้ว"→delivering, delivering→"ส่งสำเร็จ"→completed) ผ่าน
+  `orderStateMachine.transition`/`acceptOrder` เดิม — ไม่มี state ใหม่ ไม่แตะ logic
+- **RiderTimeline** / **RiderPaymentCard** / **riderJobFlow** (ใหม่): timeline (เขียว=เสร็จ/
+  primary=ปัจจุบัน/เทา=รอ), payment card (ยอดใหญ่ + badge COD/พร้อมเพย์/โอน, เก็บเงิน vs จ่ายแล้ว)
+- **Bottom nav 5 เมนูสไตล์ LINE MAN**: Home / Job Map / History / Finance / Settings ; Profile
+  ย้ายไปปุ่ม avatar มุมขวาบน (ไม่เพิ่มเมนูที่ 6) ; sidebar เดสก์ท็อปย่อได้เหมือนเดิม
+- การ์ดงานหน้า Home เพิ่มลิงก์ "รายละเอียดงาน ›" เปิด Job Details
+- i18n `ro.*` ครบ EN/TH (nav/jobMap/jobDetails/step/action/pay/notes) ; keys ~45 รายการ
+- **ตรวจ headless จริง** (Chromium): timeline 4 สถานะ, payment card, bottom nav 5 เมนู, Job Map
+  (เขต 8 กม./หมุดร้าน/ปุ่มลอย/legend) — overflow=0 ทุก breakpoint, ไม่มี console error ของแอป
+- **ต้อง QA บนเครื่องจริง**: map tiles + ตำแหน่ง GPS สด + หมุดงานจริง, flow กด accept→ส่งสำเร็จ
+  บนออเดอร์จริง (auth-gated), แผนที่ preview ใน Job Details/StopCard
+
 ### Changed (Rider UI dedup + headless visual verification)
 - **Refactor duplication → reusable components**: `StatCard` (Profile+Earnings) และ `SectionTitle`
   (Earnings+Settings+Notifications) ย้ายไป `src/rider/riderUi.jsx` ตัวเดียว ; `vehicleLabel`
