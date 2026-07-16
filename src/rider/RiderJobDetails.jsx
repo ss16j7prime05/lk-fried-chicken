@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import {
   ArrowLeft, Store, User, Phone, MessageCircle, Navigation, Package,
-  ChevronDown, ChevronUp, StickyNote, MapPin, X,
+  ChevronDown, ChevronUp, StickyNote, X,
 } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID, STORE_PHONE } from "../config";
@@ -19,12 +19,11 @@ import DeliveryMap from "../location/DeliveryMap.jsx";
 import MapButton from "../location/MapButton.jsx";
 import Chat from "../Chat.jsx";
 import { Card } from "../components/ui/Card";
-import { Button } from "../components/ui/Button";
 import { Loading } from "../components/ui/Loading";
 import { EmptyState } from "../components/ui/EmptyState";
 import { RiderTimeline } from "./RiderTimeline";
 import { RiderPaymentCard } from "./RiderPaymentCard";
-import { jobActionFor } from "./riderJobFlow";
+import { RiderJobActionBar } from "./RiderJobActionBar";
 
 const FALLBACK_STORE_LAT = 13.8294079;
 const FALLBACK_STORE_LNG = 100.0529543;
@@ -93,6 +92,9 @@ export default function RiderJobDetails() {
   const [busy, setBusy] = useState(false);
   const [showItems, setShowItems] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  // UI-only sub-step within the picked_up state (no backend state): Navigate to Store →
+  // Arrived at Store → Confirm Food Pickup. Does not persist — a convenience affordance.
+  const [arrivedStore, setArrivedStore] = useState(false);
   const [storeLocation, setStoreLocation] = useState({ lat: FALLBACK_STORE_LAT, lng: FALLBACK_STORE_LNG, name: "LK Fried Chicken" });
 
   useEffect(() => {
@@ -120,7 +122,6 @@ export default function RiderJobDetails() {
   }, []);
 
   const dest = useMemo(() => (order ? getDestination(order) : { lat: null, lng: null, address: "" }), [order]);
-  const action = order ? jobActionFor(order.status) : { kind: "none" };
 
   const run = async (fn) => {
     if (busy) return;
@@ -237,28 +238,19 @@ export default function RiderJobDetails() {
       )}
 
       {/* sticky action bar — reflects the existing state, drives existing transitions */}
-      <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] md:bottom-4 z-30">
-        <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-premium border border-gray-100 p-3 space-y-2">
-          {action.kind === "accept" && (
-            <Button className="w-full h-14 text-base" loading={busy} onClick={doAccept}>{t("ro.action.accept")}</Button>
-          )}
-          {action.kind === "pickup" && (
-            <>
-              {dest.lat != null && <MapButton lat={storeLocation.lat} lng={storeLocation.lng} address={storeLocation.name} mode="navigate" label={`🧭 ${t("ro.action.goToStore")}`} style={{ width: "100%", textAlign: "center", display: "block" }} />}
-              <Button className="w-full h-14 text-base" loading={busy} onClick={doPickup}>{t("ro.action.foodPickedUp")}</Button>
-            </>
-          )}
-          {action.kind === "deliver" && (
-            <>
-              {dest.lat != null && <MapButton lat={dest.lat} lng={dest.lng} address={dest.address} mode="navigate" label={`🧭 ${t("ro.action.goToCustomer")}`} style={{ width: "100%", textAlign: "center", display: "block" }} />}
-              <Button className="w-full h-14 text-base" loading={busy} onClick={doDeliver}>{t("ro.action.deliveryComplete")}</Button>
-            </>
-          )}
-          {action.kind === "done" && (
-            <Button className="w-full h-14 text-base" onClick={() => navigate("/rider")}><MapPin size={18} /> {t("ro.action.nextJob")}</Button>
-          )}
-        </div>
-      </div>
+      <RiderJobActionBar
+        status={order.status}
+        arrivedStore={arrivedStore}
+        busy={busy}
+        storeLocation={storeLocation}
+        dest={dest}
+        onArrivedStore={() => setArrivedStore(true)}
+        onAccept={doAccept}
+        onPickup={doPickup}
+        onDeliver={doDeliver}
+        onNextJob={() => navigate("/rider")}
+        t={t}
+      />
     </div>
   );
 }

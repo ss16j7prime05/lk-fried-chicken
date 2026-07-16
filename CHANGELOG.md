@@ -5,6 +5,22 @@
 
 ## [Unreleased]
 
+### Added (Rider Phase 3 — complete the accept→delivered workflow; UI only)
+- **แถบปุ่มครบทั้ง 7 สเต็ปตามที่ผู้ใช้ระบุ** map ลง state เดิม (ยืนยันจากโค้ดจริง: `acceptOrder`
+  เขียน `status:"picked_up"`, กราฟ `picked_up→delivering→completed` คือ transition เดิมที่ R-04 ใช้):
+  Accept → (picked_up) → **Navigate to Store → Arrived at Store → Confirm Food Pickup** →
+  (delivering) → **Navigate to Customer → Delivered** → (completed) → **Next Job**
+- **"Arrived at Store"** เป็น sub-step UI ล้วน (local state) ภายใน picked_up — ไม่มี backend state
+  ใหม่ ไม่แตะ schema/logic ; ปุ่มยืนยัน (Confirm Pickup/Delivered) ยิงผ่าน `transition` เดิม
+- **แยก `RiderJobActionBar`** เป็นคอมโพเนนต์ใช้ซ้ำได้ (เลิก inline ใน RiderJobDetails — no duplicate)
+  → ทำให้ทดสอบ/เรนเดอร์ทุก state ได้
+- **ตรวจ headless จริง** ทุก state ของ flow (accept / navigate+arrived / confirm pickup / navigate+
+  delivered / next job) + timeline + Job Map — overflow=0 ทั้ง mobile/tablet/desktop, ไม่มี console
+  error ของแอป. build/lint ผ่าน
+- **ยังต้อง QA เครื่องจริง (auth-gated + เน็ต Firestore/tiles ถูกบล็อกใน env นี้)**: ล็อกอินไรเดอร์จริง
+  เดินครบ flow บนออเดอร์จริง, GPS สด + หมุดไรเดอร์/ร้าน/งานจริง + เขต 8 กม.บนแผนที่มี tile,
+  real-time order updates, notification flow
+
 ### Added (Rider UI/UX Phase 2 — LINE MAN-style flow; presentation only, no backend/schema/API/logic)
 - **Job Map** (`/rider/map`, ใหม่): แผนที่ Leaflet เต็มจอ + **เขตจัดส่ง 8 กม.** (Circle เขียวโปร่ง
   รอบร้าน จาก `stores/{STORE_ID}`), หมุดร้าน, ตำแหน่งไรเดอร์ (geolocation), หมุดงานว่าง (อ่านจาก
