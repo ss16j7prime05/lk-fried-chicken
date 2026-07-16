@@ -200,7 +200,8 @@ export const OrderDetail = () => {
       const url = await uploadSlip(slipFile);
       await submitSlip(order, url);
       setSlipFile(null);
-    } catch {
+    } catch (err) {
+      console.error("Slip submit failed (upload or Firestore write):", err);
       setSlipError(t("od.slipUploadErr"));
     } finally {
       setUploadingSlip(false);

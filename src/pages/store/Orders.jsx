@@ -85,6 +85,20 @@ export const STATUS_LABEL_EN = {
 // Translated status label for on-screen UI. t comes from usePreferences().
 const statusLabel = (t, status) => t(`so.status.${status}`) || status;
 
+// Translated payment-method label + badge colour. Supports all three methods the
+// customer can pick at checkout — cash / promptpay / transfer — so the card badge,
+// header line and receipt all read the real method (single source, no duplication).
+// Previously these spots did a binary promptpay-vs-cash check, so "โอนผ่านธนาคาร"
+// (transfer) fell through to the cash branch and showed "เงินสด".
+const paymentMethodLabel = (t, method) =>
+  method === "promptpay" ? t("so.promptpay") : method === "transfer" ? t("so.methodTransfer") : t("so.cash");
+
+const PAYMENT_METHOD_BADGE = {
+  promptpay: "bg-blue-50 text-blue-600 border-blue-100",
+  transfer: "bg-orange-50 text-orange-600 border-orange-100",
+  cash: "bg-gray-50 text-gray-500 border-gray-100",
+};
+
 const STATUS_DOT = {
   pending: "bg-red-500", accepted: "bg-yellow-500", cooking: "bg-orange-500",
   ready_for_delivery: "bg-blue-500", picked_up: "bg-indigo-500", delivering: "bg-purple-500",
@@ -223,7 +237,7 @@ const buildReceiptHtml = (order, size = "80mm") => {
         <tr class="total"><td class="bold">TOTAL</td><td class="right bold">฿${fmtMoney(order.grandTotal ?? order.subtotal)}</td></tr>
       </table>
       <hr class="sep"/>
-      <div class="center" style="font-size:${is58 ? "9px" : "10px"};">Payment: ${order.paymentMethod === "promptpay" ? "PromptPay" : "Cash on Delivery"}</div>
+      <div class="center" style="font-size:${is58 ? "9px" : "10px"};">Payment: ${order.paymentMethod === "promptpay" ? "PromptPay" : order.paymentMethod === "transfer" ? "Bank Transfer" : "Cash on Delivery"}</div>
       <div class="center" style="font-size:${is58 ? "8px" : "9px"};margin-top:4px;">ID: ${order.id}</div>
       <div class="center" style="font-size:${is58 ? "8px" : "9px"};margin-top:8px;">Thank you!</div>
     </body></html>`;
@@ -450,8 +464,8 @@ export const OrderCard = memo(function OrderCard({ order, status, selected, sele
           {order.orderType === "pickup" ? <Package size={11} /> : <Bike size={11} />}
           {order.orderType === "pickup" ? t("so.pickup") : t("so.delivery")}
         </span>
-        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${order.paymentMethod === "promptpay" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-gray-50 text-gray-500 border-gray-100"}`}>
-          {order.paymentMethod === "promptpay" ? t("so.promptpay") : t("so.cash")}
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${PAYMENT_METHOD_BADGE[order.paymentMethod] || PAYMENT_METHOD_BADGE.cash}`}>
+          {paymentMethodLabel(t, order.paymentMethod)}
         </span>
         <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-50 text-gray-500 border border-gray-100">{itemCount(order)} {itemCount(order) !== 1 ? t("so.items") : t("so.item")}</span>
         {order.estimatedMinutes && !isDone && (
@@ -617,7 +631,7 @@ export const KitchenCard = memo(function KitchenCard({ order, status, onAdvance,
             </p>
             <p className="text-xl md:text-2xl font-black text-gray-700 mt-1 truncate">{order.customerName || "—"}</p>
             <p className="text-xs font-bold text-gray-400 mt-1">
-              {order.orderType === "pickup" ? t("so.pickup") : t("so.delivery")} · {order.paymentMethod === "promptpay" ? t("so.promptpay") : t("so.cash")}
+              {order.orderType === "pickup" ? t("so.pickup") : t("so.delivery")} · {paymentMethodLabel(t, order.paymentMethod)}
             </p>
           </div>
           {/* Large elapsed clock */}

@@ -87,13 +87,30 @@ service cloud.firestore {
         (role() == "rider" && isApprovedOrLegacy() &&
           (resource.data.riderId == request.auth.uid || isReadyForDelivery()));
 
+      // ลูกค้าเจ้าของออเดอร์อัปโหลด/ส่งสลิปชำระเงินได้ (PromptPay / โอน) — จำกัดเฉพาะ
+      // ฟิลด์ที่ submitSlip แตะจริง (payment / timeline / audit) เท่านั้น ห้ามแก้ราคา
+      // รายการ เบอร์ ฯลฯ ; บังคับให้ payment.method คงเดิม (กันแก้วิธีชำระ) และ
+      // payment.status ได้แค่ "pending_verification" (ส่งสลิปให้ร้านตรวจ ไม่ใช่ตั้ง
+      // approved เอง). เดิมไม่มี rule นี้เลย -> การเขียน URL สลิปลง Firestore ถูกปฏิเสธ
+      // ทำให้อัปโหลดสลิปไม่สำเร็จและร้านไม่ได้รับสลิป
+      function isCustomerSlipUpdate() {
+        return role() == "customer" &&
+          resource.data.phone == myPhone() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["payment", "timeline", "audit"]) &&
+          request.resource.data.payment.method == resource.data.payment.method &&
+          request.resource.data.payment.status == "pending_verification";
+      }
+
       // แก้ไข / เปลี่ยนสถานะ / ยกเลิก
       // admin/store(approved) = เต็มสิทธิ์ ; rider(approved) = เฉพาะงานที่รับ (หรือพร้อมส่งเพื่อรับงาน)
+      // customer = เฉพาะการส่งสลิปของออเดอร์ตัวเอง (isCustomerSlipUpdate)
       allow update: if
         role() == "admin" ||
         (role() == "store" && isApprovedOrLegacy()) ||
         (role() == "rider" && isApprovedOrLegacy() &&
-          (resource.data.riderId == request.auth.uid || isReadyForDelivery()));
+          (resource.data.riderId == request.auth.uid || isReadyForDelivery())) ||
+        isCustomerSlipUpdate();
 
       // ลบ = admin หรือ store
       allow delete: if role() == "admin" || role() == "store";
