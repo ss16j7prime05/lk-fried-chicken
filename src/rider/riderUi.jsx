@@ -1,6 +1,6 @@
 // Shared rider presentational primitives — extracted from RiderProfile / RiderEarnings /
-// RiderSettings / RiderNotifications where they were duplicated byte-for-byte. One source
-// so spacing, radius and typography stay identical across every rider screen.
+// RiderSettings where they were duplicated byte-for-byte. One source so spacing, radius
+// and typography stay identical across every rider screen.
 import { Card } from "../components/ui/Card";
 
 // Section heading used above grouped content on the rider screens.

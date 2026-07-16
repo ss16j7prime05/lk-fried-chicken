@@ -20,14 +20,12 @@ export function flowStepIndex(status) {
   return 0;                               // ready_for_delivery (not yet accepted)
 }
 
-// Action-bar config for the current status. `to` is the next existing state to
-// transition into; `navTarget` is which map point the secondary "Navigate" opens.
+// Action kind for the current status. RiderJobActionBar renders the buttons per kind
+// and owns the labels; the transitions themselves are hardcoded in RiderJobDetails.
 export function jobActionFor(status) {
   const s = normalizeStatus(status);
-  if (s === PICKED_UP_STATUS)
-    return { kind: "pickup", to: DELIVERING_STATUS, labelKey: "ro.action.foodPickedUp", navKey: "ro.action.goToStore", navTarget: "store" };
-  if (s === DELIVERING_STATUS)
-    return { kind: "deliver", to: DELIVERED_STATUS, labelKey: "ro.action.deliveryComplete", navKey: "ro.action.goToCustomer", navTarget: "customer" };
+  if (s === PICKED_UP_STATUS) return { kind: "pickup" };
+  if (s === DELIVERING_STATUS) return { kind: "deliver" };
   if (s === DELIVERED_STATUS) return { kind: "done" };
   if (s === READY_STATUS || isReadyForDelivery(s)) return { kind: "accept" };
   return { kind: "none" };

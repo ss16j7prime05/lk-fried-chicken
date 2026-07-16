@@ -32,7 +32,6 @@ const RiderJobMap = lazy(() => import('./rider/RiderJobMap.jsx'))
 const RiderSettings = lazy(() => import('./rider/RiderSettings.jsx'))
 const RiderOrderHistory = lazy(() => import('./rider/RiderOrderHistory.jsx'))
 const RiderEarnings = lazy(() => import('./rider/RiderEarnings.jsx'))
-const RiderNotifications = lazy(() => import('./rider/RiderNotifications.jsx'))
 
 // Admin — production UI
 const AdminControlCenter = lazy(() => import('./admin/AdminControlCenter.jsx'))
@@ -113,7 +112,6 @@ createRoot(document.getElementById('root')).render(
             <Route path="/rider/settings" element={<RiderSettings />} />
             <Route path="/rider/history" element={<RiderOrderHistory />} />
             <Route path="/rider/earnings" element={<RiderEarnings />} />
-            <Route path="/rider/notifications" element={<RiderNotifications />} />
           </Route>
 
           {/* Store — production UI (StoreLayout dashboard at /store) */}

@@ -59,7 +59,7 @@ const StopCard = ({ index, kind, title, name, address, lat, lng, storeLocation, 
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {tel && <RoundAction icon={Phone} label={t("ro.callCustomer")} href={tel} />}
-          {onChat && <RoundAction icon={MessageCircle} label={t("ro.nav.notifications")} onClick={onChat} />}
+          {onChat && <RoundAction icon={MessageCircle} label={t("ro.chat")} onClick={onChat} />}
         </div>
       </div>
 
@@ -204,7 +204,7 @@ export default function RiderJobDetails() {
 
       {/* items (collapsible) */}
       <Card className="p-5">
-        <button type="button" onClick={() => setShowItems((v) => !v)} className="w-full flex items-center justify-between gap-3 focus-visible:outline-none">
+        <button type="button" onClick={() => setShowItems((v) => !v)} aria-expanded={showItems} className="w-full flex items-center justify-between gap-3 focus-visible:outline-none">
           <span className="flex items-center gap-2 text-sm font-black text-gray-700"><Package size={16} className="text-gray-400" /> {t("ro.items", { count: items.reduce((s, i) => s + (i.qty || 1), 0) })}</span>
           <span className="text-xs font-bold text-primary flex items-center gap-1">{showItems ? t("ro.hideItems") : t("ro.viewItems")}{showItems ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
         </button>

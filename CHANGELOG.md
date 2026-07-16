@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### Removed / Fixed (Rider Phase 4 — production hardening: dead-code removal + a11y)
+- **ลบเพจ Notifications ที่เข้าไม่ถึงแล้ว (dead code)**: `rider/RiderNotifications.jsx` +
+  route `/rider/notifications` + lazy import — ยืนยันว่าไม่มีลิงก์/ไม่มี notification actionUrl ชี้มา
+  (NotificationBell dropdown แทนที่ไปแล้วตั้งแต่ Phase 2). ลบคีย์ i18n ที่ใช้เฉพาะเพจนี้ ~28 คีย์ ×
+  EN/TH (ro.notif.*, ro.cat.*, ro.msg.*, ro.markAllRead, ro.new, ro.read, ro.unread, ro.earlier,
+  ro.min/hr/dayAgo, ro.nav.notifications)
+- **ตัด field ตายใน `jobActionFor`** (labelKey/navKey/navTarget/to — ไม่มีใครอ่าน) เหลือ `{ kind }`
+  → ทำให้คีย์ `ro.action.foodPickedUp`/`ro.action.deliveryComplete` ไม่ถูกใช้ จึงลบทิ้งทั้ง EN/TH
+- **แก้ a11y**: ปุ่มแชทในการ์ดลูกค้า (Job Details) เดิม aria-label ผิดเป็น "Notifications" → เพิ่มคีย์
+  `ro.chat` ใช้แทน ; เพิ่ม `aria-expanded` ให้ปุ่มพับ/กางรายการอาหาร
+- **Performance audit**: `useDeliveryBroadcast` กัน identity churn ด้วย `broadcastSignature` อยู่แล้ว
+  (R-02) → derived arrays ใน Dashboard ไม่ต้อง memo เพิ่ม (ไม่ over-engineer)
+- build ผ่าน, ESLint rider-scope 0 error (baseline โปรเจกต์ 61 คงเดิม), 0 อ้างอิงคีย์ที่ลบไปแล้ว
+
 ### Added (Rider Phase 3 — complete the accept→delivered workflow; UI only)
 - **แถบปุ่มครบทั้ง 7 สเต็ปตามที่ผู้ใช้ระบุ** map ลง state เดิม (ยืนยันจากโค้ดจริง: `acceptOrder`
   เขียน `status:"picked_up"`, กราฟ `picked_up→delivering→completed` คือ transition เดิมที่ R-04 ใช้):
