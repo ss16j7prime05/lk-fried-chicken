@@ -8,6 +8,7 @@ import { getStore } from "./getStore";
 import { useStore } from "../../store/useStore";
 import { PAYMENT_STATUS, countdownFrom, uploadSlip, submitSlip, expire } from "../../payment/paymentService";
 import { normalizeStatus } from "../../store/orderStatus";
+import { deriveCustomerStatus } from "../../rider/riderStage";
 import { usePreferences } from "../../context/PreferencesContext";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
@@ -259,7 +260,11 @@ export const OrderDetail = () => {
   // still show the correct label and timeline progress instead of falling back to
   // the raw Thai string / an all-blank timeline.
   const normalizedStatus = normalizeStatus(order.status);
-  const statusLabel = t(`status.${normalizedStatus}`) || order.status || t("status.pending");
+  // Granular real-time status the customer sees (derived from status + riderStage +
+  // nearPressed) — e.g. "Rider is on the way to you" / "Rider nearby" / "Rider arrived".
+  // Falls back gracefully for legacy orders with no riderStage.
+  const customerStatus = deriveCustomerStatus(order);
+  const statusLabel = t(`cstat.${customerStatus}`) || t(`status.${normalizedStatus}`) || order.status;
   const isCancelled = normalizedStatus === "cancelled";
   const currentStepIndex = TIMELINE_STEPS.findIndex((step) => step.status === normalizedStatus);
   const isTrackable = TRACKABLE_STATUSES.includes(normalizedStatus);

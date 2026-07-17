@@ -5,6 +5,27 @@
 
 ## [Unreleased]
 
+### Added (Rider production workflow — additive granular stages + real-time customer status)
+- **`stores`/order schema (additive, backward-compatible)**: ฟิลด์ใหม่ `order.riderStage`
+  (heading_to_restaurant / arrived_at_restaurant / heading_to_customer / arrived_at_customer /
+  delivered) + `arrivedRestaurantAt`/`arrivedCustomerAt`. **`status` เดิมไม่แตะ** (Store/Admin/
+  query/rules ทำงานเหมือนเดิม) — riderStage แค่เพิ่มความละเอียดใน picked_up/delivering
+  ; ออเดอร์เก่าไม่มี riderStage → derive จาก status (ไม่ต้อง migrate ข้อมูล)
+- **`src/rider/riderStage.js`** (ใหม่): `deriveCustomerStatus()` (10 สถานะที่ลูกค้าเห็น จาก status +
+  riderStage + nearPressed), `riderStageAction()` (ปุ่มไรเดอร์ตาม stage), geofence helper (fail-open)
+- **Rider flow เต็มรูปแบบ**: Accept → (picked_up + heading_to_restaurant) → ยืนยันถึงร้าน (geofence) →
+  ยืนยันรับอาหาร (→delivering + heading_to_customer) → ยืนยันถึงลูกค้า (geofence) → ยืนยันจัดส่ง
+  (dialog → completed + delivered). ปุ่ม "ถึงแล้ว" เปิดเมื่ออยู่ในรัศมี geofence (watchLocation)
+  แต่ **fail-open** ถ้า GPS ใช้ไม่ได้ (ไม่บล็อกการส่ง). `acceptOrder` เขียน riderStage ใน transaction เดิม
+- **ลูกค้าเห็นสถานะเรียลไทม์**: OrderDetail แสดง `deriveCustomerStatus` (เช่น "ไรเดอร์กำลังไปหาคุณ"/
+  "ใกล้ถึงแล้ว"/"มาถึงแล้ว") อัปเดตทันทีผ่าน onSnapshot เดิม ; ตำแหน่งสดยังใช้ TrackingPanel เดิม
+- **rules ไม่เปลี่ยน** (rider ที่ถือ order เขียนได้ทุกฟิลด์อยู่แล้ว, customer อ่านได้) ; ลบ dead
+  `jobActionFor`. Test: `npm test` = 40 เคส (serviceArea 15 + riderStage 25) ผ่าน, build/lint ผ่าน
+- **ยังไม่ได้ทำในรอบนี้ (จะทำต่อ)**: full-screen new-order popup + เสียงเตือน, chat read-receipt/
+  typing indicator (ต้องเพิ่ม schema chat), delivery summary bonus/tax/credits/coins, ปิด chat/call
+  หลังส่งเสร็จ, ขยาย stepper ลูกค้าเป็น 10 ขั้น (ตอนนี้ label ละเอียดแล้ว แต่ stepper ยัง 7 ขั้น)
+  — และทั้งหมดต้อง **QA เครื่องจริง** (auth/GPS/Firestore/เสียง บล็อกในเครื่องนี้)
+
 ### Changed (Service-area QA hardening — remove hardcoded 8 km, dynamic zone everywhere)
 - **AddressCard**: badge "นอกเขต" เดิมใช้ค่าคงที่ 8 กม. → ตอนนี้รับ prop `store` แล้วเช็คด้วย
   `isInsideServiceArea` (polygon ถ้ามี ไม่งั้นรัศมีร้าน) ; หน้า Addresses subscribe store แล้วส่งให้

@@ -36,6 +36,8 @@ export async function acceptOrder(order, rider) {
         riderName: rider.name || "",
         riderPhone: rider.phone || "",
         status: "picked_up",
+        // Granular workflow stage (additive) — rider just accepted, heading to the store.
+        riderStage: "heading_to_restaurant",
         acceptedAt: serverTimestamp(),
         pickedUpAt: serverTimestamp(),
         timeline: arrayUnion(timelineTrigger("picked_up", rider.uid)),

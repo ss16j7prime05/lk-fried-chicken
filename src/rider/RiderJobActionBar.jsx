@@ -1,19 +1,23 @@
 import { MapPin } from "lucide-react";
 import MapButton from "../location/MapButton.jsx";
 import { Button } from "../components/ui/Button";
-import { jobActionFor } from "./riderJobFlow";
+import { riderStageAction, withinGeofence } from "./riderStage";
 
-// Sticky bottom action bar for the rider job flow. Pure presentation over the EXISTING
-// order state — it renders the right buttons per state and calls the handlers; the
-// handlers (in RiderJobDetails) drive the existing orderStateMachine transitions.
-// The Navigate → Arrived at Store → Confirm Pickup granularity within picked_up is a
-// UI-only sub-step (arrivedStore) — no backend state is added.
+// Sticky bottom action bar for the granular rider workflow. The stage (order.riderStage)
+// drives which buttons show; the handlers (in RiderJobDetails) advance riderStage and, at
+// the pickup/delivery boundaries, the existing status machine too. Arrival buttons are
+// geofence-gated (enabled within GEOFENCE_KM of the target) but fail open when GPS is
+// unavailable so a location problem can never block a real delivery.
 export const RiderJobActionBar = ({
-  status, arrivedStore, busy, storeLocation, dest,
-  onArrivedStore, onAccept, onPickup, onDeliver, onNextJob, t,
+  order, busy, storeLocation, dest, storeDistanceKm, customerDistanceKm,
+  onAccept, onArriveRestaurant, onConfirmPickup, onArriveCustomer, onConfirmDelivery, onNextJob, t,
 }) => {
-  const action = jobActionFor(status);
+  const action = riderStageAction(order);
   if (action.kind === "none") return null;
+
+  const atStore = withinGeofence(storeDistanceKm);
+  const atCustomer = withinGeofence(customerDistanceKm);
+  const fullBtn = { width: "100%", textAlign: "center", display: "block" };
 
   return (
     <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] md:bottom-4 z-30">
@@ -22,21 +26,36 @@ export const RiderJobActionBar = ({
           <Button className="w-full h-14 text-base" loading={busy} onClick={onAccept}>{t("ro.action.accept")}</Button>
         )}
 
-        {action.kind === "pickup" && !arrivedStore && (
+        {action.kind === "arrive_restaurant" && (
           <>
-            <MapButton lat={storeLocation.lat} lng={storeLocation.lng} address={storeLocation.name} mode="navigate" label={`🧭 ${t("ro.action.goToStore")}`} style={{ width: "100%", textAlign: "center", display: "block" }} />
-            <Button variant="outline" className="w-full h-14 text-base" onClick={onArrivedStore}>{t("ro.action.arrivedStore")}</Button>
+            <MapButton lat={storeLocation.lat} lng={storeLocation.lng} address={storeLocation.name} mode="navigate" label={`🧭 ${t("ro.action.goToStore")}`} style={fullBtn} />
+            {!atStore && storeDistanceKm != null && (
+              <p className="text-center text-xs font-bold text-gray-400">{t("ro.action.farFromStore", { km: storeDistanceKm.toFixed(1) })}</p>
+            )}
+            <Button className="w-full h-14 text-base" disabled={!atStore} loading={busy} onClick={onArriveRestaurant}>
+              {t("ro.action.confirmArriveRestaurant")}
+            </Button>
           </>
-        )}
-        {action.kind === "pickup" && arrivedStore && (
-          <Button className="w-full h-14 text-base" loading={busy} onClick={onPickup}>{t("ro.action.confirmPickup")}</Button>
         )}
 
-        {action.kind === "deliver" && (
+        {action.kind === "confirm_pickup" && (
+          <Button className="w-full h-14 text-base" loading={busy} onClick={onConfirmPickup}>{t("ro.action.confirmPickup")}</Button>
+        )}
+
+        {action.kind === "arrive_customer" && (
           <>
-            {dest.lat != null && <MapButton lat={dest.lat} lng={dest.lng} address={dest.address} mode="navigate" label={`🧭 ${t("ro.action.goToCustomer")}`} style={{ width: "100%", textAlign: "center", display: "block" }} />}
-            <Button className="w-full h-14 text-base" loading={busy} onClick={onDeliver}>{t("ro.action.delivered")}</Button>
+            {dest.lat != null && <MapButton lat={dest.lat} lng={dest.lng} address={dest.address} mode="navigate" label={`🧭 ${t("ro.action.goToCustomer")}`} style={fullBtn} />}
+            {!atCustomer && customerDistanceKm != null && (
+              <p className="text-center text-xs font-bold text-gray-400">{t("ro.action.farFromCustomer", { km: customerDistanceKm.toFixed(1) })}</p>
+            )}
+            <Button className="w-full h-14 text-base" disabled={!atCustomer} loading={busy} onClick={onArriveCustomer}>
+              {t("ro.action.confirmArriveCustomer")}
+            </Button>
           </>
+        )}
+
+        {action.kind === "confirm_delivery" && (
+          <Button className="w-full h-14 text-base" loading={busy} onClick={onConfirmDelivery}>{t("ro.action.confirmDelivery")}</Button>
         )}
 
         {action.kind === "done" && (

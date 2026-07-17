@@ -2,10 +2,10 @@
 // No new backend states: we only translate the current status into a timeline step
 // and an action-button config. State transitions still go through the existing
 // orderStateMachine (ready_for_delivery → picked_up → delivering → completed).
+// Rider timeline steps — pure presentation over the order status. The granular action
+// flow now lives in riderStage.js (riderStageAction); this only feeds RiderTimeline.
 import { normalizeStatus } from "../store/orderStatus";
-import {
-  READY_STATUS, PICKED_UP_STATUS, DELIVERING_STATUS, DELIVERED_STATUS, isReadyForDelivery,
-} from "./riderStatus";
+import { PICKED_UP_STATUS, DELIVERING_STATUS, DELIVERED_STATUS } from "./riderStatus";
 
 // Timeline steps for an accepted job (label keys → ro.step.*).
 export const FLOW_STEPS = ["accepted", "atStore", "delivering", "delivered"];
@@ -18,15 +18,4 @@ export function flowStepIndex(status) {
   if (s === DELIVERING_STATUS) return 2;  // en route to customer
   if (s === PICKED_UP_STATUS) return 1;   // accepted, heading to / at store
   return 0;                               // ready_for_delivery (not yet accepted)
-}
-
-// Action kind for the current status. RiderJobActionBar renders the buttons per kind
-// and owns the labels; the transitions themselves are hardcoded in RiderJobDetails.
-export function jobActionFor(status) {
-  const s = normalizeStatus(status);
-  if (s === PICKED_UP_STATUS) return { kind: "pickup" };
-  if (s === DELIVERING_STATUS) return { kind: "deliver" };
-  if (s === DELIVERED_STATUS) return { kind: "done" };
-  if (s === READY_STATUS || isReadyForDelivery(s)) return { kind: "accept" };
-  return { kind: "none" };
 }

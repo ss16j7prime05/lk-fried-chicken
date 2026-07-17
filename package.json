@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node scripts/serviceArea.test.mjs"
+    "test": "node scripts/serviceArea.test.mjs && node scripts/riderStage.test.mjs"
   },
   "dependencies": {
     "firebase": "^12.14.0",

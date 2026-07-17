@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
 import {
   ArrowLeft, Store, User, Phone, MessageCircle, Navigation, Package,
   ChevronDown, ChevronUp, StickyNote, X,
@@ -12,7 +12,10 @@ import { usePreferences } from "../context/PreferencesContext";
 import { transition } from "../store/orderStateMachine";
 import { acceptOrder } from "./riderAcceptReject";
 import { DELIVERING_STATUS, DELIVERED_STATUS } from "./riderStatus";
+import { RIDER_STAGE } from "./riderStage";
 import { getDestination } from "./riderLocationService";
+import { watchLocation, stopWatching } from "../location/mapsService";
+import { haversineKm } from "../location/locationUtils";
 import { telHref } from "../telUtils";
 import { logError } from "../errorCenter";
 import DeliveryMap from "../location/DeliveryMap.jsx";
@@ -21,6 +24,7 @@ import Chat from "../Chat.jsx";
 import { Card } from "../components/ui/Card";
 import { Loading } from "../components/ui/Loading";
 import { EmptyState } from "../components/ui/EmptyState";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { RiderTimeline } from "./RiderTimeline";
 import { RiderPaymentCard } from "./RiderPaymentCard";
 import { RiderJobActionBar } from "./RiderJobActionBar";
@@ -92,9 +96,8 @@ export default function RiderJobDetails() {
   const [busy, setBusy] = useState(false);
   const [showItems, setShowItems] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  // UI-only sub-step within the picked_up state (no backend state): Navigate to Store →
-  // Arrived at Store → Confirm Food Pickup. Does not persist — a convenience affordance.
-  const [arrivedStore, setArrivedStore] = useState(false);
+  const [confirmDeliveryOpen, setConfirmDeliveryOpen] = useState(false);
+  const [riderLoc, setRiderLoc] = useState(null); // live GPS, for geofencing the arrival buttons
   const [storeLocation, setStoreLocation] = useState({ lat: FALLBACK_STORE_LAT, lng: FALLBACK_STORE_LNG, name: "LK Fried Chicken" });
 
   useEffect(() => {
@@ -123,16 +126,44 @@ export default function RiderJobDetails() {
 
   const dest = useMemo(() => (order ? getDestination(order) : { lat: null, lng: null, address: "" }), [order]);
 
+  // Watch the rider's location only while the job is active (picked_up / delivering) —
+  // used to geofence the arrival buttons. Stops as soon as the job leaves active state.
+  const activeStatus = order?.status === "picked_up" || order?.status === "delivering";
+  useEffect(() => {
+    if (!activeStatus) return undefined;
+    const id2 = watchLocation(
+      (c) => setRiderLoc({ lat: c.lat, lng: c.lng }),
+      (err) => logError(err, "RiderJobDetails.watch")
+    );
+    return () => stopWatching(id2);
+  }, [activeStatus]);
+
+  const storeDistanceKm = riderLoc ? haversineKm(riderLoc.lat, riderLoc.lng, storeLocation.lat, storeLocation.lng) : null;
+  const customerDistanceKm =
+    riderLoc && dest.lat != null ? haversineKm(riderLoc.lat, riderLoc.lng, dest.lat, dest.lng) : null;
+
   const run = async (fn) => {
     if (busy) return;
     setBusy(true);
     try { await fn(); } catch (e) { logError(e, "RiderJobDetails.action"); } finally { setBusy(false); }
   };
   const riderIdentity = () => ({ uid: user.uid, name: profile?.name || profile?.riderName || user?.email || "ไรเดอร์", phone: profile?.phone || "" });
+  const patchStage = (patch) => updateDoc(doc(db, "orders", order.id), patch);
 
   const doAccept = () => run(async () => { await acceptOrder(order, riderIdentity()); });
-  const doPickup = () => run(() => transition(order, DELIVERING_STATUS, { by: user.uid }));
-  const doDeliver = () => run(() => transition(order, DELIVERED_STATUS, { by: user.uid }));
+  // Arrival at restaurant / customer: additive riderStage + timestamp (status unchanged).
+  const doArriveRestaurant = () => run(() => patchStage({ riderStage: RIDER_STAGE.ARRIVED_AT_RESTAURANT, arrivedRestaurantAt: serverTimestamp() }));
+  const doArriveCustomer = () => run(() => patchStage({ riderStage: RIDER_STAGE.ARRIVED_AT_CUSTOMER, arrivedCustomerAt: serverTimestamp() }));
+  // Pickup / delivery boundaries: advance the existing status machine, then stamp the stage.
+  const doConfirmPickup = () => run(async () => {
+    const { ok } = await transition(order, DELIVERING_STATUS, { by: user.uid });
+    if (ok) await patchStage({ riderStage: RIDER_STAGE.HEADING_TO_CUSTOMER });
+  });
+  const doConfirmDelivery = () => run(async () => {
+    setConfirmDeliveryOpen(false);
+    const { ok } = await transition(order, DELIVERED_STATUS, { by: user.uid });
+    if (ok) await patchStage({ riderStage: RIDER_STAGE.DELIVERED });
+  });
 
   if (loading) return <Loading text={t("ro.loading.deliveries")} />;
   if (notFound || !order) {
@@ -237,19 +268,31 @@ export default function RiderJobDetails() {
         </Card>
       )}
 
-      {/* sticky action bar — reflects the existing state, drives existing transitions */}
+      {/* sticky action bar — stage-driven; arrival buttons geofence-gated (fail-open) */}
       <RiderJobActionBar
-        status={order.status}
-        arrivedStore={arrivedStore}
+        order={order}
         busy={busy}
         storeLocation={storeLocation}
         dest={dest}
-        onArrivedStore={() => setArrivedStore(true)}
+        storeDistanceKm={storeDistanceKm}
+        customerDistanceKm={customerDistanceKm}
         onAccept={doAccept}
-        onPickup={doPickup}
-        onDeliver={doDeliver}
+        onArriveRestaurant={doArriveRestaurant}
+        onConfirmPickup={doConfirmPickup}
+        onArriveCustomer={doArriveCustomer}
+        onConfirmDelivery={() => setConfirmDeliveryOpen(true)}
         onNextJob={() => navigate("/rider")}
         t={t}
+      />
+
+      <ConfirmDialog
+        open={confirmDeliveryOpen}
+        title={t("ro.confirmDeliveryTitle")}
+        message={t("ro.confirmDeliveryMsg")}
+        confirmText={t("ro.action.confirmDelivery")}
+        cancelText={t("common.close")}
+        onConfirm={doConfirmDelivery}
+        onCancel={() => setConfirmDeliveryOpen(false)}
       />
     </div>
   );
