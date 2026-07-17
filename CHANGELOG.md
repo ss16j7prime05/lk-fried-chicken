@@ -5,6 +5,21 @@
 
 ## [Unreleased]
 
+### Fixed (Rider workflow — production QA pass)
+- **หน้าสรุปกระพริบหลังกดส่งสำเร็จ**: `justCompleted` เช็ค `deliveredAt >= mountTime` แต่ `deliveredAt`
+  เป็น `serverTimestamp()` ที่อ่านได้เป็น `null` ในเครื่องระหว่างรอ server → `activeOrder` กลายเป็น
+  null ชั่วขณะ หน้าจอหลุดไปหน้ารอรับงานแล้วเด้งกลับ. แก้โดยอ่าน snapshot งานของไรเดอร์ด้วย
+  `{ serverTimestamps: "estimate" }` ให้ deliveredAt มีค่าประมาณทันที (ไม่กระพริบ)
+- **เสียงเรียกงานแรกเงียบ**: `RiderLayout` ไม่มีการปลุก AudioContext (ต่างจาก StoreLayout) ถ้าไรเดอร์
+  เปิด/รีเฟรชแอปมาแบบออนไลน์อยู่แล้วโดยยังไม่แตะจอ เสียงเรียกงานใหม่ครั้งแรกจะไม่ดัง (เบราว์เซอร์บล็อก).
+  แก้โดยเพิ่ม unlock listener (touchstart/click ครั้งแรก) ใน `RiderLayout` เหมือน StoreLayout
+- **Action ล้มเหลวเงียบ**: `RiderActiveOrder` ยืนยันรับอาหาร/ส่งสำเร็จ ถ้า `transition()` ถูกปฏิเสธ
+  (ออเดอร์ถูกยกเลิก/สถานะไม่ตรง) หรือเขียน Firestore ไม่ผ่าน เดิมกดแล้วเงียบ. แก้โดยจับผลลัพธ์แล้ว
+  โชว์แถบ error (`ro.actionFailed`) ให้ไรเดอร์รู้และลองใหม่ได้
+- ตรวจครบ 15 สถานการณ์ (popup/accept/view details/COD/ออนไลน์/นำทางทุกสเตจ/รีเฟรชทุกสเตจ/resume/
+  Firestore sync/store→rider→customer/เสียง/กันรับซ้ำ/งานเดียว/สรุป/edge cases) — QA เป็น **static
+  code trace** เพราะเครื่องนี้บล็อก auth/GPS/Firestore/เสียง ; ยังต้อง **QA เครื่องจริง** ก่อน production
+
 ### Changed (Rider workflow redesign — single active order, popup→detail→accept→workflow)
 - **งานเดียวต่อครั้ง (single active order)**: ไรเดอร์ถืองานได้ทีละ 1 ใบ. เมื่อมีงานกำลังทำ
   (`status` picked_up/delivering) `RiderOrdersDashboard` จะโชว์ **workflow อย่างเดียว** — ซ่อน

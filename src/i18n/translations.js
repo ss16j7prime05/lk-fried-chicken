@@ -1284,6 +1284,7 @@ export const translations = {
     "ro.expandSidebar": "Expand sidebar",
     "ro.retry": "Retry",
     "ro.dismiss": "Dismiss",
+    "ro.actionFailed": "Action failed — the order may have changed. Please try again.",
     "ro.items": "{count} items",
 
     "ro.status.pending": "Pending",
@@ -2733,6 +2734,7 @@ export const translations = {
     "ro.expandSidebar": "ขยายแถบเมนู",
     "ro.retry": "ลองใหม่",
     "ro.dismiss": "ปิด",
+    "ro.actionFailed": "ทำรายการไม่สำเร็จ — ออเดอร์อาจมีการเปลี่ยนแปลง กรุณาลองใหม่",
     "ro.items": "{count} รายการ",
 
     "ro.status.pending": "รอรับออเดอร์",

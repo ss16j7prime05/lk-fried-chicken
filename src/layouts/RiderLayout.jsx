@@ -7,6 +7,7 @@ import {
 import { usePreferences } from "../context/PreferencesContext";
 import { useAuth } from "../AuthContext.jsx";
 import { NotificationBell } from "../components/notifications/NotificationBell";
+import { getAlarmAudioCtx } from "../store/alarmSounds";
 
 // Device-local UI preference (not Firestore) — remembers the collapsed sidebar choice.
 const SIDEBAR_KEY = "lkfc_rider_sidebar_collapsed";
@@ -36,6 +37,23 @@ export const RiderLayout = () => {
       // ignore blocked/full localStorage
     }
   }, [collapsed]);
+
+  // ปลุก AudioContext จาก user gesture แรก (เหมือน StoreLayout) — เบราว์เซอร์บล็อกเสียงจนกว่าจะมี
+  // การแตะ/คลิก ถ้าไรเดอร์เปิดแอปมาแบบออนไลน์อยู่แล้ว เสียงเรียกงานใหม่ครั้งแรกจะเงียบถ้าไม่ปลุกไว้ก่อน
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        const ctx = getAlarmAudioCtx();
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      } catch { /* ignore */ }
+    };
+    document.addEventListener("touchstart", unlock, { once: true });
+    document.addEventListener("click", unlock, { once: true });
+    return () => {
+      document.removeEventListener("touchstart", unlock);
+      document.removeEventListener("click", unlock);
+    };
+  }, []);
 
   // LINE MAN-style 5-menu bottom nav. Profile lives on the avatar (top-right), not the nav.
   const navItems = [

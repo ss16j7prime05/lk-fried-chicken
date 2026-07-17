@@ -182,7 +182,9 @@ export default function RiderOrdersDashboard() {
     const unsubMine = onSnapshot(
       mineQ,
       (snapshot) => {
-        setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        // อ่านด้วย serverTimestamps:"estimate" เพื่อให้ deliveredAt (serverTimestamp) มีค่าประมาณ
+        // ทันทีตอนกดส่งสำเร็จ (ไม่เป็น null ระหว่างรอ server) — ไม่งั้นหน้าสรุปจะกระพริบหลุดไปหน้ารอรับงาน
+        setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })));
         markFeed("mine", "");
         setLoading(false);
       },

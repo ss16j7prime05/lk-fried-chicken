@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import {
   Store, User, Phone, MessageCircle, Navigation, Package,
-  ChevronDown, ChevronUp, StickyNote, X, ArrowLeft,
+  ChevronDown, ChevronUp, StickyNote, X, ArrowLeft, AlertCircle,
 } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_PHONE } from "../config";
@@ -88,6 +88,7 @@ export default function RiderActiveOrder({ order, storeLocation, onDone, onBack 
   const { t } = usePreferences();
 
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [showItems, setShowItems] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [confirmDeliveryOpen, setConfirmDeliveryOpen] = useState(false);
@@ -112,10 +113,12 @@ export default function RiderActiveOrder({ order, storeLocation, onDone, onBack 
   const customerDistanceKm =
     riderLoc && dest.lat != null ? haversineKm(riderLoc.lat, riderLoc.lng, dest.lat, dest.lng) : null;
 
+  // ทุก action ผ่านตัวนี้ — ล็อกกันกดซ้ำ + จับ error แล้วแจ้งไรเดอร์ (เดิมล้มเหลวเงียบ)
   const run = async (fn) => {
     if (busy) return;
     setBusy(true);
-    try { await fn(); } catch (e) { logError(e, "RiderActiveOrder.action"); } finally { setBusy(false); }
+    setActionError("");
+    try { await fn(); } catch (e) { logError(e, "RiderActiveOrder.action"); setActionError(t("ro.actionFailed")); } finally { setBusy(false); }
   };
   const patchStage = (patch) => updateDoc(doc(db, "orders", order.id), patch);
 
@@ -123,14 +126,17 @@ export default function RiderActiveOrder({ order, storeLocation, onDone, onBack 
   const doArriveRestaurant = () => run(() => patchStage({ riderStage: RIDER_STAGE.ARRIVED_AT_RESTAURANT, arrivedRestaurantAt: serverTimestamp() }));
   const doArriveCustomer = () => run(() => patchStage({ riderStage: RIDER_STAGE.ARRIVED_AT_CUSTOMER, arrivedCustomerAt: serverTimestamp() }));
   // Pickup / delivery boundaries: advance the existing status machine, then stamp the stage.
+  // ถ้า transition ถูกปฏิเสธ (ออเดอร์ถูกยกเลิก/สถานะไม่ตรง) ต้องแจ้งไรเดอร์ ไม่ใช่กดแล้วเงียบ
   const doConfirmPickup = () => run(async () => {
     const { ok } = await transition(order, DELIVERING_STATUS, { by: user.uid });
     if (ok) await patchStage({ riderStage: RIDER_STAGE.HEADING_TO_CUSTOMER });
+    else setActionError(t("ro.actionFailed"));
   });
   const doConfirmDelivery = () => run(async () => {
     setConfirmDeliveryOpen(false);
     const { ok } = await transition(order, DELIVERED_STATUS, { by: user.uid });
     if (ok) await patchStage({ riderStage: RIDER_STAGE.DELIVERED });
+    else setActionError(t("ro.actionFailed"));
   });
 
   const items = order.items || [];
@@ -148,6 +154,14 @@ export default function RiderActiveOrder({ order, storeLocation, onDone, onBack 
         )}
         <span className="text-xs font-bold text-gray-400">{order.orderNo || order.id?.slice(0, 8)}</span>
       </div>
+
+      {actionError && (
+        <div role="alert" className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
+          <AlertCircle size={20} className="shrink-0 mt-0.5" />
+          <p className="text-sm font-bold min-w-0 flex-1">{actionError}</p>
+          <button type="button" onClick={() => setActionError("")} className="text-xs font-black text-red-400 hover:text-red-600 shrink-0">{t("ro.dismiss")}</button>
+        </div>
+      )}
 
       {/* completion summary (income / distance / time / coins / tax / net) */}
       {order.status === "completed" && <RiderDeliverySummary order={order} t={t} />}
