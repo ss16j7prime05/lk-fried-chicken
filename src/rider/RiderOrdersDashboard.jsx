@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
-import { AlertCircle, Banknote, ChevronRight, CreditCard, MapPin, Navigation, Package, Power, User, WifiOff } from "lucide-react";
+import { AlertCircle, Banknote, Bike, CheckCircle2, Coins, MapPin, Navigation, Package, Power, Store, WifiOff } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
@@ -19,7 +19,7 @@ import {
   READY_QUERY_STATUSES,
   isReadyForDelivery,
 } from "./riderStatus";
-import { byNewest, normalizeStatus } from "../store/orderStatus";
+import { byNewest, normalizeStatus, toDate } from "../store/orderStatus";
 import { useStoreStatus } from "../store/useStoreStatus";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
 import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
@@ -34,6 +34,19 @@ const FALLBACK_STORE_LNG = 100.0529543;
 
 // Firestore Timestamp | ISO | ms -> ms (0 ถ้าไม่มี)
 const orderMs = (ts) => (ts?.toMillis ? ts.toMillis() : ts ? new Date(ts).getTime() : 0);
+
+const money = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
+const isSameDay = (d, ref) =>
+  !!d && d.getDate() === ref.getDate() && d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
+
+// ตัวเลือกจำนวนเงินสดที่ไรเดอร์มี (กรองงานเก็บเงินปลายทางที่เกินวงเงิน) — null = ทั้งหมด
+const CASH_OPTIONS = [500, 1000, Infinity];
+// งานผ่านตัวกรองเงินสดไหม: งานจ่ายออนไลน์ผ่านเสมอ (ไม่ต้องใช้เงินสด) ; COD ต้อง <= วงเงินที่เลือก
+const passesCash = (order, cashLimit) => {
+  if (cashLimit == null) return true;
+  if ((order.paymentMethod || "cash") !== "cash") return true;
+  return Number(order.grandTotal ?? order.subtotal ?? 0) <= cashLimit;
+};
 
 // เหตุผลที่รับ/ปฏิเสธงานไม่สำเร็จ (reason จาก riderAcceptReject) -> คีย์แปลภาษา ro.err.*
 // ที่สำคัญที่สุดคือ already_taken: ไรเดอร์ต้องรู้ว่าโดนตัดหน้า ไม่ใช่กดแล้วเงียบ
@@ -63,44 +76,104 @@ const pickLocationAlert = (online, geoError, permission) => {
   return null;
 };
 
-// Compact available-job card (idle browse list). Tapping opens the pre-accept detail
-// sheet; the Accept button claims it directly. All figures are real order data.
+// Available-job card (idle browse list) — LINE MAN-style information layout in LK's design
+// language. Tapping the body opens the pre-accept detail sheet; "รับงานนี้" accepts directly.
+// All figures are real order data (earnings = deliveryFee ; COD = collect grandTotal).
 const AvailableJobCard = ({ order, storeLocation, busy, disabled, onView, onAccept, t }) => {
   const dest = getDestination(order);
   const distanceKm =
     dest.lat != null && dest.lng != null
       ? haversineKm(storeLocation.lat, storeLocation.lng, dest.lat, dest.lng)
       : (order.distanceKm ?? order.distance ?? null);
-  const method = order.paymentMethod || "cash";
-  const isCod = method === "cash";
+  const isCod = (order.paymentMethod || "cash") === "cash";
+  const codAmount = Number(order.grandTotal ?? order.subtotal ?? 0);
   return (
-    <Card className="p-4 flex flex-col gap-3">
-      <button type="button" onClick={() => onView(order)} className="text-left space-y-2 focus-visible:outline-none">
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-black text-gray-900">{order.orderNo || order.id?.slice(0, 8)}</span>
-          <span className="text-lg font-black text-primary">฿{Number(order.deliveryFee || 0).toLocaleString("th-TH")}</span>
-        </div>
-        <p className="flex items-center gap-1.5 text-sm text-gray-700 font-medium truncate">
-          <User size={14} className="text-gray-400 shrink-0" /> {order.customerName || "-"}
-        </p>
-        <div className="flex items-center gap-3 text-xs font-bold text-gray-500">
-          <span className="inline-flex items-center gap-1"><MapPin size={13} className="text-gray-400" /> {distanceKm != null ? `${distanceKm.toFixed(1)} km` : "—"}</span>
-          <span className={`inline-flex items-center gap-1 ${isCod ? "text-secondary" : "text-primary"}`}>
-            {isCod ? <Banknote size={13} /> : <CreditCard size={13} />} {t(`payment.${method}`)}
+    <Card className="p-0 overflow-hidden flex flex-col">
+      <button type="button" onClick={() => onView(order)} className="text-left p-4 focus-visible:outline-none">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <span className="inline-flex items-center gap-1 text-[11px] font-black text-primary bg-primary-light px-2.5 py-1 rounded-full">
+            <Bike size={13} /> {t("ro.card.foodDelivery")}
           </span>
+          {distanceKm != null && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-400">
+              <Navigation size={12} /> {distanceKm.toFixed(1)} km
+            </span>
+          )}
+        </div>
+
+        {/* pickup (store) -> dropoff (customer) */}
+        <div className="space-y-2">
+          <div className="flex items-start gap-2">
+            <Store size={15} className="text-primary shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-black text-gray-900 truncate">{storeLocation?.name || "LK Fried Chicken"}</p>
+              {order.storeAddress && <p className="text-xs text-gray-400 font-medium truncate">{order.storeAddress}</p>}
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <MapPin size={15} className="text-secondary shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-bold text-gray-700 truncate">{order.customerName || "-"}</p>
+              {dest.address && <p className="text-xs text-gray-400 font-medium truncate">{dest.address}</p>}
+            </div>
+          </div>
         </div>
       </button>
-      <div className="flex gap-2">
-        <Button variant="outline" className="flex-1 !py-2 text-sm" onClick={() => onView(order)}>
-          {t("ro.incoming.viewDetails")} <ChevronRight size={15} />
-        </Button>
-        <Button className="flex-1 !py-2 text-sm" loading={busy} disabled={disabled} onClick={() => onAccept(order)}>
-          <Package size={15} /> {t("ro.acceptDelivery")}
+
+      {/* payment + earnings + accept */}
+      <div className="px-4 pb-4 pt-1 space-y-3">
+        <div className="flex items-center justify-between gap-2 rounded-2xl bg-gray-50 px-3 py-2.5">
+          <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${isCod ? "text-secondary" : "text-primary"}`}>
+            {isCod ? <Banknote size={14} /> : <CheckCircle2 size={14} />}
+            {isCod ? t("ro.card.collect", { amount: money(codAmount) }) : t("ro.card.noCollect")}
+          </span>
+          <span className="text-right">
+            <span className="block text-[10px] font-bold text-gray-400 uppercase leading-none">{t("ro.card.earnings")}</span>
+            <span className="block text-lg font-black text-primary leading-tight">{money(order.deliveryFee)}</span>
+          </span>
+        </div>
+        <Button className="w-full !py-2.5" loading={busy} disabled={disabled} onClick={() => onAccept(order)}>
+          <Package size={16} /> {t("ro.card.acceptThis")}
         </Button>
       </div>
     </Card>
   );
 };
+
+// Rider stats bar (income today / credit / coins today) + online toggle. Income & coins are
+// derived from the rider's own completed orders (real data) ; credit reads a real profile
+// field, default 0 — no mock values.
+const RiderStatsBar = ({ income, credit, coins, isOnline, onToggle, t }) => (
+  <Card className="p-4">
+    <div className="flex items-stretch gap-3">
+      <div className="grid grid-cols-3 flex-1 divide-x divide-gray-100">
+        <div className="flex flex-col items-center justify-center gap-0.5 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t("ro.stats.income")}</span>
+          <span className="text-base font-black text-primary leading-tight">{money(income)}</span>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-0.5 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t("ro.stats.credit")}</span>
+          <span className="text-base font-black text-blue-600 leading-tight">{money(credit)}</span>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-0.5 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t("ro.stats.coins")}</span>
+          <span className="flex items-center gap-1 text-base font-black text-amber-500 leading-tight"><Coins size={15} /> {coins}</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={isOnline}
+        className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-20 rounded-2xl font-black text-xs transition-colors ${
+          isOnline ? "bg-primary text-white hover:bg-primary-dark" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+        }`}
+      >
+        <Power size={20} />
+        {isOnline ? t("ro.online") : t("ro.offline")}
+      </button>
+    </div>
+  </Card>
+);
 
 // Rider Dashboard v2 (single active order): incoming popup + pre-accept detail sheet when
 // idle; a locked single-job workflow (RiderActiveOrder) once a job is accepted.
@@ -130,6 +203,7 @@ export default function RiderOrdersDashboard() {
   // คิวงานใหม่ที่เพิ่งเข้ามา -> ป๊อปอัปเต็มจอ + เสียงเรียก (ไล่ทีละใบตามลำดับที่เข้า)
   const [incomingIds, setIncomingIds] = useState([]);
   const [detailOrder, setDetailOrder] = useState(null); // ออเดอร์ที่เปิดดูรายละเอียดก่อนรับ (View Details)
+  const [cashFilter, setCashFilter] = useState(null);   // วงเงินสดที่ไรเดอร์มี (กรอง COD) — null = ทั้งหมด
   const [doneIds, setDoneIds] = useState(() => new Set()); // งาน completed ที่กด Done แล้ว -> เลิกโชว์สรุป
   const [mountTime] = useState(() => Date.now()); // เวลาเปิดหน้า — ใช้แยก "งานเพิ่งจบ" ออกจากงานเก่าใน history
   const seenOrderIdsRef = useRef(new Set()); // เคยเห็นแล้ว ไม่ต้องเด้งซ้ำ (เหมือน StoreLayout)
@@ -235,6 +309,19 @@ export default function RiderOrdersDashboard() {
   const availableOrders = orders
     .filter((o) => !o.riderId && isReadyForDelivery(o.status) && !hasRejected(o, user?.uid))
     .sort(byNewest());
+  // กรองด้วยวงเงินสดที่ไรเดอร์เลือก (งานเก็บเงินปลายทางที่เกินวงเงินจะไม่ขึ้น)
+  const visibleAvailable = availableOrders.filter((o) => passesCash(o, cashFilter));
+
+  // สถิติหัวจอ: รายได้/เหรียญ "วันนี้" คิดจากงานของไรเดอร์ที่ส่งสำเร็จวันนี้ (ข้อมูลจริง) ;
+  // เครดิตอ่านจากโปรไฟล์จริง (default 0 ไม่มี mock). ใช้ mountTime เป็นวันอ้างอิง (คงที่ทั้งเซสชัน)
+  const dayRef = new Date(mountTime);
+  const doneToday = orders.filter(
+    (o) => o.riderId === user?.uid && normalizeStatus(o.status) === DELIVERED_STATUS &&
+      isSameDay(toDate(o.deliveredAt ?? o.completedAt ?? o.createdAt), dayRef)
+  );
+  const todayIncome = doneToday.reduce((s, o) => s + Number(o.deliveryFee || 0) + Number(o.riderBonus || 0), 0);
+  const todayCoins = doneToday.reduce((s, o) => s + Number(o.riderCoins || 0), 0);
+  const credit = Number(profile?.riderCredit ?? profile?.credit ?? 0);
 
   // ป๊อปอัปงานใหม่: แสดงงานแรกในคิวที่ยัง "ว่างจริง" (ถ้าไรเดอร์คนอื่นรับไปก่อน หรือหมดสถานะพร้อมส่ง
   // ก็ข้ามไปใบถัดไป). ปิดรับงาน = ไม่เด้ง (เผื่อสลับ offline ระหว่างที่ยังมีคิวค้าง). การตัดคิวที่
@@ -261,9 +348,11 @@ export default function RiderOrdersDashboard() {
   const activeOrder = inProgress[0] || justCompleted || null;
   const hasActive = Boolean(inProgress[0]);
 
-  // ป๊อปอัป/รายการงานว่างแสดงเฉพาะตอน "ไม่มีงานกำลังทำ" (งานเดียวต่อครั้ง)
+  // ป๊อปอัป/รายการงานว่างแสดงเฉพาะตอน "ไม่มีงานกำลังทำ" (งานเดียวต่อครั้ง). ป๊อปอัปยังเคารพ
+  // ตัวกรองเงินสดด้วย — งาน COD ที่เกินวงเงินไม่เด้ง/ไม่ส่งเสียง
   const showIncoming = !activeOrder;
-  const popupOrder = showIncoming && !detailOrder ? incomingOrder : null;
+  const popupOrder =
+    showIncoming && !detailOrder && incomingOrder && passesCash(incomingOrder, cashFilter) ? incomingOrder : null;
 
   // งานที่กำลังส่งอยู่จริง = สิ่งที่ต้องกระจายตำแหน่งให้ลูกค้าติดตาม (งานเดียว)
   const deliveries =
@@ -383,18 +472,38 @@ export default function RiderOrdersDashboard() {
         />
       )}
 
-      {/* Header: title + availability toggle (nav + notifications live in RiderLayout) */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-black text-gray-900">{t("ro.jobs.title")}</h1>
-        <Button
-          variant={isOnline ? "primary" : "outline"}
-          className={`!px-4 !py-2 text-sm shrink-0 ${isOnline ? "" : "text-gray-500"}`}
-          onClick={toggleAvailability}
-        >
-          <Power size={16} />
-          {isOnline ? t("ro.online") : t("ro.offline")}
-        </Button>
-      </div>
+      {/* Stats bar: income / credit / coins + online toggle */}
+      <RiderStatsBar income={todayIncome} credit={credit} coins={todayCoins} isOnline={isOnline} onToggle={toggleAvailability} t={t} />
+
+      {/* Cash-on-hand filter — pick how much cash you have; matching jobs appear */}
+      {isOnline && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 mb-2">{t("ro.cash.label")}</p>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            <button
+              type="button"
+              onClick={() => setCashFilter(null)}
+              className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap border transition-all ${
+                cashFilter == null ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-100 hover:border-primary"
+              }`}
+            >
+              {t("ro.cash.all")}
+            </button>
+            {CASH_OPTIONS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCashFilter(c)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap border transition-all ${
+                  cashFilter === c ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-100 hover:border-primary"
+                }`}
+              >
+                {c === Infinity ? t("ro.cash.over", { amount: money(1000) }) : money(c)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {renderLocationAlert()}
 
@@ -433,11 +542,15 @@ export default function RiderOrdersDashboard() {
             </Button>
           </div>
         </div>
-      ) : availableOrders.length === 0 ? (
-        <EmptyState icon="🛵" title={t("ro.waiting.title")} description={t("ro.waiting.desc")} />
+      ) : visibleAvailable.length === 0 ? (
+        <EmptyState
+          icon="🛵"
+          title={t("ro.waiting.title")}
+          description={availableOrders.length > 0 ? t("ro.cash.noneMatch") : t("ro.waiting.desc")}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {availableOrders.map((order) => (
+          {visibleAvailable.map((order) => (
             <AvailableJobCard
               key={order.id}
               order={order}
