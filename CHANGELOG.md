@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+### Changed (Rider home — declutter top-right, fix notification-bell overlap)
+- **ซ่อน avatar โปรไฟล์เฉพาะหน้า Home/รองาน** (`/rider`) — เหลือแค่กระดิ่งแจ้งเตือนมุมขวาบน
+  (หน้าอื่นยังมี avatar ไว้เข้าโปรไฟล์ เพราะเป็นทางเข้าเดียว). คง Stats card + ปุ่มเปิด-ปิดรับงาน + กระดิ่ง
+- **กระดิ่งไม่ทับกับ Stats card อีกต่อไป**: หน้า Home สำรองพื้นที่ด้านบน (ความสูงกระดิ่ง + safe-area
+  inset) ให้เนื้อหาเริ่มใต้กระดิ่งเสมอ ; กระดิ่งเองก็ขยับลงตาม `env(safe-area-inset-top)` กันโดน notch
+  บังทุกขนาดจอ. ไม่แตะ business logic
+
 ### Changed (Rider home/waiting screen — LINE MAN-style layout in LK design language)
 - **แถบสถิติหัวจอ** (`RiderStatsBar`): รายได้วันนี้ / เครดิต / เหรียญวันนี้ + ปุ่มเปิด-ปิดรับงาน
   รวมในการ์ดเดียว. รายได้/เหรียญคิดจากงานของไรเดอร์ที่ส่งสำเร็จ "วันนี้" (ข้อมูลจริง จาก
