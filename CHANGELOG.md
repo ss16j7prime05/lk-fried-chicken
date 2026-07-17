@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+### Fixed (Customer storefront — real UX/a11y bugs; the storefront was already production-grade)
+- **Home search behaviour**: เดิม search กรองเฉพาะ section "ยอดนิยม" — "แนะนำ" ยังโชว์ 2 รายการแรก
+  ที่ไม่ตรงคำค้นระหว่างพิมพ์ค้นหา และ 2 รายการแรกซ้ำทั้งใน "แนะนำ" และ "ยอดนิยม" → ตอนนี้เวลาค้นหา
+  แสดงผลลัพธ์ชุดเดียว (กรองชื่อ+รายละเอียด) ; เวลาเรียกดูปกติ แนะนำ = 2 รายการแรก, ยอดนิยม = ที่เหลือ
+  (ไม่ซ้ำกัน) — ลด duplication ของ FoodCard markup ด้วย `renderCard` helper
+- **Home search a11y/UX**: เพิ่ม `type="search"` + `aria-label` + ปุ่มล้าง (X) เมื่อมีคำค้น
+- **FoodCard a11y**: ปุ่มเพิ่มลงตะกร้าจาก 36px → **44px** (touch target) + focus-visible ring
+- **หมายเหตุ**: `src/App.jsx` (1428 บรรทัด, legacy storefront) **ไม่ถูก mount ที่ไหนเลย = dead code**
+  แต่ถูกอ้างเป็นเอกสารอ้างอิง shape ของ order item ในคอมเมนต์หลายไฟล์ และไม่ได้สร้างใน session นี้
+  → **surface ไว้ให้ตัดสินใจลบ** (ไม่ลบเองเพราะเป็นไฟล์เดิมที่ถูกอ้างอิงกว้าง)
+
 ### Removed / Fixed (Rider Phase 4 — production hardening: dead-code removal + a11y)
 - **ลบเพจ Notifications ที่เข้าไม่ถึงแล้ว (dead code)**: `rider/RiderNotifications.jsx` +
   route `/rider/notifications` + lazy import — ยืนยันว่าไม่มีลิงก์/ไม่มี notification actionUrl ชี้มา

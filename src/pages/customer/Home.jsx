@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
-import { Search, ShoppingCart } from "lucide-react";
+import { Search, ShoppingCart, X } from "lucide-react";
 import { db } from "../../firebase";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { FoodCardSkeleton } from "../../components/ui/Skeleton";
@@ -84,14 +84,34 @@ export const Home = () => {
     [availableMenus, activeCategory]
   );
 
-  const recommended = useMemo(() => filteredByCategory.slice(0, 2), [filteredByCategory]);
+  // ค้นหา: กรองข้าม category ที่เลือกอยู่ (ชื่อ + รายละเอียด) — โชว์เป็นผลลัพธ์ชุดเดียว
+  const searching = query.trim().length > 0;
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return filteredByCategory.filter(
+      (item) =>
+        (item.name || "").toLowerCase().includes(q) ||
+        (item.description || "").toLowerCase().includes(q)
+    );
+  }, [filteredByCategory, query]);
 
-  const popular = useMemo(
-    () =>
-      filteredByCategory.filter((item) =>
-        (item.name || "").toLowerCase().includes(query.toLowerCase())
-      ),
-    [filteredByCategory, query]
+  // ตอนเรียกดูปกติ: 2 รายการแรก = "แนะนำ", ที่เหลือ = "ยอดนิยม" (ไม่ซ้ำกันข้าม section)
+  const recommended = useMemo(() => filteredByCategory.slice(0, 2), [filteredByCategory]);
+  const popular = useMemo(() => filteredByCategory.slice(2), [filteredByCategory]);
+
+  const renderCard = (item) => (
+    <FoodCard
+      key={item.id}
+      image={item.image}
+      name={item.name}
+      description={item.description}
+      price={item.price}
+      rating={item.rating}
+      sold={item.sold}
+      badge={item.badge}
+      onView={() => openDetail(item)}
+      onAdd={() => openDetail(item)}
+    />
   );
 
   return (
@@ -106,11 +126,23 @@ export const Home = () => {
         <div className="relative">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input
+            type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("home.searchPlaceholder")}
-            className="w-full bg-white h-[52px] pl-12 pr-14 rounded-full shadow-soft border border-gray-100 focus:border-primary focus:ring-2 ring-primary/15 transition-all duration-200 outline-none text-sm font-medium"
+            aria-label={t("home.searchPlaceholder")}
+            className="w-full bg-white h-[52px] pl-12 pr-14 rounded-full shadow-soft border border-gray-100 focus:border-primary focus:ring-2 ring-primary/15 transition-all duration-200 outline-none text-sm font-medium [&::-webkit-search-cancel-button]:hidden"
           />
+          {searching && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={t("home.clearSearch")}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -150,6 +182,20 @@ export const Home = () => {
           title={t("home.noMenuTitle")}
           description={t("home.noMenuDesc")}
         />
+      ) : searching ? (
+        /* Search results — one list, filtered by name + description across the category */
+        <section className="space-y-3">
+          <h2 className="text-base sm:text-lg font-black text-gray-900">
+            {t("home.results")} ({searchResults.length})
+          </h2>
+          {searchResults.length === 0 ? (
+            <EmptyState icon="🔍" title={t("home.noItemsTitle")} description={t("home.noItemsDesc")} />
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {searchResults.map(renderCard)}
+            </div>
+          )}
+        </section>
       ) : (
         <>
           {/* Recommended */}
@@ -157,52 +203,20 @@ export const Home = () => {
             <section className="space-y-3">
               <h2 className="text-base sm:text-lg font-black text-gray-900">{t("home.recommended")}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {recommended.map((item) => (
-                  <FoodCard
-                    key={item.id}
-                    image={item.image}
-                    name={item.name}
-                    description={item.description}
-                    price={item.price}
-                    rating={item.rating}
-                    sold={item.sold}
-                    badge={item.badge}
-                    onView={() => openDetail(item)}
-                    onAdd={() => openDetail(item)}
-                  />
-                ))}
+                {recommended.map(renderCard)}
               </div>
             </section>
           )}
 
           {/* Popular */}
-          <section className="space-y-3">
-            <h2 className="text-base sm:text-lg font-black text-gray-900">{t("home.popular")}</h2>
-            {popular.length === 0 ? (
-              <EmptyState
-                icon="🍗"
-                title={t("home.noItemsTitle")}
-                description={t("home.noItemsDesc")}
-              />
-            ) : (
+          {popular.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-base sm:text-lg font-black text-gray-900">{t("home.popular")}</h2>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {popular.map((item) => (
-                  <FoodCard
-                    key={item.id}
-                    image={item.image}
-                    name={item.name}
-                    description={item.description}
-                    price={item.price}
-                    rating={item.rating}
-                    sold={item.sold}
-                    badge={item.badge}
-                    onView={() => openDetail(item)}
-                    onAdd={() => openDetail(item)}
-                  />
-                ))}
+                {popular.map(renderCard)}
               </div>
-            )}
-          </section>
+            </section>
+          )}
         </>
       )}
 

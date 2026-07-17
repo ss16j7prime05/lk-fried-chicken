@@ -61,7 +61,7 @@ export const FoodCard = ({
           <button
             onClick={onAdd}
             aria-label={t("food.addToCart")}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-primary text-white hover:bg-primary-dark active:scale-95 transition-all shrink-0"
+            className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-white hover:bg-primary-dark active:scale-95 transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
           >
             <Plus size={18} />
           </button>
