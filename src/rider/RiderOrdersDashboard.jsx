@@ -48,6 +48,16 @@ const passesCash = (order, cashLimit) => {
   return Number(order.grandTotal ?? order.subtotal ?? 0) <= cashLimit;
 };
 
+// ยิง browser notification เมื่อมีงานใหม่ (เฉพาะเมื่อได้รับอนุญาตแล้ว) — ไม่ขอสิทธิ์เอง
+// (ให้ไปกดอนุญาตในหน้า Device Check). ปลอดภัยถ้า Notification API ไม่มี
+const sendJobNotification = (order, title, body) => {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const n = new Notification(title, { body, tag: `lk-rider-job-${order.id}`, requireInteraction: true });
+    n.onclick = () => window.focus();
+  } catch { /* ignore */ }
+};
+
 // เหตุผลที่รับ/ปฏิเสธงานไม่สำเร็จ (reason จาก riderAcceptReject) -> คีย์แปลภาษา ro.err.*
 // ที่สำคัญที่สุดคือ already_taken: ไรเดอร์ต้องรู้ว่าโดนตัดหน้า ไม่ใช่กดแล้วเงียบ
 const KNOWN_ACTION_ERRORS = new Set([
@@ -195,6 +205,12 @@ export default function RiderOrdersDashboard() {
   const [busyId, setBusyId] = useState("");
   // ความพร้อมรับงาน อ่านแบบ realtime จาก users/{uid}.riderStatus (ฟิลด์เดียวกับ RiderSettings/Admin)
   const [riderStatus, setRiderStatus] = useState(profile?.riderStatus || "offline");
+  // ตั้งค่าแอปฝั่งไรเดอร์ อ่าน realtime จาก users/{uid} — สลับใน "ตั้งค่าแอป" แล้วมีผลทันทีไม่ต้องรีเฟรช
+  const [settings, setSettings] = useState({
+    notifyNewJob: profile?.notifyNewJob ?? profile?.notifyOrderUpdates ?? true,
+    soundOn: profile?.notifSoundEnabled ?? true,
+    autoAccept: profile?.autoAccept ?? false,
+  });
   const [storeLocation, setStoreLocation] = useState({
     lat: FALLBACK_STORE_LAT,
     lng: FALLBACK_STORE_LNG,
@@ -207,8 +223,12 @@ export default function RiderOrdersDashboard() {
   const [doneIds, setDoneIds] = useState(() => new Set()); // งาน completed ที่กด Done แล้ว -> เลิกโชว์สรุป
   const [mountTime] = useState(() => Date.now()); // เวลาเปิดหน้า — ใช้แยก "งานเพิ่งจบ" ออกจากงานเก่าใน history
   const seenOrderIdsRef = useRef(new Set()); // เคยเห็นแล้ว ไม่ต้องเด้งซ้ำ (เหมือน StoreLayout)
+  const notifiedIdsRef = useRef(new Set());  // งานที่ยิง browser notification ไปแล้ว (กันซ้ำ)
+  const autoAcceptedRef = useRef(new Set());  // งานที่ auto-accept ไปแล้ว (กันรับซ้ำระหว่างรอ async)
   const availInitRef = useRef(false);        // snapshot แรก = งานเดิม ไม่ต้องเด้ง
   const isOnlineRef = useRef(false);         // สถานะล่าสุดสำหรับใช้ใน callback ของ snapshot
+  const settingsRef = useRef(settings);      // ค่าล่าสุดสำหรับใช้ใน callback ของ snapshot
+  const baseTitleRef = useRef(typeof document !== "undefined" ? document.title : ""); // ชื่อแท็บเดิม (ไว้ทำ badge)
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -249,6 +269,11 @@ export default function RiderOrdersDashboard() {
           seenOrderIdsRef.current.add(order.id);
           if (!isOnlineRef.current || hasRejected(order, user.uid)) return;
           setIncomingIds((prev) => (prev.includes(order.id) ? prev : [...prev, order.id]));
+          // New Job Notification เปิด -> ยิง browser notification (ครั้งเดียวต่อออเดอร์). ปิด = ไม่ยิง
+          if (settingsRef.current.notifyNewJob && !notifiedIdsRef.current.has(order.id)) {
+            notifiedIdsRef.current.add(order.id);
+            sendJobNotification(order, t("ro.notif.newJobTitle"), t("ro.notif.newJobBody", { name: order.customerName || "-" }));
+          }
         });
       },
       (err) => onFeedError(err, "available")
@@ -284,19 +309,30 @@ export default function RiderOrdersDashboard() {
       unsubMine();
       unsubStore();
     };
+    // t ใช้แค่ทำข้อความ notification — ไม่ผูกเป็น dep เพื่อไม่ให้ re-subscribe listener ทุกครั้งที่สลับภาษา
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
-  // สถานะออนไลน์/ออฟไลน์ของไรเดอร์เอง (realtime) — RiderSettings เขียนฟิลด์เดียวกันนี้
+  // สถานะออนไลน์/ออฟไลน์ + ตั้งค่าแอป อ่าน realtime จาก users/{uid} (เอกสารเดียวที่ "ตั้งค่าแอป" เขียน)
+  // -> สลับ toggle ในหน้าตั้งค่าแล้วมีผลกับ runtime ทันที ไม่ต้องรีเฟรช
   useEffect(() => {
     if (!user?.uid) return;
     const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
-      if (snap.exists()) setRiderStatus(snap.data().riderStatus || "offline");
+      if (!snap.exists()) return;
+      const d = snap.data();
+      setRiderStatus(d.riderStatus || "offline");
+      setSettings({
+        notifyNewJob: d.notifyNewJob ?? d.notifyOrderUpdates ?? true,
+        soundOn: d.notifSoundEnabled ?? true,
+        autoAccept: d.autoAccept ?? false,
+      });
     });
     return () => unsub();
   }, [user?.uid]);
 
   const isOnline = riderStatus === "online";
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
   const feedErrorKey = feedErrors.available || feedErrors.mine;
   // networkOnline = มีเน็ตไหม (คนละเรื่องกับ isOnline ที่แปลว่า "ไรเดอร์เปิดรับงาน")
   const networkOnline = useOnlineStatus();
@@ -348,11 +384,14 @@ export default function RiderOrdersDashboard() {
   const activeOrder = inProgress[0] || justCompleted || null;
   const hasActive = Boolean(inProgress[0]);
 
-  // ป๊อปอัป/รายการงานว่างแสดงเฉพาะตอน "ไม่มีงานกำลังทำ" (งานเดียวต่อครั้ง). ป๊อปอัปยังเคารพ
-  // ตัวกรองเงินสดด้วย — งาน COD ที่เกินวงเงินไม่เด้ง/ไม่ส่งเสียง
+  // งานเข้าใหม่ที่ "รับได้จริง": ไม่มีงานกำลังทำ + ผ่านตัวกรองเงินสด (ใช้ทั้งป๊อปอัป/auto-accept/badge)
   const showIncoming = !activeOrder;
+  const eligibleIncoming =
+    showIncoming && incomingOrder && passesCash(incomingOrder, cashFilter) ? incomingOrder : null;
+  // ป๊อปอัปแสดงเมื่อ: เปิด "แจ้งเตือนงานใหม่" + ไม่ได้เปิด auto-accept (auto-accept รับเองไม่ต้องเด้ง)
+  // + ไม่ได้เปิดดูรายละเอียดอยู่. ปิดแจ้งเตือน = ไม่มีป๊อปอัป/ไม่มีเสียง
   const popupOrder =
-    showIncoming && !detailOrder && incomingOrder && passesCash(incomingOrder, cashFilter) ? incomingOrder : null;
+    eligibleIncoming && !detailOrder && settings.notifyNewJob && !settings.autoAccept ? eligibleIncoming : null;
 
   // งานที่กำลังส่งอยู่จริง = สิ่งที่ต้องกระจายตำแหน่งให้ลูกค้าติดตาม (งานเดียว)
   const deliveries =
@@ -411,6 +450,24 @@ export default function RiderOrdersDashboard() {
   // กด Done บนหน้าสรุป -> เลิกล็อกหน้าจอ กลับสู่โหมดรับงาน
   const markDone = (order) => setDoneIds((prev) => new Set(prev).add(order.id));
 
+  // Auto Accept: เปิดแล้วรับงานที่ "รับได้จริง" อัตโนมัติ (ผ่าน acceptDelivery = ตรวจ validation
+  // เดิมครบทุกอย่าง ไม่ข้ามการกันรับซ้ำ/งานเดียว) โดยไม่ต้องกดยืนยัน. กันรับซ้ำด้วย autoAcceptedRef
+  useEffect(() => {
+    if (!settings.autoAccept || !isOnline || hasActive || busyId || detailOrder) return;
+    if (!eligibleIncoming || autoAcceptedRef.current.has(eligibleIncoming.id)) return;
+    autoAcceptedRef.current.add(eligibleIncoming.id);
+    acceptDelivery(eligibleIncoming);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.autoAccept, isOnline, hasActive, busyId, detailOrder, eligibleIncoming?.id]);
+
+  // Badge: จำนวนงานว่างที่รับได้ ขึ้นที่ชื่อแท็บเบราว์เซอร์ เมื่อเปิด "แจ้งเตือนงานใหม่" และยังว่าง
+  const badgeCount = settings.notifyNewJob && isOnline && !activeOrder ? visibleAvailable.length : 0;
+  useEffect(() => {
+    const base = baseTitleRef.current || "LK Rider";
+    document.title = badgeCount > 0 ? `(${badgeCount}) ${base}` : base;
+    return () => { document.title = base; };
+  }, [badgeCount]);
+
   // Render helpers (plain functions, not nested components) for the two shared banners.
   const renderAlert = () =>
     actionError ? (
@@ -455,6 +512,7 @@ export default function RiderOrdersDashboard() {
         order={popupOrder}
         storeLocation={storeLocation}
         busy={Boolean(busyId)}
+        soundOn={settings.soundOn}
         onAccept={acceptDelivery}
         onReject={rejectDelivery}
         onViewDetails={setDetailOrder}

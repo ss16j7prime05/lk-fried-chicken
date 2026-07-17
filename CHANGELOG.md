@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Added (Rider App Settings — wire toggles into live runtime)
+- **อ่านตั้งค่า realtime** จาก users/{uid} (listener เดียวกับ riderStatus) → สลับ toggle ในหน้า
+  "ตั้งค่าแอป" มีผลกับ runtime **ทันทีไม่ต้องรีเฟรช**
+- **เสียงแจ้งเตือน (notifSoundEnabled)**: ป๊อปอัปรับ prop `soundOn` — เปิด = เสียงเรียกวนซ้ำจนกด
+  รับ/ปฏิเสธ (respect autoplay ผ่าน AudioContext unlock เดิม), หยุดทันทีเมื่อจัดการออเดอร์ ; ปิด = ไม่มีเสียงเลย
+- **แจ้งเตือนงานใหม่ (notifyNewJob)**: เปิด = ป๊อปอัปเต็มจอ + browser notification (เมื่อได้สิทธิ์) +
+  badge บนชื่อแท็บ ; ปิด = ซ่อน notification UI ทั้งหมด (ไม่มีป๊อปอัป/เสียง/notification/badge) เหลือแค่
+  รายการงานว่างให้เลือกเอง
+- **รับงานอัตโนมัติ (autoAccept)**: เปิด = รับงานที่รับได้จริงอัตโนมัติผ่าน `acceptOrder` (validation
+  เดิมครบ: กันรับซ้ำ/งานเดียว/พร้อมส่ง/ตัวกรองเงินสด) ข้ามป๊อปอัปยืนยัน ; ปิด = workflow เดิม
+- ตรวจครบ 8 combinations (Notif×Sound×Auto) โดย code trace ; build/lint (แตะ 0 error)/`npm test` (40) ผ่าน
+
 ### Changed (Rider module — remove bell, rebuild Settings into 5 production sections)
 - **หน้า Home: เอากระดิ่งแจ้งเตือนออก** — ไม่มี floating element บนหน้า Home อีก (การ์ดสถิติ +
   ปุ่มออนไลน์ขึ้นบนสุดเลย ไม่มีที่ว่างค้าง). หน้าอื่นยังมี avatar เข้าโปรไฟล์. NotificationBell ยังใช้
