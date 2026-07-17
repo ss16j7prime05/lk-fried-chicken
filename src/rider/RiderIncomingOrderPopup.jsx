@@ -44,13 +44,15 @@ const Stat = ({ icon: Icon, label, value }) => (
 // order data; no mock values.
 // This component is keyed by order id in the parent, so it remounts per incoming order —
 // the countdown state initialises fresh on mount (no setState-in-effect to reset it).
-export default function RiderIncomingOrderPopup({ order, storeLocation, busy, onAccept, onReject, onViewDetails, onDismiss }) {
+export default function RiderIncomingOrderPopup({ order, storeLocation, busy, soundOn = true, onAccept, onReject, onViewDetails, onDismiss }) {
   const { t } = usePreferences();
   const [secondsLeft, setSecondsLeft] = useState(AUTO_DISMISS_SEC);
   const dismissRef = useRef(onDismiss);
   useEffect(() => { dismissRef.current = onDismiss; }); // keep latest without re-arming the timer
 
-  useIncomingAlarm(Boolean(order) && !busy);
+  // Alarm loops only while the popup is up, not busy, and the Notification Sound setting is
+  // on — flip the setting off and the effect cleanup stops the loop immediately (no refresh).
+  useIncomingAlarm(Boolean(order) && !busy && soundOn);
 
   // นับถอยหลัง แล้วปิด popup เมื่อหมดเวลา (งานยังอยู่ในพูล). ตั้ง 1 ครั้งตอน mount (keyed ต่อออเดอร์)
   useEffect(() => {
