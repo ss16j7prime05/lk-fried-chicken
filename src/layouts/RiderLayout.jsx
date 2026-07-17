@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { usePreferences } from "../context/PreferencesContext";
 import { useAuth } from "../AuthContext.jsx";
-import { NotificationBell } from "../components/notifications/NotificationBell";
+import { getAlarmAudioCtx } from "../store/alarmSounds";
 
 // Device-local UI preference (not Firestore) — remembers the collapsed sidebar choice.
 const SIDEBAR_KEY = "lkfc_rider_sidebar_collapsed";
@@ -37,6 +37,23 @@ export const RiderLayout = () => {
     }
   }, [collapsed]);
 
+  // ปลุก AudioContext จาก user gesture แรก (เหมือน StoreLayout) — เบราว์เซอร์บล็อกเสียงจนกว่าจะมี
+  // การแตะ/คลิก ถ้าไรเดอร์เปิดแอปมาแบบออนไลน์อยู่แล้ว เสียงเรียกงานใหม่ครั้งแรกจะเงียบถ้าไม่ปลุกไว้ก่อน
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        const ctx = getAlarmAudioCtx();
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      } catch { /* ignore */ }
+    };
+    document.addEventListener("touchstart", unlock, { once: true });
+    document.addEventListener("click", unlock, { once: true });
+    return () => {
+      document.removeEventListener("touchstart", unlock);
+      document.removeEventListener("click", unlock);
+    };
+  }, []);
+
   // LINE MAN-style 5-menu bottom nav. Profile lives on the avatar (top-right), not the nav.
   const navItems = [
     { icon: Home, label: t("ro.nav.home"), path: "/rider" },
@@ -52,23 +69,29 @@ export const RiderLayout = () => {
       ? pathname === "/rider" || pathname.startsWith("/rider/job")
       : pathname === path || pathname.startsWith(`${path}/`);
 
+  // The home screen has its own top card (stats + toggle), so no floating profile avatar
+  // there. Other rider pages keep the avatar top-right so the profile page stays reachable.
+  const onHome = pathname === "/rider";
+
   return (
     <div
       className={`min-h-screen bg-gray-50 pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-0 transition-[padding] duration-200 ${
         collapsed ? "md:pl-20" : "md:pl-64"
       }`}
     >
-      {/* Floating top-right: profile avatar + notification bell (all breakpoints) */}
-      <div className="fixed top-3 right-3 z-[55] flex items-center gap-2">
-        <Link
-          to="/rider/profile"
-          aria-label={t("ro.nav.profile")}
-          className="w-11 h-11 rounded-full bg-white shadow-soft border border-gray-50 flex items-center justify-center font-black text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        >
-          {avatarChar}
-        </Link>
-        <NotificationBell className="bg-white shadow-soft border border-gray-50" />
-      </div>
+      {/* Floating profile avatar (top-right) — hidden on home; offset by the top safe-area
+          inset so it's never clipped under a notch/status bar. */}
+      {!onHome && (
+        <div className="fixed right-3 z-[55] top-[calc(0.75rem+env(safe-area-inset-top))]">
+          <Link
+            to="/rider/profile"
+            aria-label={t("ro.nav.profile")}
+            className="w-11 h-11 rounded-full bg-white shadow-soft border border-gray-50 flex items-center justify-center font-black text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          >
+            {avatarChar}
+          </Link>
+        </div>
+      )}
 
       {/* Desktop / tablet sidebar (sticky full-height). Collapses to an icon rail. */}
       <nav
@@ -154,7 +177,13 @@ export const RiderLayout = () => {
         })}
       </nav>
 
-      <main className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
+      {/* Home has no floating element (stats card sits at the top). Other pages reserve a
+          little top space so the floating avatar never overlaps their header. */}
+      <main
+        className={`max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 ${
+          onHome ? "pt-4 sm:pt-6 md:pt-8" : "pt-[calc(4rem+env(safe-area-inset-top))] sm:pt-6 md:pt-8"
+        }`}
+      >
         <Outlet />
       </main>
     </div>

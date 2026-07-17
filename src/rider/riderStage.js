@@ -71,6 +71,20 @@ export function deriveCustomerStatus(order) {
 
 export const customerStatusIndex = (cs) => CUSTOMER_STATUS_ORDER.indexOf(cs);
 
+// Rider-facing workflow milestones for the active-job timeline (5 clean steps that fit
+// mobile). Derived from status + riderStage — no new stored field. Label keys → ro.step.*
+export const RIDER_FLOW_STEPS = ["toStore", "atStore", "toCustomer", "atCustomer", "done"];
+
+// Index of the CURRENT rider milestone (0..4). < index = done, == current, > = pending.
+export function riderFlowStepIndex(order) {
+  const s = normalizeStatus(order?.status);
+  const stage = order?.riderStage;
+  if (s === "completed") return 4;
+  if (s === "delivering") return stage === RIDER_STAGE.ARRIVED_AT_CUSTOMER ? 3 : 2;
+  if (s === "picked_up") return stage === RIDER_STAGE.ARRIVED_AT_RESTAURANT ? 1 : 0;
+  return 0; // ready_for_delivery / just accepted
+}
+
 // The rider's next action for the current order (stage-aware). Drives the action bar.
 // kinds: accept | arrive_restaurant | confirm_pickup | arrive_customer | confirm_delivery | done | none
 export function riderStageAction(order) {

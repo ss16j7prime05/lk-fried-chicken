@@ -5,6 +5,110 @@
 
 ## [Unreleased]
 
+### Changed (Rider module — remove bell, rebuild Settings into 5 production sections)
+- **หน้า Home: เอากระดิ่งแจ้งเตือนออก** — ไม่มี floating element บนหน้า Home อีก (การ์ดสถิติ +
+  ปุ่มออนไลน์ขึ้นบนสุดเลย ไม่มีที่ว่างค้าง). หน้าอื่นยังมี avatar เข้าโปรไฟล์. NotificationBell ยังใช้
+  ในฝั่ง Store/Customer/Admin เหมือนเดิม (ลบเฉพาะ RiderLayout)
+- **Settings เป็นฮับ 5 หัวข้อ** (`/rider/settings` + sub-routes ใหม่ ไม่กระทบ route เดิม):
+  - **บัญชีของฉัน** (`/settings/account`): รูป/ชื่อ/รหัส/ระดับ/เรตติ้ง (จากรีวิวจริง) + ประเภทงาน +
+    ข้อมูลส่วนตัว + ปุ่มแก้ไข (ไป `/rider/profile`)
+  - **สรุปการทำงาน** (`/settings/work-summary`): เรตติ้ง, อัตรารับงาน/ยกเลิก (จากงานจริง),
+    สรุปรายได้ (วันนี้/สัปดาห์/เดือน), สถิติการทำงาน (งานสำเร็จ/ระยะทาง/รายได้รวม)
+  - **สรุปรายได้** (`/settings/income`): แท็บ รายวัน/สัปดาห์/เดือน — รายได้รวม + จำนวนงานสำเร็จ +
+    ส่วนต่างจากงวดก่อน + อัปเดตล่าสุด (ข้อมูล Firestore จริง งวดที่ไม่มีงาน = ฿0.00)
+  - **ตั้งค่าแอป** (`/settings/app`): แจ้งเตือนงานใหม่ / เสียงแจ้งเตือน / รับงานอัตโนมัติ
+    (persist ลง users/{uid} — additive fields) + ธีม/ภาษา
+  - **เช็คความพร้อมอุปกรณ์** (`/settings/device`): ตรวจสิทธิ์แจ้งเตือน/เสียง/เครือข่าย/เวอร์ชันจริง ;
+    รายการเฉพาะ native (Play Services/overlay/full-screen) รายงานตรง ๆ ว่า "ไม่มีบนเว็บ" ไม่แกล้งผ่าน ;
+    ปุ่ม "ตรวจสอบอีกครั้ง"
+- ทุกหน้าใช้ข้อมูล Firebase จริง (ไม่มี mock — ค่าที่ยังไม่มีข้อมูล = 0/—), ดีไซน์ LK, responsive.
+  เพิ่ม `riderMetrics.js` (คำนวณรายได้/อัตรา/งวดจากงานจริง) + `APP_VERSION` ใน config. เก็บ business
+  logic เดิม (single active order flow ไม่แตะ). ลบ `RiderSettings.jsx` เดิม (ย้ายเนื้อหาไปฮับ/ตั้งค่าแอป/บัญชี)
+- build / lint (ไฟล์ที่แตะ 0 error) / `npm test` (40) ผ่าน — ยังต้อง **QA เครื่องจริง**
+
+### Changed (Rider home — declutter top-right, fix notification-bell overlap)
+- **ซ่อน avatar โปรไฟล์เฉพาะหน้า Home/รองาน** (`/rider`) — เหลือแค่กระดิ่งแจ้งเตือนมุมขวาบน
+  (หน้าอื่นยังมี avatar ไว้เข้าโปรไฟล์ เพราะเป็นทางเข้าเดียว). คง Stats card + ปุ่มเปิด-ปิดรับงาน + กระดิ่ง
+- **กระดิ่งไม่ทับกับ Stats card อีกต่อไป**: หน้า Home สำรองพื้นที่ด้านบน (ความสูงกระดิ่ง + safe-area
+  inset) ให้เนื้อหาเริ่มใต้กระดิ่งเสมอ ; กระดิ่งเองก็ขยับลงตาม `env(safe-area-inset-top)` กันโดน notch
+  บังทุกขนาดจอ. ไม่แตะ business logic
+
+### Changed (Rider home/waiting screen — LINE MAN-style layout in LK design language)
+- **แถบสถิติหัวจอ** (`RiderStatsBar`): รายได้วันนี้ / เครดิต / เหรียญวันนี้ + ปุ่มเปิด-ปิดรับงาน
+  รวมในการ์ดเดียว. รายได้/เหรียญคิดจากงานของไรเดอร์ที่ส่งสำเร็จ "วันนี้" (ข้อมูลจริง จาก
+  deliveredAt) ; เครดิตอ่าน `profile.riderCredit/credit` (default 0 ไม่มี mock)
+- **ตัวกรองเงินสด** ("เลือกจำนวนเงินสดที่คุณมี"): ชิป ทั้งหมด / ฿500 / ฿1,000 / มากกว่า ฿1,000 —
+  งานเก็บเงินปลายทาง (COD) ที่ยอดเกินวงเงินที่เลือกจะไม่ขึ้นในลิสต์ **และไม่เด้งป๊อปอัป/ไม่ส่งเสียง** ;
+  งานจ่ายออนไลน์ขึ้นเสมอ (ไม่ต้องใช้เงินสด). ถ้ากรองแล้วไม่เหลืองาน โชว์ข้อความบอกให้เพิ่มวงเงิน
+- **การ์ดงานว่าง (redesign)**: แท็ก "ส่งอาหาร", ร้าน (ต้นทาง) + จุดส่ง (ปลายทาง),
+  "เก็บปลายทาง ฿X" (COD) / "ไม่ต้องเก็บเงิน" (จ่ายแล้ว), "รายรับ ฿X" เด่นชัด, ปุ่ม "รับงานนี้" ;
+  แตะการ์ดเพื่อดูรายละเอียดก่อนรับ. ใช้ดีไซน์ LK (primary, Card/Button) ไม่ลอก UI ของ LINE MAN
+- **หน้าไม่มีงาน**: มอเตอร์ไซค์ + "ยังไม่มีงานว่าง" / "งานที่พร้อมให้ไปรับจะแสดงที่นี่" (แทนแท็บเดิม
+  งานว่าง/รับแล้ว/กำลังส่ง ที่เอาออกไปตั้งแต่รอบ single-active-order)
+- build / lint (ไฟล์ที่แตะ 0 error) / `npm test` (40 เคส) ผ่าน — ยังต้อง **QA เครื่องจริง**
+
+### Fixed (Rider workflow — production QA pass)
+- **หน้าสรุปกระพริบหลังกดส่งสำเร็จ**: `justCompleted` เช็ค `deliveredAt >= mountTime` แต่ `deliveredAt`
+  เป็น `serverTimestamp()` ที่อ่านได้เป็น `null` ในเครื่องระหว่างรอ server → `activeOrder` กลายเป็น
+  null ชั่วขณะ หน้าจอหลุดไปหน้ารอรับงานแล้วเด้งกลับ. แก้โดยอ่าน snapshot งานของไรเดอร์ด้วย
+  `{ serverTimestamps: "estimate" }` ให้ deliveredAt มีค่าประมาณทันที (ไม่กระพริบ)
+- **เสียงเรียกงานแรกเงียบ**: `RiderLayout` ไม่มีการปลุก AudioContext (ต่างจาก StoreLayout) ถ้าไรเดอร์
+  เปิด/รีเฟรชแอปมาแบบออนไลน์อยู่แล้วโดยยังไม่แตะจอ เสียงเรียกงานใหม่ครั้งแรกจะไม่ดัง (เบราว์เซอร์บล็อก).
+  แก้โดยเพิ่ม unlock listener (touchstart/click ครั้งแรก) ใน `RiderLayout` เหมือน StoreLayout
+- **Action ล้มเหลวเงียบ**: `RiderActiveOrder` ยืนยันรับอาหาร/ส่งสำเร็จ ถ้า `transition()` ถูกปฏิเสธ
+  (ออเดอร์ถูกยกเลิก/สถานะไม่ตรง) หรือเขียน Firestore ไม่ผ่าน เดิมกดแล้วเงียบ. แก้โดยจับผลลัพธ์แล้ว
+  โชว์แถบ error (`ro.actionFailed`) ให้ไรเดอร์รู้และลองใหม่ได้
+- ตรวจครบ 15 สถานการณ์ (popup/accept/view details/COD/ออนไลน์/นำทางทุกสเตจ/รีเฟรชทุกสเตจ/resume/
+  Firestore sync/store→rider→customer/เสียง/กันรับซ้ำ/งานเดียว/สรุป/edge cases) — QA เป็น **static
+  code trace** เพราะเครื่องนี้บล็อก auth/GPS/Firestore/เสียง ; ยังต้อง **QA เครื่องจริง** ก่อน production
+
+### Changed (Rider workflow redesign — single active order, popup→detail→accept→workflow)
+- **งานเดียวต่อครั้ง (single active order)**: ไรเดอร์ถืองานได้ทีละ 1 ใบ. เมื่อมีงานกำลังทำ
+  (`status` picked_up/delivering) `RiderOrdersDashboard` จะโชว์ **workflow อย่างเดียว** — ซ่อน
+  ป๊อปอัปงานใหม่/รายการงานว่าง/ปุ่มสลับสถานะทั้งหมด และ `acceptOrder` ถูกล็อก (กดรับใบใหม่ไม่ได้
+  จนกว่าจะส่งจบ). สถานะทั้งหมด derive จาก Firestore → **รีเฟรช/ปิดเปิดแอปแล้วกลับมาขั้นเดิมเสมอ**
+- **ป๊อปอัปงานใหม่ (redesign)**: `RiderIncomingOrderPopup` เพิ่ม **ประเภทการชำระ** (COD/ออนไลน์)
+  + **ETA** + ปุ่ม **ดูรายละเอียด (View Details)** ครบ 3 ปุ่ม (รับ / ดูรายละเอียด / ปฏิเสธ) พร้อม
+  เสียงเรียกวนซ้ำ + countdown เหมือนเดิม. ไม่เปิดหน้าเต็มอัตโนมัติ
+- **หน้ารายละเอียดก่อนรับ** (`RiderOrderDetailSheet.jsx` ใหม่): เปิดจาก "ดูรายละเอียด" —
+  COD โชว์ "ลูกค้าจ่ายเงินสด + ยอดที่ต้องเก็บ", ออนไลน์โชว์ "ลูกค้าจ่ายแล้ว ไม่ต้องเก็บเงิน" +
+  ข้อมูลร้าน/ลูกค้า/แผนที่/รายการอาหาร. ปุ่ม **รับงาน / ย้อนกลับ** (Back กลับไปหน้าป๊อปอัป)
+- **Workflow เต็ม (shared)**: แยก workflow ออกเป็น `RiderActiveOrder.jsx` ใช้ร่วมกันทั้ง dashboard
+  (งานที่กำลังทำ) และ route `/rider/job/:id` (ทำให้ `RiderJobDetails` เหลือ wrapper บาง ๆ). ขั้นตอน:
+  ไปร้าน → ถึงร้าน (geofence) → รับอาหาร → ไปหาลูกค้า → ถึงลูกค้า (geofence) → ยืนยันส่ง (dialog)
+  → สำเร็จ. Timeline ปรับเป็น 5 ไมล์สโตน stage-aware (`riderFlowStepIndex`). โทร/แชทปิดเองเมื่อจบงาน
+- **หน้าสรุปการจัดส่ง (redesign)**: `RiderDeliverySummary` โชว์ตามสเปก — **รายได้ / ระยะทาง /
+  เวลา / เหรียญ / ภาษี / รายได้สุทธิ** (เวลา = acceptedAt→deliveredAt ; ฟิลด์ additive default 0
+  ไม่มี mock) + ปุ่ม **เสร็จสิ้น (Done)** กลับสู่หน้ารอรับงาน
+- **ลบ dead code**: `riderJobFlow.js` (FLOW_STEPS/flowStepIndex เดิม) — ย้าย logic ไป `riderStage.js`.
+  `RiderOrderCard.jsx` ไม่ถูกเรียกจาก dashboard แล้ว (คงไฟล์ไว้ ยังเป็นคอมโพเนนต์ที่ reuse ได้)
+- build / lint (ไฟล์ที่แตะ 0 error) / `npm test` (40 เคส) ผ่าน. **ยังไม่ได้ QA เครื่องจริง**
+  (auth/GPS/Firestore/เสียง/กล้อง บล็อกในเครื่องนี้) — ต้องทดสอบ flow ครบทุกขั้นบนอุปกรณ์จริง
+
+### Added (Rider production UX — incoming-order popup + sound, richer chat, delivery summary)
+- **Full-screen new-order popup + เสียงเรียกวนซ้ำ** (`src/rider/RiderIncomingOrderPopup.jsx` ใหม่):
+  งานใหม่ที่เข้าพูล (docChanges `added` จาก snapshot เดิม) เด้งป๊อปอัปเต็มจอ — โชว์ร้าน/ลูกค้า/
+  ระยะทาง (haversine ร้าน→ลูกค้า)/รายได้ (deliveryFee)/countdown — พร้อมเสียง `kitchen` วนทุก 2 วิ
+  (Web Audio ตัวเดียวกับ StoreLayout ไม่ต้องมีไฟล์เสียง) **จนกดรับ/ปฏิเสธ/หมดเวลา 30 วิ** (auto-
+  dismiss = ปิดป๊อปอัปเฉย ๆ งานยังอยู่ในลิสต์). ไล่ทีละใบตามคิว, เด้งเฉพาะตอนไรเดอร์ออนไลน์,
+  ตัดออกจากคิวอัตโนมัติเมื่อไรเดอร์อื่นรับไป (docChanges `removed`/มี riderId) — ไม่มี mock
+- **Chat ลูกค้า↔ไรเดอร์แบบเต็ม** (`src/Chat.jsx` เขียนใหม่, realtime `onSnapshot`): ข้อความ +
+  **รูปภาพ** (Cloudinary, ดูเต็มจอได้), **read receipt** + **typing indicator** เก็บใน doc เสริม
+  `chatMeta/{orderId}` (เขียนครั้งเดียวต่อการอ่าน/พิมพ์ ไม่แตะ `chats` ที่ update-locked), **ปุ่มโทร**
+  (ไรเดอร์→`order.phone`, ลูกค้า→`order.riderPhone`). **ปิด chat + โทรอัตโนมัติ** เมื่อออเดอร์
+  completed/cancelled (composer ซ่อน, ขึ้น "การสนทนาปิดแล้ว")
+- **สรุปการจัดส่ง** (`src/rider/RiderDeliverySummary.jsx` ใหม่): แสดงเมื่อ status=completed —
+  รายได้ + โบนัส + ภาษี + เครดิต + coins (ฟิลด์ `riderBonus/riderTax/riderCredits/riderCoins`
+  additive, default 0 เมื่อ back-office ยังไม่ตั้ง) ; ยอดจ่าย = รายได้ + โบนัส − ภาษี + เครดิต — ไม่มี mock
+- **Stepper ลูกค้า 10 ขั้น** (`OrderDetail.jsx`): เปลี่ยนจาก 7 ขั้น (status ดิบ) มาเป็น
+  `CUSTOMER_STATUS_ORDER` (deriveCustomerStatus) — เห็นทุกช่วง incl. ไปร้าน/ถึงร้าน/ไปหาลูกค้า/ใกล้ถึง
+- **`firestore.rules`**: เพิ่ม match `chatMeta/{orderId}` — คู่สนทนาของออเดอร์นั้นอ่าน/เขียนได้
+  (เกณฑ์เดียวกับ `/chats`). Additive ไม่กระทบ schema เดิม. **ต้อง `firebase deploy --only
+  firestore:rules` เอง** (session นี้ไม่มี Firebase login) — จนกว่าจะ deploy read-receipt/typing
+  จะเขียนไม่ผ่านแต่ **fail กราว์ซ้อ** (แชท/รูป/โทร ใช้ได้ปกติ)
+- build/lint (ไฟล์ที่แตะสะอาด 0 error) / `npm test` (40 เคส) ผ่าน. ทั้งหมดต้อง **QA เครื่องจริง**
+  (auth/GPS/Firestore/เสียง/กล้อง บล็อกในเครื่องนี้)
+
 ### Added (Rider production workflow — additive granular stages + real-time customer status)
 - **`stores`/order schema (additive, backward-compatible)**: ฟิลด์ใหม่ `order.riderStage`
   (heading_to_restaurant / arrived_at_restaurant / heading_to_customer / arrived_at_customer /

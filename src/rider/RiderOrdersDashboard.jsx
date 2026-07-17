@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
-import { AlertCircle, Navigation, Power, WifiOff } from "lucide-react";
+import { AlertCircle, Banknote, Bike, CheckCircle2, Coins, MapPin, Navigation, Package, Power, Store, WifiOff } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
-import RiderOrderCard from "./RiderOrderCard.jsx";
+import RiderIncomingOrderPopup from "./RiderIncomingOrderPopup.jsx";
+import RiderOrderDetailSheet from "./RiderOrderDetailSheet.jsx";
+import RiderActiveOrder from "./RiderActiveOrder.jsx";
 import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { RiderCardGridSkeleton } from "../components/ui/Skeleton";
 import {
@@ -14,14 +17,13 @@ import {
   DELIVERING_STATUS,
   PICKED_UP_STATUS,
   READY_QUERY_STATUSES,
-  READY_STATUS,
   isReadyForDelivery,
 } from "./riderStatus";
-import { byNewest, normalizeStatus } from "../store/orderStatus";
+import { byNewest, normalizeStatus, toDate } from "../store/orderStatus";
 import { useStoreStatus } from "../store/useStoreStatus";
-import { transition } from "../store/orderStateMachine";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
 import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
+import { haversineKm } from "../location/locationUtils";
 import { GEO_STATE, useGeolocationStatus } from "../location/mapsService";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { logError } from "../errorCenter";
@@ -29,6 +31,22 @@ import { logError } from "../errorCenter";
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
 const FALLBACK_STORE_LNG = 100.0529543;
+
+// Firestore Timestamp | ISO | ms -> ms (0 ถ้าไม่มี)
+const orderMs = (ts) => (ts?.toMillis ? ts.toMillis() : ts ? new Date(ts).getTime() : 0);
+
+const money = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
+const isSameDay = (d, ref) =>
+  !!d && d.getDate() === ref.getDate() && d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
+
+// ตัวเลือกจำนวนเงินสดที่ไรเดอร์มี (กรองงานเก็บเงินปลายทางที่เกินวงเงิน) — null = ทั้งหมด
+const CASH_OPTIONS = [500, 1000, Infinity];
+// งานผ่านตัวกรองเงินสดไหม: งานจ่ายออนไลน์ผ่านเสมอ (ไม่ต้องใช้เงินสด) ; COD ต้อง <= วงเงินที่เลือก
+const passesCash = (order, cashLimit) => {
+  if (cashLimit == null) return true;
+  if ((order.paymentMethod || "cash") !== "cash") return true;
+  return Number(order.grandTotal ?? order.subtotal ?? 0) <= cashLimit;
+};
 
 // เหตุผลที่รับ/ปฏิเสธงานไม่สำเร็จ (reason จาก riderAcceptReject) -> คีย์แปลภาษา ro.err.*
 // ที่สำคัญที่สุดคือ already_taken: ไรเดอร์ต้องรู้ว่าโดนตัดหน้า ไม่ใช่กดแล้วเงียบ
@@ -58,7 +76,107 @@ const pickLocationAlert = (online, geoError, permission) => {
   return null;
 };
 
-// Rider Dashboard ใหม่: เห็นงานพร้อมส่งทั้งหมด, รับงานได้, อัปเดตสถานะแบบ realtime
+// Available-job card (idle browse list) — LINE MAN-style information layout in LK's design
+// language. Tapping the body opens the pre-accept detail sheet; "รับงานนี้" accepts directly.
+// All figures are real order data (earnings = deliveryFee ; COD = collect grandTotal).
+const AvailableJobCard = ({ order, storeLocation, busy, disabled, onView, onAccept, t }) => {
+  const dest = getDestination(order);
+  const distanceKm =
+    dest.lat != null && dest.lng != null
+      ? haversineKm(storeLocation.lat, storeLocation.lng, dest.lat, dest.lng)
+      : (order.distanceKm ?? order.distance ?? null);
+  const isCod = (order.paymentMethod || "cash") === "cash";
+  const codAmount = Number(order.grandTotal ?? order.subtotal ?? 0);
+  return (
+    <Card className="p-0 overflow-hidden flex flex-col">
+      <button type="button" onClick={() => onView(order)} className="text-left p-4 focus-visible:outline-none">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <span className="inline-flex items-center gap-1 text-[11px] font-black text-primary bg-primary-light px-2.5 py-1 rounded-full">
+            <Bike size={13} /> {t("ro.card.foodDelivery")}
+          </span>
+          {distanceKm != null && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-400">
+              <Navigation size={12} /> {distanceKm.toFixed(1)} km
+            </span>
+          )}
+        </div>
+
+        {/* pickup (store) -> dropoff (customer) */}
+        <div className="space-y-2">
+          <div className="flex items-start gap-2">
+            <Store size={15} className="text-primary shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-black text-gray-900 truncate">{storeLocation?.name || "LK Fried Chicken"}</p>
+              {order.storeAddress && <p className="text-xs text-gray-400 font-medium truncate">{order.storeAddress}</p>}
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <MapPin size={15} className="text-secondary shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-bold text-gray-700 truncate">{order.customerName || "-"}</p>
+              {dest.address && <p className="text-xs text-gray-400 font-medium truncate">{dest.address}</p>}
+            </div>
+          </div>
+        </div>
+      </button>
+
+      {/* payment + earnings + accept */}
+      <div className="px-4 pb-4 pt-1 space-y-3">
+        <div className="flex items-center justify-between gap-2 rounded-2xl bg-gray-50 px-3 py-2.5">
+          <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${isCod ? "text-secondary" : "text-primary"}`}>
+            {isCod ? <Banknote size={14} /> : <CheckCircle2 size={14} />}
+            {isCod ? t("ro.card.collect", { amount: money(codAmount) }) : t("ro.card.noCollect")}
+          </span>
+          <span className="text-right">
+            <span className="block text-[10px] font-bold text-gray-400 uppercase leading-none">{t("ro.card.earnings")}</span>
+            <span className="block text-lg font-black text-primary leading-tight">{money(order.deliveryFee)}</span>
+          </span>
+        </div>
+        <Button className="w-full !py-2.5" loading={busy} disabled={disabled} onClick={() => onAccept(order)}>
+          <Package size={16} /> {t("ro.card.acceptThis")}
+        </Button>
+      </div>
+    </Card>
+  );
+};
+
+// Rider stats bar (income today / credit / coins today) + online toggle. Income & coins are
+// derived from the rider's own completed orders (real data) ; credit reads a real profile
+// field, default 0 — no mock values.
+const RiderStatsBar = ({ income, credit, coins, isOnline, onToggle, t }) => (
+  <Card className="p-4">
+    <div className="flex items-stretch gap-3">
+      <div className="grid grid-cols-3 flex-1 divide-x divide-gray-100">
+        <div className="flex flex-col items-center justify-center gap-0.5 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t("ro.stats.income")}</span>
+          <span className="text-base font-black text-primary leading-tight">{money(income)}</span>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-0.5 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t("ro.stats.credit")}</span>
+          <span className="text-base font-black text-blue-600 leading-tight">{money(credit)}</span>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-0.5 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t("ro.stats.coins")}</span>
+          <span className="flex items-center gap-1 text-base font-black text-amber-500 leading-tight"><Coins size={15} /> {coins}</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={isOnline}
+        className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-20 rounded-2xl font-black text-xs transition-colors ${
+          isOnline ? "bg-primary text-white hover:bg-primary-dark" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+        }`}
+      >
+        <Power size={20} />
+        {isOnline ? t("ro.online") : t("ro.offline")}
+      </button>
+    </div>
+  </Card>
+);
+
+// Rider Dashboard v2 (single active order): incoming popup + pre-accept detail sheet when
+// idle; a locked single-job workflow (RiderActiveOrder) once a job is accepted.
 export default function RiderOrdersDashboard() {
   const { user, profile } = useAuth();
   const { t } = usePreferences();
@@ -69,7 +187,6 @@ export default function RiderOrdersDashboard() {
   const [availablePool, setAvailablePool] = useState([]);
   const [myJobs, setMyJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("available");
   // ข้อผิดพลาดจากการกดปุ่ม (รับ/ปฏิเสธ/สลับสถานะ) กับจากตัว feed เอง แยกกันคนละก้อน
   const [actionError, setActionError] = useState("");
   // แยกราย feed: feed หนึ่งหายดีต้องไม่ไปล้าง error ของอีก feed ที่ยังพังอยู่
@@ -83,6 +200,15 @@ export default function RiderOrdersDashboard() {
     lng: FALLBACK_STORE_LNG,
     name: "LK Fried Chicken",
   });
+  // คิวงานใหม่ที่เพิ่งเข้ามา -> ป๊อปอัปเต็มจอ + เสียงเรียก (ไล่ทีละใบตามลำดับที่เข้า)
+  const [incomingIds, setIncomingIds] = useState([]);
+  const [detailOrder, setDetailOrder] = useState(null); // ออเดอร์ที่เปิดดูรายละเอียดก่อนรับ (View Details)
+  const [cashFilter, setCashFilter] = useState(null);   // วงเงินสดที่ไรเดอร์มี (กรอง COD) — null = ทั้งหมด
+  const [doneIds, setDoneIds] = useState(() => new Set()); // งาน completed ที่กด Done แล้ว -> เลิกโชว์สรุป
+  const [mountTime] = useState(() => Date.now()); // เวลาเปิดหน้า — ใช้แยก "งานเพิ่งจบ" ออกจากงานเก่าใน history
+  const seenOrderIdsRef = useRef(new Set()); // เคยเห็นแล้ว ไม่ต้องเด้งซ้ำ (เหมือน StoreLayout)
+  const availInitRef = useRef(false);        // snapshot แรก = งานเดิม ไม่ต้องเด้ง
+  const isOnlineRef = useRef(false);         // สถานะล่าสุดสำหรับใช้ใน callback ของ snapshot
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -103,13 +229,36 @@ export default function RiderOrdersDashboard() {
         setAvailablePool(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
         markFeed("available", "");
         setLoading(false);
+
+        // snapshot แรก: จำงานที่มีอยู่แล้วไว้ ไม่เด้งป๊อปอัปให้งานเก่า
+        if (!availInitRef.current) {
+          snapshot.docs.forEach((d) => seenOrderIdsRef.current.add(d.id));
+          availInitRef.current = true;
+          return;
+        }
+        // งานใหม่จริง ๆ ที่เพิ่งพร้อมส่ง -> เข้าคิวป๊อปอัป (เฉพาะตอนไรเดอร์เปิดรับงาน
+        // และงานยังว่าง + เราไม่ได้ปฏิเสธไปแล้ว). งานที่ถูกรับ/หลุดพูล -> เอาออกจากคิว (หยุดเสียง)
+        snapshot.docChanges().forEach((change) => {
+          const order = { id: change.doc.id, ...change.doc.data() };
+          if (change.type === "removed" || order.riderId || !isReadyForDelivery(order.status)) {
+            setIncomingIds((prev) => (prev.includes(order.id) ? prev.filter((qid) => qid !== order.id) : prev));
+            return;
+          }
+          if (change.type !== "added") return;
+          if (seenOrderIdsRef.current.has(order.id)) return;
+          seenOrderIdsRef.current.add(order.id);
+          if (!isOnlineRef.current || hasRejected(order, user.uid)) return;
+          setIncomingIds((prev) => (prev.includes(order.id) ? prev : [...prev, order.id]));
+        });
       },
       (err) => onFeedError(err, "available")
     );
     const unsubMine = onSnapshot(
       mineQ,
       (snapshot) => {
-        setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        // อ่านด้วย serverTimestamps:"estimate" เพื่อให้ deliveredAt (serverTimestamp) มีค่าประมาณ
+        // ทันทีตอนกดส่งสำเร็จ (ไม่เป็น null ระหว่างรอ server) — ไม่งั้นหน้าสรุปจะกระพริบหลุดไปหน้ารอรับงาน
+        setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })));
         markFeed("mine", "");
         setLoading(false);
       },
@@ -147,6 +296,7 @@ export default function RiderOrdersDashboard() {
   }, [user?.uid]);
 
   const isOnline = riderStatus === "online";
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
   const feedErrorKey = feedErrors.available || feedErrors.mine;
   // networkOnline = มีเน็ตไหม (คนละเรื่องกับ isOnline ที่แปลว่า "ไรเดอร์เปิดรับงาน")
   const networkOnline = useOnlineStatus();
@@ -159,22 +309,56 @@ export default function RiderOrdersDashboard() {
   const availableOrders = orders
     .filter((o) => !o.riderId && isReadyForDelivery(o.status) && !hasRejected(o, user?.uid))
     .sort(byNewest());
+  // กรองด้วยวงเงินสดที่ไรเดอร์เลือก (งานเก็บเงินปลายทางที่เกินวงเงินจะไม่ขึ้น)
+  const visibleAvailable = availableOrders.filter((o) => passesCash(o, cashFilter));
 
-  // คิวงานของไรเดอร์คนนี้ แยกตามสถานะเดิม: Assigned (picked_up) / Active (delivering) / Completed
+  // สถิติหัวจอ: รายได้/เหรียญ "วันนี้" คิดจากงานของไรเดอร์ที่ส่งสำเร็จวันนี้ (ข้อมูลจริง) ;
+  // เครดิตอ่านจากโปรไฟล์จริง (default 0 ไม่มี mock). ใช้ mountTime เป็นวันอ้างอิง (คงที่ทั้งเซสชัน)
+  const dayRef = new Date(mountTime);
+  const doneToday = orders.filter(
+    (o) => o.riderId === user?.uid && normalizeStatus(o.status) === DELIVERED_STATUS &&
+      isSameDay(toDate(o.deliveredAt ?? o.completedAt ?? o.createdAt), dayRef)
+  );
+  const todayIncome = doneToday.reduce((s, o) => s + Number(o.deliveryFee || 0) + Number(o.riderBonus || 0), 0);
+  const todayCoins = doneToday.reduce((s, o) => s + Number(o.riderCoins || 0), 0);
+  const credit = Number(profile?.riderCredit ?? profile?.credit ?? 0);
+
+  // ป๊อปอัปงานใหม่: แสดงงานแรกในคิวที่ยัง "ว่างจริง" (ถ้าไรเดอร์คนอื่นรับไปก่อน หรือหมดสถานะพร้อมส่ง
+  // ก็ข้ามไปใบถัดไป). ปิดรับงาน = ไม่เด้ง (เผื่อสลับ offline ระหว่างที่ยังมีคิวค้าง). การตัดคิวที่
+  // "ไม่ว่างแล้ว" ทำตอน snapshot (docChanges removed/modified) จึงไม่ต้อง setState ใน effect
+  const firstIncomingId = incomingIds.find((qid) => availableOrders.some((o) => o.id === qid));
+  const incomingOrder =
+    isOnline && firstIncomingId ? availableOrders.find((o) => o.id === firstIncomingId) : null;
+
+  const dismissIncoming = (id) => setIncomingIds((prev) => prev.filter((qid) => qid !== id));
+
+  // ── งานเดียวต่อครั้ง (single active order) ──────────────────────────────────
+  // งานที่ "กำลังทำ" = ออเดอร์ของเราที่ยัง picked_up/delivering (ใหม่สุดก่อน — ปกติมีใบเดียว)
   const mine = orders.filter((o) => o.riderId === user?.uid);
-  const assignedOrders = mine.filter((o) => o.status === PICKED_UP_STATUS).sort(byNewest());
-  const activeOrders = mine.filter((o) => o.status === DELIVERING_STATUS).sort(byNewest());
-  const completedOrders = mine
-    .filter((o) => normalizeStatus(o.status) === DELIVERED_STATUS)
+  const inProgress = mine
+    .filter((o) => o.status === PICKED_UP_STATUS || o.status === DELIVERING_STATUS)
     .sort(byNewest());
 
-  // งานที่กำลังส่งอยู่จริง = สิ่งที่ต้องกระจายตำแหน่งให้ลูกค้าติดตาม
-  const deliveries = activeOrders
-    .map((o) => {
-      const { lat, lng } = getDestination(o);
-      return { id: o.id, lat, lng };
-    })
-    .filter((d) => d.lat != null && d.lng != null);
+  // งานที่เพิ่งส่งสำเร็จ "หลังเปิดหน้านี้" (deliveredAt > mountTime) และยังไม่กด Done -> คงหน้าสรุปไว้
+  // ออเดอร์ completed เก่าที่โหลดมาตอนเปิดแอป (deliveredAt เก่ากว่า mountTime) จะไม่เด้งสรุปย้อนหลัง
+  const justCompleted = mine.find(
+    (o) => normalizeStatus(o.status) === DELIVERED_STATUS && !doneIds.has(o.id) && orderMs(o.deliveredAt ?? o.completedAt) >= mountTime
+  );
+  // ออเดอร์ที่กำลังโฟกัส (ล็อกทั้งหน้าจอ). hasActive = ยังส่งไม่จบ -> ห้ามรับงานใหม่
+  const activeOrder = inProgress[0] || justCompleted || null;
+  const hasActive = Boolean(inProgress[0]);
+
+  // ป๊อปอัป/รายการงานว่างแสดงเฉพาะตอน "ไม่มีงานกำลังทำ" (งานเดียวต่อครั้ง). ป๊อปอัปยังเคารพ
+  // ตัวกรองเงินสดด้วย — งาน COD ที่เกินวงเงินไม่เด้ง/ไม่ส่งเสียง
+  const showIncoming = !activeOrder;
+  const popupOrder =
+    showIncoming && !detailOrder && incomingOrder && passesCash(incomingOrder, cashFilter) ? incomingOrder : null;
+
+  // งานที่กำลังส่งอยู่จริง = สิ่งที่ต้องกระจายตำแหน่งให้ลูกค้าติดตาม (งานเดียว)
+  const deliveries =
+    activeOrder && activeOrder.status === DELIVERING_STATUS
+      ? [{ id: activeOrder.id, ...getDestination(activeOrder) }].filter((d) => d.lat != null && d.lng != null)
+      : [];
   // ออฟไลน์ = เขียนไม่ถึง Firestore อยู่แล้ว หยุดอ่าน GPS ไปเลย (ประหยัดแบต)
   const { geoError } = useDeliveryBroadcast(deliveries, isOnline && networkOnline);
   const locationAlert = pickLocationAlert(networkOnline, geoError, geoPermission.state);
@@ -183,9 +367,7 @@ export default function RiderOrdersDashboard() {
   const toggleAvailability = async () => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, "users", user.uid), {
-        riderStatus: isOnline ? "offline" : "online",
-      });
+      await updateDoc(doc(db, "users", user.uid), { riderStatus: isOnline ? "offline" : "online" });
       setActionError("");
     } catch (e) {
       logError(e, "RiderOrdersDashboard.toggleAvailability");
@@ -200,103 +382,130 @@ export default function RiderOrdersDashboard() {
     phone: profile?.phone || "",
   });
 
-  // รับงาน: ผ่าน acceptOrder (transaction) เท่านั้น — re-read ออเดอร์ใน transaction แล้วเคลมต่อเมื่อ
-  // ยังพร้อมส่งและยังไม่มีคนรับ จึงกันสองไรเดอร์กดพร้อมกันแล้วได้งานใบเดียวกันทั้งคู่
+  // รับงาน: ผ่าน acceptOrder (transaction) — กันสองไรเดอร์กดพร้อมกัน. ล็อกให้มีงานเดียวต่อครั้ง
   const acceptDelivery = async (order) => {
     if (!user || !isOnline || busyId) return;
+    if (hasActive) { setActionError(t("ro.oneActiveOnly")); return; }
     setBusyId(order.id);
     setActionError("");
     const { ok, reason } = await acceptOrder(order, riderIdentity());
-    // สำเร็จแล้วออเดอร์จะหายจากแท็บ Available ไปโผล่ที่ Assigned — พาไรเดอร์ตามไปเลย
-    if (ok) setTab("assigned");
-    else setActionError(t(actionMessageKey(reason)));
+    if (!ok) setActionError(t(actionMessageKey(reason)));
+    // สำเร็จ -> งานกลายเป็น activeOrder แล้วหน้าจะสลับไปโหมดทำงานอัตโนมัติ (Firestore SSOT)
+    dismissIncoming(order.id);
+    setDetailOrder(null);
     setBusyId("");
   };
 
-  // ปฏิเสธงาน: ออเดอร์ยังพร้อมส่งและว่างเหมือนเดิม แค่ซ่อนจากพูลของไรเดอร์คนนี้ (rejectedBy)
+  // ปฏิเสธงาน: ซ่อนจากพูลของไรเดอร์คนนี้ (rejectedBy). ออเดอร์ยังว่างสำหรับคนอื่น
   const rejectDelivery = async (order) => {
     if (!user || busyId) return;
     setBusyId(order.id);
     setActionError("");
     const { ok, reason } = await rejectOrder(order, riderIdentity());
     if (!ok) setActionError(t(actionMessageKey(reason)));
+    dismissIncoming(order.id);
+    setDetailOrder(null);
     setBusyId("");
   };
-  // เปลี่ยนสถานะงาน: ผ่าน orderStateMachine.transition (SSOT ด่านเดียวของการเปลี่ยนสถานะ)
-  const runTransition = async (order, to) => {
-    if (!user || busyId) return;
-    setBusyId(order.id);
-    setActionError("");
-    const { ok, reason } = await transition(order, to, { by: user.uid });
-    if (!ok) setActionError(t(actionMessageKey(reason)));
-    setBusyId("");
-  };
-  const startDelivering = (order) => runTransition(order, DELIVERING_STATUS);
-  const markDelivered = (order) => runTransition(order, DELIVERED_STATUS);
 
-  // แท็บทั้งหมด: พูลงานว่าง + คิวงานของไรเดอร์ (ใช้ RiderOrderCard ตัวเดิมทุกแท็บ)
-  const TABS = [
-    { key: "available", list: availableOrders },
-    { key: "assigned", list: assignedOrders },
-    { key: "active", list: activeOrders },
-    { key: "completed", list: completedOrders },
-  ];
-  const activeTab = TABS.find((tb) => tb.key === tab) ?? TABS[0];
-  const list = activeTab.list;
+  // กด Done บนหน้าสรุป -> เลิกล็อกหน้าจอ กลับสู่โหมดรับงาน
+  const markDone = (order) => setDoneIds((prev) => new Set(prev).add(order.id));
 
+  // Render helpers (plain functions, not nested components) for the two shared banners.
+  const renderAlert = () =>
+    actionError ? (
+      <div role="alert" className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
+        <AlertCircle size={20} className="shrink-0 mt-0.5" />
+        <p className="text-sm font-bold min-w-0 flex-1">{actionError}</p>
+        <button onClick={() => setActionError("")} className="text-xs font-black text-red-400 hover:text-red-600 shrink-0">{t("ro.dismiss")}</button>
+      </div>
+    ) : null;
+
+  const renderLocationAlert = () =>
+    locationAlert ? (
+      <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-700">
+        {networkOnline ? <Navigation size={20} className="shrink-0 mt-0.5" /> : <WifiOff size={20} className="shrink-0 mt-0.5" />}
+        <div className="min-w-0 flex-1">
+          <p className="font-black text-sm">{t(`ro.loc.${locationAlert.key}.title`)}</p>
+          <p className="text-xs font-medium text-amber-600 mt-0.5">{t(`ro.loc.${locationAlert.key}.desc`)}</p>
+        </div>
+        {locationAlert.retry && (
+          <button onClick={geoPermission.request} className="text-xs font-black text-amber-700 underline shrink-0 mt-0.5">{t("ro.retry")}</button>
+        )}
+      </div>
+    ) : null;
+
+  // ── โหมดทำงาน: มีงานเดียวที่กำลังทำ -> โชว์ workflow อย่างเดียว (ซ่อนงานเข้าใหม่ทั้งหมด) ──
+  if (activeOrder) {
+    return (
+      <div className="space-y-4">
+        {renderAlert()}
+        {renderLocationAlert()}
+        <RiderActiveOrder order={activeOrder} storeLocation={storeLocation} onDone={() => markDone(activeOrder)} />
+      </div>
+    );
+  }
+
+  // ── โหมดว่าง: ป๊อปอัปงานใหม่ + รายละเอียดก่อนรับ + รายการงานว่าง ──
   return (
     <div className="space-y-6">
-      {/* Header: title + availability toggle (nav + notifications live in RiderLayout) */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-black text-gray-900">{t("ro.jobs.title")}</h1>
-        <Button
-          variant={isOnline ? "primary" : "outline"}
-          className={`!px-4 !py-2 text-sm shrink-0 ${isOnline ? "" : "text-gray-500"}`}
-          onClick={toggleAvailability}
-        >
-          <Power size={16} />
-          {isOnline ? t("ro.online") : t("ro.offline")}
-        </Button>
-      </div>
+      {/* งานใหม่เข้า -> ป๊อปอัปเต็มจอ + เสียงเรียกวนซ้ำจนกดรับ/ปฏิเสธ/หมดเวลา (ซ่อนตอนดูรายละเอียด) */}
+      <RiderIncomingOrderPopup
+        key={popupOrder?.id || "none"}
+        order={popupOrder}
+        storeLocation={storeLocation}
+        busy={Boolean(busyId)}
+        onAccept={acceptDelivery}
+        onReject={rejectDelivery}
+        onViewDetails={setDetailOrder}
+        onDismiss={() => popupOrder && dismissIncoming(popupOrder.id)}
+      />
 
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {TABS.map((tb) => (
-          <button
-            key={tb.key}
-            onClick={() => setTab(tb.key)}
-            className={`px-5 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border transition-all ${
-              tab === tb.key
-                ? "bg-primary text-white border-primary"
-                : "bg-white text-gray-500 border-gray-100 hover:border-primary"
-            }`}
-          >
-            {t(`ro.tab.${tb.key}`)} ({tb.list.length})
-          </button>
-        ))}
-      </div>
+      {/* ดูรายละเอียดก่อนรับ (เต็มจอ) — Back กลับไปหน้าป๊อปอัป */}
+      {detailOrder && (
+        <RiderOrderDetailSheet
+          order={detailOrder}
+          storeLocation={storeLocation}
+          busy={Boolean(busyId)}
+          onAccept={acceptDelivery}
+          onBack={() => setDetailOrder(null)}
+        />
+      )}
 
-      {/* ตำแหน่ง/เน็ตมีปัญหา = นำทางไม่ได้ + ลูกค้าติดตามไม่ได้ ไรเดอร์ต้องรู้ตัว (เดิมพังเงียบ) */}
-      {locationAlert && (
-        <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-700">
-          {networkOnline ? (
-            <Navigation size={20} className="shrink-0 mt-0.5" />
-          ) : (
-            <WifiOff size={20} className="shrink-0 mt-0.5" />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="font-black text-sm">{t(`ro.loc.${locationAlert.key}.title`)}</p>
-            <p className="text-xs font-medium text-amber-600 mt-0.5">{t(`ro.loc.${locationAlert.key}.desc`)}</p>
-          </div>
-          {locationAlert.retry && (
+      {/* Stats bar: income / credit / coins + online toggle */}
+      <RiderStatsBar income={todayIncome} credit={credit} coins={todayCoins} isOnline={isOnline} onToggle={toggleAvailability} t={t} />
+
+      {/* Cash-on-hand filter — pick how much cash you have; matching jobs appear */}
+      {isOnline && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 mb-2">{t("ro.cash.label")}</p>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
             <button
-              onClick={geoPermission.request}
-              className="text-xs font-black text-amber-700 underline shrink-0 mt-0.5"
+              type="button"
+              onClick={() => setCashFilter(null)}
+              className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap border transition-all ${
+                cashFilter == null ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-100 hover:border-primary"
+              }`}
             >
-              {t("ro.retry")}
+              {t("ro.cash.all")}
             </button>
-          )}
+            {CASH_OPTIONS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCashFilter(c)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap border transition-all ${
+                  cashFilter === c ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-100 hover:border-primary"
+                }`}
+              >
+                {c === Infinity ? t("ro.cash.over", { amount: money(1000) }) : money(c)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
+
+      {renderLocationAlert()}
 
       {/* feed พัง = ไม่มีข้อมูลให้เชื่อถือ ต้องบอกตรง ๆ แทนที่จะโชว์ "ไม่มีงาน" ทั้งที่อาจมี */}
       {feedErrorKey && (
@@ -309,23 +518,9 @@ export default function RiderOrdersDashboard() {
         </div>
       )}
 
-      {actionError && (
-        <div
-          role="alert"
-          className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600"
-        >
-          <AlertCircle size={20} className="shrink-0 mt-0.5" />
-          <p className="text-sm font-bold min-w-0 flex-1">{actionError}</p>
-          <button
-            onClick={() => setActionError("")}
-            className="text-xs font-black text-red-400 hover:text-red-600 shrink-0"
-          >
-            {t("ro.dismiss")}
-          </button>
-        </div>
-      )}
+      {renderAlert()}
 
-      {tab === "available" && storeClosed && (
+      {isOnline && storeClosed && (
         <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600">
           <Power size={20} className="shrink-0 mt-0.5" />
           <div>
@@ -337,7 +532,7 @@ export default function RiderOrdersDashboard() {
 
       {loading ? (
         <RiderCardGridSkeleton />
-      ) : tab === "available" && !isOnline ? (
+      ) : !isOnline ? (
         <div className="space-y-4">
           <EmptyState icon="🌙" title={t("ro.offlineTitle")} description={t("ro.offlineDesc")} />
           <div className="flex justify-center">
@@ -347,27 +542,24 @@ export default function RiderOrdersDashboard() {
             </Button>
           </div>
         </div>
-      ) : list.length === 0 ? (
+      ) : visibleAvailable.length === 0 ? (
         <EmptyState
           icon="🛵"
-          title={t(`ro.empty.${activeTab.key}.title`)}
-          description={t(`ro.empty.${activeTab.key}.desc`)}
+          title={t("ro.waiting.title")}
+          description={availableOrders.length > 0 ? t("ro.cash.noneMatch") : t("ro.waiting.desc")}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {list.map((order) => (
-            <RiderOrderCard
+          {visibleAvailable.map((order) => (
+            <AvailableJobCard
               key={order.id}
               order={order}
-              effectiveStatus={tab === "available" ? READY_STATUS : order.status}
               storeLocation={storeLocation}
-              networkOnline={networkOnline}
               busy={busyId === order.id}
               disabled={Boolean(busyId) && busyId !== order.id}
+              onView={setDetailOrder}
               onAccept={acceptDelivery}
-              onReject={rejectDelivery}
-              onStartDelivering={startDelivering}
-              onDelivered={markDelivered}
+              t={t}
             />
           ))}
         </div>
