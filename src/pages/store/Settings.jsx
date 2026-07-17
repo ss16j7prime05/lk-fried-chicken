@@ -15,8 +15,8 @@ import {
 import { db } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { uploadImage } from "../../services/cloudinary";
-import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION, isValidThaiPhone } from "../../constants/address";
-import { generateServiceArea, clampDeliveryKm } from "../../location/serviceArea";
+import { STORE_LOCATION, isValidThaiPhone } from "../../constants/address";
+import { generateServiceArea, clampDeliveryKm, DELIVERY_DEFAULT_KM } from "../../location/serviceArea";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../store/alarmSounds";
@@ -588,7 +588,7 @@ export function Settings() {
   const [mapLink, setMapLink] = useState("");
   const [storeLat, setStoreLat] = useState("");
   const [storeLng, setStoreLng] = useState("");
-  const [deliveryRadius, setDeliveryRadius] = useState(String(MAX_DELIVERY_RADIUS_KM));
+  const [deliveryRadius, setDeliveryRadius] = useState(String(DELIVERY_DEFAULT_KM));
   const [prepMinutes, setPrepMinutes] = useState(EST_PREP_MINUTES);
   const [social, setSocial] = useState(EMPTY_SOCIAL);
   const [tax, setTax] = useState(EMPTY_TAX);
@@ -658,7 +658,7 @@ export function Settings() {
       setMapLink(d.mapLink || "");
       setStoreLat(d.lat != null ? String(d.lat) : "");
       setStoreLng(d.lng != null ? String(d.lng) : "");
-      setDeliveryRadius(d.deliveryRadius != null ? String(d.deliveryRadius) : String(MAX_DELIVERY_RADIUS_KM));
+      setDeliveryRadius(d.deliveryRadius != null ? String(d.deliveryRadius) : String(DELIVERY_DEFAULT_KM));
       setPrepMinutes(d.prepMinutes != null ? d.prepMinutes : EST_PREP_MINUTES);
       setSocial({ ...EMPTY_SOCIAL, ...(d.social || {}) });
       setTax({ ...EMPTY_TAX, ...(d.tax || {}) });

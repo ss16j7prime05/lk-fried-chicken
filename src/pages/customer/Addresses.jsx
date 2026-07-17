@@ -3,6 +3,7 @@ import { Plus, MapPinHouse } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useAddresses } from "../../hooks/useAddresses";
+import { useStoreStatus } from "../../store/useStoreStatus";
 import { distanceFromStore } from "../../location/distance";
 import { STORE_LOCATION } from "../../constants/address";
 import { Button } from "../../components/ui/Button";
@@ -19,6 +20,8 @@ export const Addresses = () => {
   const { t } = usePreferences();
   const { addresses, loading, error, addAddress, updateAddress, removeAddress, setDefault } =
     useAddresses(user?.uid);
+  // Live store doc for the dynamic delivery service area (serviceArea polygon / radius).
+  const { store } = useStoreStatus("delivery");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // address being edited, or null for new
@@ -117,6 +120,7 @@ export const Addresses = () => {
             <AddressCard
               key={addr.id}
               address={addr}
+              store={store}
               busy={busyId === addr.id}
               onEdit={openEdit}
               onDelete={setDeleteTarget}

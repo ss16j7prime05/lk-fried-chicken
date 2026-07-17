@@ -3,15 +3,20 @@ import { Phone, Pencil, Trash2, Star, Navigation, MapPin, AlertTriangle } from "
 import { Card } from "../../ui/Card";
 import { usePreferences } from "../../../context/PreferencesContext";
 import { calcDeliveryFee } from "../../../location/locationUtils";
-import { labelMeta, formatFullAddress, isOutOfZone, MAX_DELIVERY_RADIUS_KM } from "../../../constants/address";
+import { labelMeta, formatFullAddress } from "../../../constants/address";
+import { isInsideServiceArea, clampDeliveryKm } from "../../../location/serviceArea";
 
 // Single saved-address card: label + receiver, default/GPS badges, full address,
 // distance from store, and Edit / Delete / Set Default actions.
-export const AddressCard = ({ address, onEdit, onDelete, onSetDefault, busy = false }) => {
+// `store` (optional) supplies the dynamic delivery service area; without it the
+// zone check falls back to the default radius.
+export const AddressCard = ({ address, onEdit, onDelete, onSetDefault, store, busy = false }) => {
   const { t } = usePreferences();
   const meta = labelMeta(address.label);
   const hasGps = address.lat != null && address.lng != null;
-  const outOfZone = isOutOfZone(address.distanceKm);
+  const zoneKm = clampDeliveryKm(store?.deliveryRadius);
+  const outOfZone =
+    hasGps && !isInsideServiceArea({ lat: address.lat, lng: address.lng, distanceKm: address.distanceKm, store });
   const estFee = address.distanceKm != null ? calcDeliveryFee(Number(address.distanceKm)) : null;
 
   return (
@@ -79,7 +84,7 @@ export const AddressCard = ({ address, onEdit, onDelete, onSetDefault, busy = fa
           <div className="mt-2 flex items-center gap-2 rounded-2xl bg-secondary/5 border border-secondary/20 px-4 py-2.5">
             <AlertTriangle size={15} className="text-secondary shrink-0" />
             <p className="text-xs font-bold text-secondary">
-              {t("addr.outOfZone", { km: MAX_DELIVERY_RADIUS_KM })}
+              {t("addr.outOfZone", { km: zoneKm })}
             </p>
           </div>
         )}

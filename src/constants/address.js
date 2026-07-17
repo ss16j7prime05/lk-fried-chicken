@@ -11,12 +11,9 @@ export const STORE_LOCATION = {
   name: "LK Fried Chicken",
 };
 
-// Delivery radius (km) — single source of truth shared by the address cards and
-// Checkout so the "out of zone" rule is identical everywhere.
-export const MAX_DELIVERY_RADIUS_KM = 8;
-
-export const isOutOfZone = (distanceKm) =>
-  distanceKm != null && Number(distanceKm) > MAX_DELIVERY_RADIUS_KM;
+// Delivery distance is no longer a hardcoded radius here — it lives on the store doc
+// (stores/{id}.deliveryRadius, 3–20 km) and drives the road-based service-area polygon.
+// See src/location/serviceArea.js (clampDeliveryKm / isInsideServiceArea).
 
 export const ADDRESS_LABELS = [
   { key: "home", label: "Home", emoji: "🏠" },

@@ -5,6 +5,22 @@
 
 ## [Unreleased]
 
+### Changed (Service-area QA hardening — remove hardcoded 8 km, dynamic zone everywhere)
+- **AddressCard**: badge "นอกเขต" เดิมใช้ค่าคงที่ 8 กม. → ตอนนี้รับ prop `store` แล้วเช็คด้วย
+  `isInsideServiceArea` (polygon ถ้ามี ไม่งั้นรัศมีร้าน) ; หน้า Addresses subscribe store แล้วส่งให้
+- **Settings**: ค่า default ของช่องระยะจัดส่งเปลี่ยนจาก `MAX_DELIVERY_RADIUS_KM` → `DELIVERY_DEFAULT_KM`
+- **ลบค่าคงที่ตาย**: `MAX_DELIVERY_RADIUS_KM` + `isOutOfZone` ใน `constants/address.js` (ไม่มีใครใช้แล้ว)
+  — ระยะจัดส่งมาจาก `stores/{id}.deliveryRadius` + serviceArea เท่านั้น (แหล่งเดียว) ; เหลือ 8 คงที่
+  แค่ใน `src/App.jsx` ซึ่งเป็น **dead code ไม่ถูก mount** (flag ไว้ ไม่ลบเพราะไม่ได้สร้างในเซสชันนี้)
+- **วงกลม fallback**: RiderJobMap แสดง `<Polygon>` เมื่อมี polygon เท่านั้น (วงกลมเฉพาะตอนไม่มี) —
+  ไม่วาดซ้อน ; Checkout ก็ใช้ polygon ก่อน (รัศมีเป็น fallback)
+- **ตรวจภาพจริง (headless Chromium)**: เรนเดอร์ `<Polygon>` (ผ่าน `ringToLatLngs` เส้นทางเดียวกับ
+  RiderJobMap) จาก ring ที่ generate ด้วย OSRM จำลอง → ได้รูป**ไม่กลม**สีเขียวโปร่งชัดเจน,
+  overflow=0 ทั้ง mobile/tablet/desktop, ไม่มี console error. build/lint/`npm test` (15) ผ่าน
+- **QA ที่ยังทำในเครื่องนี้ไม่ได้ (auth + OSRM/Firestore ถูกบล็อก)**: เปลี่ยนระยะจริง 5/8/12/15 กม.
+  แล้วให้ store สร้าง polygon จริง, ยืนยัน rider/customer อ่าน polygon เดียวกัน, checkout รับ/ปฏิเสธ
+  ที่อยู่ใน/นอกเขตจริง — ต้องทำบนเว็บจริงที่ล็อกอิน
+
 ### Added (Dynamic delivery service area — road-based polygon, not a circle)
 - **`src/location/serviceArea.js`** (ใหม่): เรขาคณิตล้วน (destinationPoint / pointInPolygon /
   ringToLatLngs) + `generateServiceArea(store, km, {getRouteFn})` สร้าง **polygon ตามถนน** โดยยิง
