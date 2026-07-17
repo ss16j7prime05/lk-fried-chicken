@@ -24,13 +24,13 @@ import { useStoreStatus } from "../../store/useStoreStatus";
 import { StoreClosedBanner } from "../../components/customer/StoreClosedBanner";
 import { getStore } from "./getStore";
 import { useAddresses } from "../../hooks/useAddresses";
-import { formatFullAddress, labelMeta, MAX_DELIVERY_RADIUS_KM } from "../../constants/address";
+import { formatFullAddress, labelMeta } from "../../constants/address";
+import { isInsideServiceArea, clampDeliveryKm } from "../../location/serviceArea";
 
 // Fallback store coordinates, used only until stores/{STORE_ID} loads (matches the
 // same fallback in src/App.jsx / src/pages/customer/OrderDetail.jsx).
 const FALLBACK_STORE_LAT = 13.8294079;
 const FALLBACK_STORE_LNG = 100.0529543;
-const MAX_RADIUS_KM = MAX_DELIVERY_RADIUS_KM;
 
 // Mirrors src/App.jsx / MenuDetailModal.jsx's real required-option rules (single
 // source of truth for these Firestore `options` category/name checks) — re-checked
@@ -331,8 +331,14 @@ export const Checkout = () => {
     }
   };
 
+  // Delivery boundary — dynamic service-area polygon if the store has one, else the
+  // store's configured radius (clamped 3–20 km). `deliveryKm` is only for the message.
+  const deliveryKm = clampDeliveryKm(store?.deliveryRadius);
   const outOfArea =
-    deliveryMethod === "delivery" && distanceKm != null && distanceKm > MAX_RADIUS_KM;
+    deliveryMethod === "delivery" &&
+    lat != null &&
+    lng != null &&
+    !isInsideServiceArea({ lat, lng, distanceKm, store });
 
   const grandTotal = subtotal + (deliveryMethod === "delivery" ? deliveryFee : 0);
 
@@ -359,7 +365,7 @@ export const Checkout = () => {
       if (lat == null || lng == null) {
         return t("checkout.valLocation");
       }
-      if (outOfArea) return t("checkout.outOfArea", { km: MAX_RADIUS_KM });
+      if (outOfArea) return t("checkout.outOfArea", { km: deliveryKm });
     }
 
     // Payment: the selected method must be fully configured by the store.
@@ -674,7 +680,7 @@ export const Checkout = () => {
                 )}
                 {outOfArea && (
                   <p className="text-xs font-bold text-secondary border-t border-gray-100 pt-2">
-                    ⚠️ {t("checkout.outOfArea", { km: MAX_RADIUS_KM })}
+                    ⚠️ {t("checkout.outOfArea", { km: deliveryKm })}
                   </p>
                 )}
               </div>
@@ -743,7 +749,7 @@ export const Checkout = () => {
 
             {outOfArea && (
               <p className="text-sm font-bold text-secondary">
-                {t("checkout.outOfArea", { km: MAX_RADIUS_KM })}
+                {t("checkout.outOfArea", { km: deliveryKm })}
               </p>
             )}
 

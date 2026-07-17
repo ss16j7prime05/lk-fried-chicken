@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### Added (Dynamic delivery service area — road-based polygon, not a circle)
+- **`src/location/serviceArea.js`** (ใหม่): เรขาคณิตล้วน (destinationPoint / pointInPolygon /
+  ringToLatLngs) + `generateServiceArea(store, km, {getRouteFn})` สร้าง **polygon ตามถนน** โดยยิง
+  ทิศทางรอบร้าน แล้ว binary-search จุดไกลสุดที่ระยะ**ถนน** (OSRM เดิม) ≤ ระยะที่ตั้ง +
+  `isInsideServiceArea()` (ใช้ polygon ถ้ามี ไม่งั้น fallback รัศมี) + clamp 3–20 กม.
+- **Store Settings**: ระยะจัดส่งบังคับช่วง **3–20 กม.**, ตอนบันทึกจะ**สร้าง polygon ใหม่อัตโนมัติ**
+  แล้วเก็บที่ `stores/{id}.serviceArea = { km, ring:[{lat,lng}…], generatedAt }` (array ของ object
+  ไม่ใช่ nested array — Firestore รองรับ) ; ล้มเหลว = เก็บ null → ทุกที่ fallback รัศมี (ไม่พังออเดอร์)
+- **Checkout**: บังคับเขตด้วย `isInsideServiceArea` (polygon → จุดในรูป ; ไม่มี polygon → รัศมีร้าน)
+  — **แก้บั๊กเดิมที่ Checkout ไม่อ่าน `deliveryRadius` ของร้านเลย** (ใช้ค่าคงที่ 8 กม.)
+- **Rider Job Map**: วาด `<Polygon>` เขตจัดส่งถ้ามี ไม่งั้นวงกลมตาม `deliveryRadius`
+- **Test**: `scripts/serviceArea.test.mjs` + `npm test` — 15 เคส (geometry / generation ด้วย OSRM จำลอง
+  / enforcement polygon+รัศมี / clamp) **ผ่านหมด offline**
+- **Schema**: เพิ่ม `stores/{id}.serviceArea` (additive) + ใช้ `deliveryRadius` เดิม — **ไม่แก้ rules**
+  (store เขียน stores ได้อยู่แล้ว, customer/rider อ่านได้), ไม่แตะ auth/order flow
+- **หมายเหตุ (ต้อง QA เครื่องจริง)**: การ**สร้าง polygon จริง**เรียก OSRM ผ่านเน็ต — เทสในเครื่องนี้ไม่ได้
+  (เน็ตถูกบล็อก) จึงเทสด้วย OSRM จำลอง ; ให้ store owner กดบันทึกบนเว็บจริงแล้วดู polygon บน Rider Job Map
+  + ทดสอบที่อยู่นอกเขตสั่งไม่ได้ ; badge "นอกเขต" บนการ์ดที่อยู่ยังใช้ค่า 8 กม. (เป็นแค่ hint ไม่ใช่ตัวกั้น)
+
 ### Fixed (Customer storefront — real UX/a11y bugs; the storefront was already production-grade)
 - **Home search behaviour**: เดิม search กรองเฉพาะ section "ยอดนิยม" — "แนะนำ" ยังโชว์ 2 รายการแรก
   ที่ไม่ตรงคำค้นระหว่างพิมพ์ค้นหา และ 2 รายการแรกซ้ำทั้งใน "แนะนำ" และ "ยอดนิยม" → ตอนนี้เวลาค้นหา

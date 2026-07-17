@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
@@ -11,7 +11,7 @@ import { usePreferences } from "../context/PreferencesContext";
 import { getCurrentLocation } from "../location/mapsService";
 import { getDestination } from "./riderLocationService";
 import { READY_QUERY_STATUSES, isReadyForDelivery } from "./riderStatus";
-import { MAX_DELIVERY_RADIUS_KM } from "../constants/address";
+import { clampDeliveryKm, ringToLatLngs } from "../location/serviceArea";
 import { logError } from "../errorCenter";
 
 const FALLBACK = { lat: 13.8294079, lng: 100.0529543, name: "LK Fried Chicken" };
@@ -61,7 +61,13 @@ export default function RiderJobMap() {
     const unsub = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
       if (snap.exists()) {
         const d = snap.data();
-        setStore({ lat: d.lat ?? FALLBACK.lat, lng: d.lng ?? FALLBACK.lng, name: d.storeName || FALLBACK.name });
+        setStore({
+          lat: d.lat ?? FALLBACK.lat,
+          lng: d.lng ?? FALLBACK.lng,
+          name: d.storeName || FALLBACK.name,
+          deliveryRadius: d.deliveryRadius,
+          serviceArea: d.serviceArea,
+        });
       }
     }, (err) => logError(err, "RiderJobMap.store"));
     return () => unsub();
@@ -117,9 +123,16 @@ export default function RiderJobMap() {
       <div className="relative w-full h-[calc(100dvh-64px-env(safe-area-inset-bottom))] md:h-[100dvh] overflow-hidden">
         <MapContainer center={initialCenter} zoom={12} scrollWheelZoom zoomControl={false} className="w-full h-full" style={{ height: "100%", width: "100%" }}>
           <TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {/* Delivery service area — road-based polygon if the store has one, else the
+              configured radius as a fallback circle. Both in brand green, transparent. */}
           {showZone && (
-            <Circle center={initialCenter} radius={MAX_DELIVERY_RADIUS_KM * 1000}
-              pathOptions={{ color: "#00B14F", weight: 2, fillColor: "#00B14F", fillOpacity: 0.08 }} />
+            store.serviceArea?.ring?.length >= 3 ? (
+              <Polygon positions={ringToLatLngs(store.serviceArea.ring)}
+                pathOptions={{ color: "#00B14F", weight: 2, fillColor: "#00B14F", fillOpacity: 0.08 }} />
+            ) : (
+              <Circle center={initialCenter} radius={clampDeliveryKm(store.deliveryRadius) * 1000}
+                pathOptions={{ color: "#00B14F", weight: 2, fillColor: "#00B14F", fillOpacity: 0.08 }} />
+            )
           )}
           <Marker position={initialCenter} icon={storeIcon}><Popup>{store.name}</Popup></Marker>
           {rider && <Marker position={[rider.lat, rider.lng]} icon={riderIcon}><Popup>{t("ro.jobMap.you")}</Popup></Marker>}

@@ -16,6 +16,7 @@ import { db } from "../../firebase";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
 import { uploadImage } from "../../services/cloudinary";
 import { MAX_DELIVERY_RADIUS_KM, STORE_LOCATION, isValidThaiPhone } from "../../constants/address";
+import { generateServiceArea, clampDeliveryKm } from "../../location/serviceArea";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { getAlarmAudioCtx, playSound, SOUND_LABELS, SOUND_KEYS } from "../../store/alarmSounds";
@@ -794,7 +795,22 @@ export function Settings() {
     try {
       const latNum = parseFloat(storeLat);
       const lngNum = parseFloat(storeLng);
-      const radiusNum = parseFloat(deliveryRadius);
+      // Delivery distance is clamped to the supported 3–20 km range.
+      const clampedRadius = clampDeliveryKm(parseFloat(deliveryRadius));
+
+      // Regenerate the road-based service-area polygon from the (possibly new) store
+      // location + distance. Runs through the same OSRM routing the app already uses.
+      // Robust by design: on any failure we store serviceArea: null and every consumer
+      // falls back to the radius, so a routing hiccup can never break ordering.
+      let serviceArea = null;
+      if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
+        try {
+          serviceArea = await generateServiceArea({ lat: latNum, lng: lngNum }, clampedRadius);
+        } catch (err) {
+          console.error("Service-area generation failed; falling back to radius:", err);
+          serviceArea = null;
+        }
+      }
       // lat/lng/storeName/phone/address are the exact fields Customer (Checkout) and
       // Rider already read from stores/{STORE_ID} — kept identical so nothing breaks.
       // description/social/tax are new fields on the same doc (no new collection).
@@ -812,7 +828,9 @@ export function Settings() {
         storeLogo,
         storeBanner,
         mapLink:     mapLink.trim(),
-        deliveryRadius: Number.isFinite(radiusNum) ? radiusNum : MAX_DELIVERY_RADIUS_KM,
+        deliveryRadius: clampedRadius,
+        // Road-based service-area polygon (null = consumers fall back to the radius).
+        serviceArea,
         prepMinutes: Number(prepMinutes),
         social: {
           facebook:  social.facebook.trim(),
@@ -1128,9 +1146,10 @@ export function Settings() {
           </button>
         </div>
 
-        {/* Delivery radius */}
+        {/* Delivery distance → road-based service area (3–20 km) */}
         <LabeledField label={t("si.deliveryRadius")}>
           <FieldInput value={deliveryRadius} onChange={setDeliveryRadius} placeholder="8" type="number" />
+          <p className="text-[11px] text-gray-400 font-medium mt-1.5">{t("si.deliveryRadiusHint")}</p>
         </LabeledField>
 
         {/* Prep time */}
