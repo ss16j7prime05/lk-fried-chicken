@@ -8,7 +8,7 @@ import { getStore } from "./getStore";
 import { useStore } from "../../store/useStore";
 import { PAYMENT_STATUS, countdownFrom, uploadSlip, submitSlip, expire } from "../../payment/paymentService";
 import { normalizeStatus } from "../../store/orderStatus";
-import { deriveCustomerStatus } from "../../rider/riderStage";
+import { deriveCustomerStatus, CUSTOMER_STATUS_ORDER, customerStatusIndex } from "../../rider/riderStage";
 import { usePreferences } from "../../context/PreferencesContext";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
@@ -29,20 +29,6 @@ const FALLBACK_STORE_LNG = 100.0529543;
 // Statuses (canonical, post-normalizeStatus) where a rider may be actively en
 // route — mirrors the legacy TrackOrder.jsx isDelivering() status set.
 const TRACKABLE_STATUSES = ["ready_for_delivery", "picked_up", "delivering"];
-
-// Status enum + timeline mirror src/store/orderStatus.js (single source of truth,
-// shared with Store/Rider/Admin dashboards) — DO NOT invent new status values here.
-// Cancelled is handled as a separate terminal state below (isCancelled), not a
-// linear step after Completed — an order can't be both.
-const TIMELINE_STEPS = [
-  { status: "pending", label: "Pending" },
-  { status: "accepted", label: "Accepted" },
-  { status: "cooking", label: "Cooking" },
-  { status: "ready_for_delivery", label: "Ready" },
-  { status: "picked_up", label: "Rider Assigned" },
-  { status: "delivering", label: "Delivering" },
-  { status: "completed", label: "Completed" },
-];
 
 const STATUS_BADGE_COLOR = {
   pending: "orange",
@@ -266,7 +252,9 @@ export const OrderDetail = () => {
   const customerStatus = deriveCustomerStatus(order);
   const statusLabel = t(`cstat.${customerStatus}`) || t(`status.${normalizedStatus}`) || order.status;
   const isCancelled = normalizedStatus === "cancelled";
-  const currentStepIndex = TIMELINE_STEPS.findIndex((step) => step.status === normalizedStatus);
+  // 10-step granular customer timeline (store accepted → … → nearby → arrived → delivered),
+  // driven by the derived real-time customer status. Falls back gracefully for old orders.
+  const currentStepIndex = customerStatusIndex(customerStatus);
   const isTrackable = TRACKABLE_STATUSES.includes(normalizedStatus);
 
   const customerLocation = {
@@ -531,16 +519,17 @@ export const OrderDetail = () => {
                 {t("od.estReadyBy", { time: cookingEta })}
               </div>
             )}
-            {TIMELINE_STEPS.map((step, index) => {
+            {CUSTOMER_STATUS_ORDER.map((step, index) => {
               const isDone = index <= currentStepIndex;
-              const isLast = index === TIMELINE_STEPS.length - 1;
+              const isCurrent = index === currentStepIndex;
+              const isLast = index === CUSTOMER_STATUS_ORDER.length - 1;
               return (
-                <div key={step.status} className="flex gap-4">
+                <div key={step} className="flex gap-4">
                   <div className="flex flex-col items-center">
                     <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                      className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                         isDone ? "bg-primary text-white" : "bg-gray-100 text-gray-300"
-                      }`}
+                      } ${isCurrent ? "ring-4 ring-primary-light" : ""}`}
                     >
                       <Check size={14} />
                     </div>
@@ -554,10 +543,10 @@ export const OrderDetail = () => {
                   </div>
                   <p
                     className={`font-bold pb-6 ${
-                      isDone ? "text-gray-900" : "text-gray-300"
+                      isCurrent ? "text-primary" : isDone ? "text-gray-900" : "text-gray-300"
                     }`}
                   >
-                    {t(`status.${step.status}`)}
+                    {t(`cstat.${step}`)}
                   </p>
                 </div>
               );

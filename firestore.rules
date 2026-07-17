@@ -146,6 +146,22 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- chatMeta (read positions + typing flags ต่อ 1 ออเดอร์) ----------
+    // เอกสารเดียวต่อออเดอร์ (chatMeta/{orderId}) เก็บ <role>LastRead / <role>Typing / typingAt
+    // — คู่สนทนาของออเดอร์นั้นอ่าน/เขียนได้ (เกณฑ์เดียวกับ /chats). Additive ไม่กระทบ schema เดิม
+    match /chatMeta/{orderId} {
+      function metaOrder() {
+        return get(/databases/$(database)/documents/orders/$(orderId)).data;
+      }
+      function isMetaParty(o) {
+        return role() == "admin" ||
+               (role() == "store" && isApprovedOrLegacy()) ||
+               (role() == "customer" && o.phone == myPhone()) ||
+               (role() == "rider" && isApprovedOrLegacy() && o.riderId == request.auth.uid);
+      }
+      allow read, write: if isSignedIn() && isMetaParty(metaOrder());
+    }
+
     // ---------- stores (เปิด/ปิดร้าน) ----------
     // ลูกค้าหน้าร้านสาธารณะอ่านสถานะร้านได้ ; แก้ไขเฉพาะ store/admin
     match /stores/{id} {

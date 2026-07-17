@@ -11,6 +11,9 @@
   **จนกว่าจะรัน 2 คำสั่งนี้: (1) ใครก็ตามที่ล็อกอินยังอ่านแชททุกออเดอร์ได้เหมือนเดิม
   (2) ถ้า index ยังไม่มีใน console แชทจะโหลดไม่ขึ้น** (ตอนนี้จะขึ้น "โหลดแชทไม่สำเร็จ" ให้เห็น
   แทนที่จะเงียบเหมือนเดิม) — โค้ดฝั่งเว็บ deploy ผ่าน Vercel แล้วและไม่พังกับ rules ชุดเก่า
+  **เพิ่มใหม่:** rules ชุดล่าสุดมี match `chatMeta/{orderId}` (read-receipt/typing indicator) ด้วย
+  → `firebase deploy --only firestore:rules` รอบเดียวครอบคลุมทั้งคู่ ; จนกว่าจะ deploy
+  read-receipt/typing จะเขียนไม่ผ่านแต่ fail กราว์ซ้อ (แชท/รูป/โทร ใช้ได้ปกติ)
   **rules ชุดใหม่ยังไม่ได้ทดสอบ** (เครื่องนี้ไม่มี firebase-tools/Java จึงรัน emulator ไม่ได้)
   → แนะนำให้ลองใน **Firebase Console → Rules Playground** ก่อน deploy จริง
 

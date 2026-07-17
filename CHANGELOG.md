@@ -5,6 +5,30 @@
 
 ## [Unreleased]
 
+### Added (Rider production UX — incoming-order popup + sound, richer chat, delivery summary)
+- **Full-screen new-order popup + เสียงเรียกวนซ้ำ** (`src/rider/RiderIncomingOrderPopup.jsx` ใหม่):
+  งานใหม่ที่เข้าพูล (docChanges `added` จาก snapshot เดิม) เด้งป๊อปอัปเต็มจอ — โชว์ร้าน/ลูกค้า/
+  ระยะทาง (haversine ร้าน→ลูกค้า)/รายได้ (deliveryFee)/countdown — พร้อมเสียง `kitchen` วนทุก 2 วิ
+  (Web Audio ตัวเดียวกับ StoreLayout ไม่ต้องมีไฟล์เสียง) **จนกดรับ/ปฏิเสธ/หมดเวลา 30 วิ** (auto-
+  dismiss = ปิดป๊อปอัปเฉย ๆ งานยังอยู่ในลิสต์). ไล่ทีละใบตามคิว, เด้งเฉพาะตอนไรเดอร์ออนไลน์,
+  ตัดออกจากคิวอัตโนมัติเมื่อไรเดอร์อื่นรับไป (docChanges `removed`/มี riderId) — ไม่มี mock
+- **Chat ลูกค้า↔ไรเดอร์แบบเต็ม** (`src/Chat.jsx` เขียนใหม่, realtime `onSnapshot`): ข้อความ +
+  **รูปภาพ** (Cloudinary, ดูเต็มจอได้), **read receipt** + **typing indicator** เก็บใน doc เสริม
+  `chatMeta/{orderId}` (เขียนครั้งเดียวต่อการอ่าน/พิมพ์ ไม่แตะ `chats` ที่ update-locked), **ปุ่มโทร**
+  (ไรเดอร์→`order.phone`, ลูกค้า→`order.riderPhone`). **ปิด chat + โทรอัตโนมัติ** เมื่อออเดอร์
+  completed/cancelled (composer ซ่อน, ขึ้น "การสนทนาปิดแล้ว")
+- **สรุปการจัดส่ง** (`src/rider/RiderDeliverySummary.jsx` ใหม่): แสดงเมื่อ status=completed —
+  รายได้ + โบนัส + ภาษี + เครดิต + coins (ฟิลด์ `riderBonus/riderTax/riderCredits/riderCoins`
+  additive, default 0 เมื่อ back-office ยังไม่ตั้ง) ; ยอดจ่าย = รายได้ + โบนัส − ภาษี + เครดิต — ไม่มี mock
+- **Stepper ลูกค้า 10 ขั้น** (`OrderDetail.jsx`): เปลี่ยนจาก 7 ขั้น (status ดิบ) มาเป็น
+  `CUSTOMER_STATUS_ORDER` (deriveCustomerStatus) — เห็นทุกช่วง incl. ไปร้าน/ถึงร้าน/ไปหาลูกค้า/ใกล้ถึง
+- **`firestore.rules`**: เพิ่ม match `chatMeta/{orderId}` — คู่สนทนาของออเดอร์นั้นอ่าน/เขียนได้
+  (เกณฑ์เดียวกับ `/chats`). Additive ไม่กระทบ schema เดิม. **ต้อง `firebase deploy --only
+  firestore:rules` เอง** (session นี้ไม่มี Firebase login) — จนกว่าจะ deploy read-receipt/typing
+  จะเขียนไม่ผ่านแต่ **fail กราว์ซ้อ** (แชท/รูป/โทร ใช้ได้ปกติ)
+- build/lint (ไฟล์ที่แตะสะอาด 0 error) / `npm test` (40 เคส) ผ่าน. ทั้งหมดต้อง **QA เครื่องจริง**
+  (auth/GPS/Firestore/เสียง/กล้อง บล็อกในเครื่องนี้)
+
 ### Added (Rider production workflow — additive granular stages + real-time customer status)
 - **`stores`/order schema (additive, backward-compatible)**: ฟิลด์ใหม่ `order.riderStage`
   (heading_to_restaurant / arrived_at_restaurant / heading_to_customer / arrived_at_customer /

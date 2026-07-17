@@ -28,6 +28,7 @@ import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { RiderTimeline } from "./RiderTimeline";
 import { RiderPaymentCard } from "./RiderPaymentCard";
 import { RiderJobActionBar } from "./RiderJobActionBar";
+import { RiderDeliverySummary } from "./RiderDeliverySummary";
 
 const FALLBACK_STORE_LAT = 13.8294079;
 const FALLBACK_STORE_LNG = 100.0529543;
@@ -189,6 +190,9 @@ export default function RiderJobDetails() {
         </button>
         <span className="text-xs font-bold text-gray-400">{order.orderNo || order.id?.slice(0, 8)}</span>
       </div>
+
+      {/* completion summary (earnings / bonus / tax / credits / coins) */}
+      {order.status === "completed" && <RiderDeliverySummary order={order} t={t} />}
 
       {/* timeline + key figures */}
       <Card className="p-5 space-y-4">

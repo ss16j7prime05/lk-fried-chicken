@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { AlertCircle, Navigation, Power, WifiOff } from "lucide-react";
 import { db } from "../firebase";
@@ -6,6 +6,7 @@ import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
 import RiderOrderCard from "./RiderOrderCard.jsx";
+import RiderIncomingOrderPopup from "./RiderIncomingOrderPopup.jsx";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { RiderCardGridSkeleton } from "../components/ui/Skeleton";
@@ -83,6 +84,11 @@ export default function RiderOrdersDashboard() {
     lng: FALLBACK_STORE_LNG,
     name: "LK Fried Chicken",
   });
+  // คิวงานใหม่ที่เพิ่งเข้ามา -> ป๊อปอัปเต็มจอ + เสียงเรียก (ไล่ทีละใบตามลำดับที่เข้า)
+  const [incomingIds, setIncomingIds] = useState([]);
+  const seenOrderIdsRef = useRef(new Set()); // เคยเห็นแล้ว ไม่ต้องเด้งซ้ำ (เหมือน StoreLayout)
+  const availInitRef = useRef(false);        // snapshot แรก = งานเดิม ไม่ต้องเด้ง
+  const isOnlineRef = useRef(false);         // สถานะล่าสุดสำหรับใช้ใน callback ของ snapshot
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -103,6 +109,27 @@ export default function RiderOrdersDashboard() {
         setAvailablePool(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
         markFeed("available", "");
         setLoading(false);
+
+        // snapshot แรก: จำงานที่มีอยู่แล้วไว้ ไม่เด้งป๊อปอัปให้งานเก่า
+        if (!availInitRef.current) {
+          snapshot.docs.forEach((d) => seenOrderIdsRef.current.add(d.id));
+          availInitRef.current = true;
+          return;
+        }
+        // งานใหม่จริง ๆ ที่เพิ่งพร้อมส่ง -> เข้าคิวป๊อปอัป (เฉพาะตอนไรเดอร์เปิดรับงาน
+        // และงานยังว่าง + เราไม่ได้ปฏิเสธไปแล้ว). งานที่ถูกรับ/หลุดพูล -> เอาออกจากคิว (หยุดเสียง)
+        snapshot.docChanges().forEach((change) => {
+          const order = { id: change.doc.id, ...change.doc.data() };
+          if (change.type === "removed" || order.riderId || !isReadyForDelivery(order.status)) {
+            setIncomingIds((prev) => (prev.includes(order.id) ? prev.filter((qid) => qid !== order.id) : prev));
+            return;
+          }
+          if (change.type !== "added") return;
+          if (seenOrderIdsRef.current.has(order.id)) return;
+          seenOrderIdsRef.current.add(order.id);
+          if (!isOnlineRef.current || hasRejected(order, user.uid)) return;
+          setIncomingIds((prev) => (prev.includes(order.id) ? prev : [...prev, order.id]));
+        });
       },
       (err) => onFeedError(err, "available")
     );
@@ -147,6 +174,7 @@ export default function RiderOrdersDashboard() {
   }, [user?.uid]);
 
   const isOnline = riderStatus === "online";
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
   const feedErrorKey = feedErrors.available || feedErrors.mine;
   // networkOnline = มีเน็ตไหม (คนละเรื่องกับ isOnline ที่แปลว่า "ไรเดอร์เปิดรับงาน")
   const networkOnline = useOnlineStatus();
@@ -159,6 +187,15 @@ export default function RiderOrdersDashboard() {
   const availableOrders = orders
     .filter((o) => !o.riderId && isReadyForDelivery(o.status) && !hasRejected(o, user?.uid))
     .sort(byNewest());
+
+  // ป๊อปอัปงานใหม่: แสดงงานแรกในคิวที่ยัง "ว่างจริง" (ถ้าไรเดอร์คนอื่นรับไปก่อน หรือหมดสถานะพร้อมส่ง
+  // ก็ข้ามไปใบถัดไป). ปิดรับงาน = ไม่เด้ง (เผื่อสลับ offline ระหว่างที่ยังมีคิวค้าง). การตัดคิวที่
+  // "ไม่ว่างแล้ว" ทำตอน snapshot (docChanges removed/modified) จึงไม่ต้อง setState ใน effect
+  const firstIncomingId = incomingIds.find((qid) => availableOrders.some((o) => o.id === qid));
+  const incomingOrder =
+    isOnline && firstIncomingId ? availableOrders.find((o) => o.id === firstIncomingId) : null;
+
+  const dismissIncoming = (id) => setIncomingIds((prev) => prev.filter((qid) => qid !== id));
 
   // คิวงานของไรเดอร์คนนี้ แยกตามสถานะเดิม: Assigned (picked_up) / Active (delivering) / Completed
   const mine = orders.filter((o) => o.riderId === user?.uid);
@@ -210,6 +247,7 @@ export default function RiderOrdersDashboard() {
     // สำเร็จแล้วออเดอร์จะหายจากแท็บ Available ไปโผล่ที่ Assigned — พาไรเดอร์ตามไปเลย
     if (ok) setTab("assigned");
     else setActionError(t(actionMessageKey(reason)));
+    dismissIncoming(order.id); // ปิดป๊อปอัป/หยุดเสียงไม่ว่าผลจะสำเร็จหรือไม่
     setBusyId("");
   };
 
@@ -220,6 +258,7 @@ export default function RiderOrdersDashboard() {
     setActionError("");
     const { ok, reason } = await rejectOrder(order, riderIdentity());
     if (!ok) setActionError(t(actionMessageKey(reason)));
+    dismissIncoming(order.id); // ปิดป๊อปอัป/หยุดเสียง
     setBusyId("");
   };
   // เปลี่ยนสถานะงาน: ผ่าน orderStateMachine.transition (SSOT ด่านเดียวของการเปลี่ยนสถานะ)
@@ -246,6 +285,17 @@ export default function RiderOrdersDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* งานใหม่เข้า -> ป๊อปอัปเต็มจอ + เสียงเรียกวนซ้ำจนกดรับ/ปฏิเสธ/หมดเวลา */}
+      <RiderIncomingOrderPopup
+        key={incomingOrder?.id || "none"}
+        order={incomingOrder}
+        storeLocation={storeLocation}
+        busy={Boolean(busyId)}
+        onAccept={acceptDelivery}
+        onReject={rejectDelivery}
+        onDismiss={() => incomingOrder && dismissIncoming(incomingOrder.id)}
+      />
+
       {/* Header: title + availability toggle (nav + notifications live in RiderLayout) */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-black text-gray-900">{t("ro.jobs.title")}</h1>
