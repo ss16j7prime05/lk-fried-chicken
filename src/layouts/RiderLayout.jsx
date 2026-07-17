@@ -72,6 +72,10 @@ export const RiderLayout = () => {
   // The home screen has its own top card (stats + toggle), so no floating profile avatar
   // there. Other rider pages keep the avatar top-right so the profile page stays reachable.
   const onHome = pathname === "/rider";
+  // The job map is a full-bleed page: it owns the whole content area (no padding / max-width)
+  // and its own controls, so main drops its padding there and the avatar is hidden (it would
+  // collide with the map's top-right refresh button).
+  const onMap = pathname === "/rider/map";
 
   return (
     <div
@@ -79,9 +83,9 @@ export const RiderLayout = () => {
         collapsed ? "md:pl-20" : "md:pl-64"
       }`}
     >
-      {/* Floating profile avatar (top-right) — hidden on home; offset by the top safe-area
-          inset so it's never clipped under a notch/status bar. */}
-      {!onHome && (
+      {/* Floating profile avatar (top-right) — hidden on home and the map; offset by the top
+          safe-area inset so it's never clipped under a notch/status bar. */}
+      {!onHome && !onMap && (
         <div className="fixed right-3 z-[55] top-[calc(0.75rem+env(safe-area-inset-top))]">
           <Link
             to="/rider/profile"
@@ -177,12 +181,17 @@ export const RiderLayout = () => {
         })}
       </nav>
 
-      {/* Home has no floating element (stats card sits at the top). Other pages reserve a
-          little top space so the floating avatar never overlaps their header. */}
+      {/* The map is full-bleed (owns the whole content area). Home has no floating element
+          (stats card sits at the top). Other pages reserve a little top space so the floating
+          avatar never overlaps their header. */}
       <main
-        className={`max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 ${
-          onHome ? "pt-4 sm:pt-6 md:pt-8" : "pt-[calc(4rem+env(safe-area-inset-top))] sm:pt-6 md:pt-8"
-        }`}
+        className={
+          onMap
+            ? "w-full"
+            : `max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 ${
+                onHome ? "pt-4 sm:pt-6 md:pt-8" : "pt-[calc(4rem+env(safe-area-inset-top))] sm:pt-6 md:pt-8"
+              }`
+        }
       >
         <Outlet />
       </main>

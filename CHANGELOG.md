@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Fixed (Rider Job Map — no longer renders under the bottom nav)
+- Regression จากรอบ avatar-clearance: main มี top padding แบบ asymmetric ทำให้ trick `-m-4`
+  ของหน้าแผนที่ไม่แมตช์ padding เดิม แผนที่จึงล้นไปใต้แถบเมนูล่าง. แก้โดย:
+  - RiderLayout: route `/rider/map` เป็น **full-bleed** (main = `w-full` ไม่มี padding/max-width),
+    ซ่อน avatar บนหน้าแผนที่ (กันชนปุ่ม refresh มุมขวาบน)
+  - RiderJobMap: ความสูง container = `calc(100dvh - 64px[nav] - safe-area-bottom - 16px)` บนมือถือ
+    / `100dvh` บน tablet/desktop (ไม่มี nav ล่าง) → แผนที่เต็มพื้นที่ที่มองเห็นเท่านั้น ไม่ทับ nav
+  - ปุ่มลอยขวา + legend อยู่เหนือแผนที่และเหนือ nav (z-[400], container จบเหนือ nav)
+  - top controls เลื่อนลงตาม safe-area-inset-top (กัน notch) ; เพิ่ม `<AutoResize>` เรียก
+    `invalidateSize()` ตอน mount + resize + orientation + ResizeObserver (sidebar ยุบ/ขยาย)
+  - business logic (subscription/นำทาง/locate) ไม่แตะ. responsive มือถือ/แท็บเล็ต/เดสก์ท็อป
+
 ### Added (Rider App Settings — wire toggles into live runtime)
 - **อ่านตั้งค่า realtime** จาก users/{uid} (listener เดียวกับ riderStatus) → สลับ toggle ในหน้า
   "ตั้งค่าแอป" มีผลกับ runtime **ทันทีไม่ต้องรีเฟรช**
