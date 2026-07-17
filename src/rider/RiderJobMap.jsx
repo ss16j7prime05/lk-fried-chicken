@@ -29,6 +29,31 @@ function Recenter({ target, token }) {
   return null;
 }
 
+// Leaflet can't detect container resizes on its own. Recompute the map size after the
+// initial layout settles and whenever the container changes (sidebar collapse, orientation,
+// window resize) so tiles fill the real box and never render stale/half-drawn.
+function AutoResize() {
+  const map = useMap();
+  useEffect(() => {
+    const fix = () => map.invalidateSize();
+    const raf = requestAnimationFrame(fix);
+    const t = setTimeout(fix, 250);
+    window.addEventListener("resize", fix);
+    window.addEventListener("orientationchange", fix);
+    let ro;
+    const el = map.getContainer();
+    if (typeof ResizeObserver !== "undefined" && el) { ro = new ResizeObserver(fix); ro.observe(el); }
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+      window.removeEventListener("resize", fix);
+      window.removeEventListener("orientationchange", fix);
+      if (ro) ro.disconnect();
+    };
+  }, [map]);
+  return null;
+}
+
 const FloatBtn = ({ icon: Icon, label, onClick, active = false }) => (
   <button
     type="button"
@@ -119,9 +144,14 @@ export default function RiderJobMap() {
   const initialCenter = useMemo(() => [store.lat, store.lng], [store.lat, store.lng]);
 
   return (
-    <div className="-m-4 sm:-m-6 md:-m-8">
-      <div className="relative w-full h-[calc(100dvh-64px-env(safe-area-inset-bottom))] md:h-[100dvh] overflow-hidden">
+    // Full-bleed map that fills only the VISIBLE viewport: on phones the height stops above
+    // the fixed bottom nav (nav height 64px + bottom safe-area + 16px breathing room) so the
+    // map never renders underneath it; on tablet/desktop there's no bottom nav so it fills
+    // the full height (the sidebar offset is handled by the layout). h-full height is not used
+    // because the parent is min-height driven, so an explicit dvh calc is the reliable source.
+    <div className="relative w-full overflow-hidden h-[calc(100dvh-64px-env(safe-area-inset-bottom)-16px)] md:h-[100dvh]">
         <MapContainer center={initialCenter} zoom={12} scrollWheelZoom zoomControl={false} className="w-full h-full" style={{ height: "100%", width: "100%" }}>
+          <AutoResize />
           <TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {/* Delivery service area — road-based polygon if the store has one, else the
               configured radius as a fallback circle. Both in brand green, transparent. */}
@@ -145,16 +175,16 @@ export default function RiderJobMap() {
           <Recenter target={center} token={flyToken} />
         </MapContainer>
 
-        {/* top-left: title + filter card */}
-        <div className="absolute top-3 left-3 z-[400] space-y-2">
+        {/* top-left: title + filter card (offset below the notch/status bar) */}
+        <div className="absolute left-3 z-[400] space-y-2 top-[calc(0.75rem+env(safe-area-inset-top))]">
           <div className="bg-white rounded-2xl shadow-premium border border-gray-100 px-3 py-2">
             <p className="flex items-center gap-2 text-sm font-black text-gray-800"><SlidersHorizontal size={15} className="text-primary" /> {t("ro.jobMap.title")}</p>
             <p className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 mt-0.5"><Package size={11} /> {t("ro.jobMap.jobsAvailable", { count: jobs.length })}</p>
           </div>
         </div>
 
-        {/* top-right: refresh */}
-        <div className="absolute top-3 right-3 z-[400]">
+        {/* top-right: refresh (offset below the notch/status bar) */}
+        <div className="absolute right-3 z-[400] top-[calc(0.75rem+env(safe-area-inset-top))]">
           <FloatBtn icon={RefreshCw} label={t("ro.jobMap.refresh")} onClick={locate} />
         </div>
 
@@ -176,7 +206,6 @@ export default function RiderJobMap() {
           <p className="flex items-center gap-2 text-[11px] font-bold text-gray-600"><span className="text-sm leading-none">🏪</span> {t("ro.jobMap.store")}</p>
           <p className="flex items-center gap-2 text-[11px] font-bold text-gray-600"><span className="w-3 h-3 rounded-full bg-secondary inline-block" /> {t("ro.jobMap.showJobs")}</p>
         </div>
-      </div>
     </div>
   );
 }
