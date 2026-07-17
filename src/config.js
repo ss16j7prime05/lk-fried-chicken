@@ -13,3 +13,6 @@ export const EST_PREP_MINUTES = 15;
 // cloud name + unsigned upload preset ตั้งค่าไว้ใน Cloudinary dashboard แล้ว
 export const CLOUDINARY_CLOUD_NAME = "eby8jpys";
 export const CLOUDINARY_UPLOAD_PRESET = "lk-fried-chicken";
+
+// เวอร์ชันแอป (แสดงในหน้า Device Check / About) — อัปเดตเมื่อ release
+export const APP_VERSION = "1.0.0";

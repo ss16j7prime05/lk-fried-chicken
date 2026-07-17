@@ -5,6 +5,27 @@
 
 ## [Unreleased]
 
+### Changed (Rider module — remove bell, rebuild Settings into 5 production sections)
+- **หน้า Home: เอากระดิ่งแจ้งเตือนออก** — ไม่มี floating element บนหน้า Home อีก (การ์ดสถิติ +
+  ปุ่มออนไลน์ขึ้นบนสุดเลย ไม่มีที่ว่างค้าง). หน้าอื่นยังมี avatar เข้าโปรไฟล์. NotificationBell ยังใช้
+  ในฝั่ง Store/Customer/Admin เหมือนเดิม (ลบเฉพาะ RiderLayout)
+- **Settings เป็นฮับ 5 หัวข้อ** (`/rider/settings` + sub-routes ใหม่ ไม่กระทบ route เดิม):
+  - **บัญชีของฉัน** (`/settings/account`): รูป/ชื่อ/รหัส/ระดับ/เรตติ้ง (จากรีวิวจริง) + ประเภทงาน +
+    ข้อมูลส่วนตัว + ปุ่มแก้ไข (ไป `/rider/profile`)
+  - **สรุปการทำงาน** (`/settings/work-summary`): เรตติ้ง, อัตรารับงาน/ยกเลิก (จากงานจริง),
+    สรุปรายได้ (วันนี้/สัปดาห์/เดือน), สถิติการทำงาน (งานสำเร็จ/ระยะทาง/รายได้รวม)
+  - **สรุปรายได้** (`/settings/income`): แท็บ รายวัน/สัปดาห์/เดือน — รายได้รวม + จำนวนงานสำเร็จ +
+    ส่วนต่างจากงวดก่อน + อัปเดตล่าสุด (ข้อมูล Firestore จริง งวดที่ไม่มีงาน = ฿0.00)
+  - **ตั้งค่าแอป** (`/settings/app`): แจ้งเตือนงานใหม่ / เสียงแจ้งเตือน / รับงานอัตโนมัติ
+    (persist ลง users/{uid} — additive fields) + ธีม/ภาษา
+  - **เช็คความพร้อมอุปกรณ์** (`/settings/device`): ตรวจสิทธิ์แจ้งเตือน/เสียง/เครือข่าย/เวอร์ชันจริง ;
+    รายการเฉพาะ native (Play Services/overlay/full-screen) รายงานตรง ๆ ว่า "ไม่มีบนเว็บ" ไม่แกล้งผ่าน ;
+    ปุ่ม "ตรวจสอบอีกครั้ง"
+- ทุกหน้าใช้ข้อมูล Firebase จริง (ไม่มี mock — ค่าที่ยังไม่มีข้อมูล = 0/—), ดีไซน์ LK, responsive.
+  เพิ่ม `riderMetrics.js` (คำนวณรายได้/อัตรา/งวดจากงานจริง) + `APP_VERSION` ใน config. เก็บ business
+  logic เดิม (single active order flow ไม่แตะ). ลบ `RiderSettings.jsx` เดิม (ย้ายเนื้อหาไปฮับ/ตั้งค่าแอป/บัญชี)
+- build / lint (ไฟล์ที่แตะ 0 error) / `npm test` (40) ผ่าน — ยังต้อง **QA เครื่องจริง**
+
 ### Changed (Rider home — declutter top-right, fix notification-bell overlap)
 - **ซ่อน avatar โปรไฟล์เฉพาะหน้า Home/รองาน** (`/rider`) — เหลือแค่กระดิ่งแจ้งเตือนมุมขวาบน
   (หน้าอื่นยังมี avatar ไว้เข้าโปรไฟล์ เพราะเป็นทางเข้าเดียว). คง Stats card + ปุ่มเปิด-ปิดรับงาน + กระดิ่ง

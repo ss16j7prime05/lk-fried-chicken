@@ -29,7 +29,12 @@ const RiderProfile = lazy(() => import('./RiderProfile.jsx'))
 const RiderOrdersDashboard = lazy(() => import('./rider/RiderOrdersDashboard.jsx'))
 const RiderJobDetails = lazy(() => import('./rider/RiderJobDetails.jsx'))
 const RiderJobMap = lazy(() => import('./rider/RiderJobMap.jsx'))
-const RiderSettings = lazy(() => import('./rider/RiderSettings.jsx'))
+const RiderSettingsHub = lazy(() => import('./rider/RiderSettingsHub.jsx'))
+const RiderAccount = lazy(() => import('./rider/RiderAccount.jsx'))
+const RiderWorkSummary = lazy(() => import('./rider/RiderWorkSummary.jsx'))
+const RiderIncomeSummary = lazy(() => import('./rider/RiderIncomeSummary.jsx'))
+const RiderAppSettings = lazy(() => import('./rider/RiderAppSettings.jsx'))
+const RiderDeviceCheck = lazy(() => import('./rider/RiderDeviceCheck.jsx'))
 const RiderOrderHistory = lazy(() => import('./rider/RiderOrderHistory.jsx'))
 const RiderEarnings = lazy(() => import('./rider/RiderEarnings.jsx'))
 
@@ -109,7 +114,12 @@ createRoot(document.getElementById('root')).render(
             <Route path="/rider/map" element={<RiderJobMap />} />
             <Route path="/rider/job/:id" element={<RiderJobDetails />} />
             <Route path="/rider/profile" element={<RiderProfile />} />
-            <Route path="/rider/settings" element={<RiderSettings />} />
+            <Route path="/rider/settings" element={<RiderSettingsHub />} />
+            <Route path="/rider/settings/account" element={<RiderAccount />} />
+            <Route path="/rider/settings/work-summary" element={<RiderWorkSummary />} />
+            <Route path="/rider/settings/income" element={<RiderIncomeSummary />} />
+            <Route path="/rider/settings/app" element={<RiderAppSettings />} />
+            <Route path="/rider/settings/device" element={<RiderDeviceCheck />} />
             <Route path="/rider/history" element={<RiderOrderHistory />} />
             <Route path="/rider/earnings" element={<RiderEarnings />} />
           </Route>
