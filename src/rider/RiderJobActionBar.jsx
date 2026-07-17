@@ -1,4 +1,4 @@
-import { MapPin } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import MapButton from "../location/MapButton.jsx";
 import { Button } from "../components/ui/Button";
 import { riderStageAction, withinGeofence } from "./riderStage";
@@ -59,7 +59,7 @@ export const RiderJobActionBar = ({
         )}
 
         {action.kind === "done" && (
-          <Button className="w-full h-14 text-base" onClick={onNextJob}><MapPin size={18} /> {t("ro.action.nextJob")}</Button>
+          <Button className="w-full h-14 text-base" onClick={onNextJob}><CheckCircle2 size={18} /> {t("ro.action.nextJob")}</Button>
         )}
       </div>
     </div>

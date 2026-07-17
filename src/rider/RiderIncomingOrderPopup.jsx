@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bike, MapPin, Package, Store, User, X } from "lucide-react";
+import { Banknote, Bike, Clock, CreditCard, Eye, MapPin, Package, Store, User, X } from "lucide-react";
 import { usePreferences } from "../context/PreferencesContext";
 import { getAlarmAudioCtx, playSound, getEffectiveVolume } from "../store/alarmSounds";
 import { getDestination } from "./riderLocationService";
@@ -31,10 +31,10 @@ function useIncomingAlarm(active) {
 }
 
 const Stat = ({ icon: Icon, label, value }) => (
-  <div className="flex flex-col items-center gap-1 flex-1">
-    <Icon size={22} className="text-primary" />
-    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">{label}</span>
-    <span className="text-base font-black text-gray-900 text-center leading-tight">{value}</span>
+  <div className="flex flex-col items-center gap-1 px-1 text-center">
+    <Icon size={18} className="text-primary" />
+    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide leading-none">{label}</span>
+    <span className="text-xs font-black text-gray-900 leading-tight break-words">{value}</span>
   </div>
 );
 
@@ -44,7 +44,7 @@ const Stat = ({ icon: Icon, label, value }) => (
 // order data; no mock values.
 // This component is keyed by order id in the parent, so it remounts per incoming order —
 // the countdown state initialises fresh on mount (no setState-in-effect to reset it).
-export default function RiderIncomingOrderPopup({ order, storeLocation, busy, onAccept, onReject, onDismiss }) {
+export default function RiderIncomingOrderPopup({ order, storeLocation, busy, onAccept, onReject, onViewDetails, onDismiss }) {
   const { t } = usePreferences();
   const [secondsLeft, setSecondsLeft] = useState(AUTO_DISMISS_SEC);
   const dismissRef = useRef(onDismiss);
@@ -73,6 +73,9 @@ export default function RiderIncomingOrderPopup({ order, storeLocation, busy, on
       ? haversineKm(storeLocation.lat, storeLocation.lng, dest.lat, dest.lng)
       : null;
   const earnings = Number(order.deliveryFee || 0);
+  const method = order.paymentMethod || "cash";
+  const isCod = method === "cash";
+  const eta = Number(order.estimatedDeliveryMinutes || order.etaMinutes || 0);
   const pct = (secondsLeft / AUTO_DISMISS_SEC) * 100;
 
   return createPortal(
@@ -91,14 +94,15 @@ export default function RiderIncomingOrderPopup({ order, storeLocation, busy, on
           </div>
         </div>
 
-        {/* stats */}
-        <div className="flex items-start gap-2 px-5 py-5 border-b border-gray-50">
-          <Stat icon={MapPin} label={t("ro.incoming.distance")} value={distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-"} />
-          <div className="w-px self-stretch bg-gray-100" />
+        {/* stats — distance / fee / payment / ETA */}
+        <div className="grid grid-cols-4 px-3 py-5 border-b border-gray-50 divide-x divide-gray-100">
+          <Stat icon={MapPin} label={t("ro.incoming.distance")} value={distanceKm != null ? `${distanceKm.toFixed(1)} km` : "—"} />
           <Stat icon={Package} label={t("ro.incoming.earnings")} value={`฿${earnings.toLocaleString("th-TH")}`} />
+          <Stat icon={isCod ? Banknote : CreditCard} label={t("ro.incoming.payment")} value={t(`payment.${method}`)} />
+          <Stat icon={Clock} label="ETA" value={eta > 0 ? `${eta}′` : "—"} />
         </div>
 
-        {/* store + customer */}
+        {/* store + customer + COD hint */}
         <div className="px-5 py-4 space-y-2 text-sm">
           <p className="flex items-center gap-2 text-gray-700 font-medium">
             <Store size={15} className="text-gray-400 shrink-0" />
@@ -111,26 +115,39 @@ export default function RiderIncomingOrderPopup({ order, storeLocation, busy, on
               {dest.address && <span className="block text-xs text-gray-400 mt-0.5">{dest.address}</span>}
             </span>
           </p>
+          <p className={`flex items-center gap-1.5 text-xs font-bold ${isCod ? "text-secondary" : "text-primary"}`}>
+            {isCod ? <Banknote size={13} className="shrink-0" /> : <CreditCard size={13} className="shrink-0" />}
+            {isCod ? t("ro.incoming.collectCash", { amount: `฿${Number(order.grandTotal ?? order.subtotal ?? 0).toLocaleString("th-TH")}` }) : t("ro.incoming.prepaid")}
+          </p>
         </div>
 
-        {/* actions */}
-        <div className="flex gap-3 px-5 pb-5">
+        {/* actions — View Details, then Reject / Accept */}
+        <div className="px-5 pb-5 space-y-2.5">
           <button
             type="button"
-            onClick={() => onReject(order)}
-            disabled={busy}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3.5 rounded-2xl border border-secondary/30 text-secondary font-black text-sm hover:border-secondary transition-colors disabled:opacity-50"
+            onClick={() => onViewDetails(order)}
+            className="w-full flex items-center justify-center gap-1.5 py-3 rounded-2xl border border-gray-200 text-gray-700 font-black text-sm hover:border-primary hover:text-primary transition-colors"
           >
-            <X size={18} /> {t("ro.reject")}
+            <Eye size={17} /> {t("ro.incoming.viewDetails")}
           </button>
-          <button
-            type="button"
-            onClick={() => onAccept(order)}
-            disabled={busy}
-            className="flex-[1.4] flex items-center justify-center gap-1.5 py-3.5 rounded-2xl bg-primary text-white font-black text-sm hover:bg-primary-dark transition-colors disabled:opacity-50"
-          >
-            <Package size={18} /> {busy ? t("ro.accepting") : t("ro.acceptDelivery")}
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => onReject(order)}
+              disabled={busy}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 rounded-2xl border border-secondary/30 text-secondary font-black text-sm hover:border-secondary transition-colors disabled:opacity-50"
+            >
+              <X size={18} /> {t("ro.reject")}
+            </button>
+            <button
+              type="button"
+              onClick={() => onAccept(order)}
+              disabled={busy}
+              className="flex-[1.4] flex items-center justify-center gap-1.5 py-3.5 rounded-2xl bg-primary text-white font-black text-sm hover:bg-primary-dark transition-colors disabled:opacity-50"
+            >
+              <Package size={18} /> {busy ? t("ro.accepting") : t("ro.acceptDelivery")}
+            </button>
+          </div>
         </div>
       </div>
       <style>{`@keyframes popIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}`}</style>

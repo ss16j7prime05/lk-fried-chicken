@@ -5,6 +5,29 @@
 
 ## [Unreleased]
 
+### Changed (Rider workflow redesign — single active order, popup→detail→accept→workflow)
+- **งานเดียวต่อครั้ง (single active order)**: ไรเดอร์ถืองานได้ทีละ 1 ใบ. เมื่อมีงานกำลังทำ
+  (`status` picked_up/delivering) `RiderOrdersDashboard` จะโชว์ **workflow อย่างเดียว** — ซ่อน
+  ป๊อปอัปงานใหม่/รายการงานว่าง/ปุ่มสลับสถานะทั้งหมด และ `acceptOrder` ถูกล็อก (กดรับใบใหม่ไม่ได้
+  จนกว่าจะส่งจบ). สถานะทั้งหมด derive จาก Firestore → **รีเฟรช/ปิดเปิดแอปแล้วกลับมาขั้นเดิมเสมอ**
+- **ป๊อปอัปงานใหม่ (redesign)**: `RiderIncomingOrderPopup` เพิ่ม **ประเภทการชำระ** (COD/ออนไลน์)
+  + **ETA** + ปุ่ม **ดูรายละเอียด (View Details)** ครบ 3 ปุ่ม (รับ / ดูรายละเอียด / ปฏิเสธ) พร้อม
+  เสียงเรียกวนซ้ำ + countdown เหมือนเดิม. ไม่เปิดหน้าเต็มอัตโนมัติ
+- **หน้ารายละเอียดก่อนรับ** (`RiderOrderDetailSheet.jsx` ใหม่): เปิดจาก "ดูรายละเอียด" —
+  COD โชว์ "ลูกค้าจ่ายเงินสด + ยอดที่ต้องเก็บ", ออนไลน์โชว์ "ลูกค้าจ่ายแล้ว ไม่ต้องเก็บเงิน" +
+  ข้อมูลร้าน/ลูกค้า/แผนที่/รายการอาหาร. ปุ่ม **รับงาน / ย้อนกลับ** (Back กลับไปหน้าป๊อปอัป)
+- **Workflow เต็ม (shared)**: แยก workflow ออกเป็น `RiderActiveOrder.jsx` ใช้ร่วมกันทั้ง dashboard
+  (งานที่กำลังทำ) และ route `/rider/job/:id` (ทำให้ `RiderJobDetails` เหลือ wrapper บาง ๆ). ขั้นตอน:
+  ไปร้าน → ถึงร้าน (geofence) → รับอาหาร → ไปหาลูกค้า → ถึงลูกค้า (geofence) → ยืนยันส่ง (dialog)
+  → สำเร็จ. Timeline ปรับเป็น 5 ไมล์สโตน stage-aware (`riderFlowStepIndex`). โทร/แชทปิดเองเมื่อจบงาน
+- **หน้าสรุปการจัดส่ง (redesign)**: `RiderDeliverySummary` โชว์ตามสเปก — **รายได้ / ระยะทาง /
+  เวลา / เหรียญ / ภาษี / รายได้สุทธิ** (เวลา = acceptedAt→deliveredAt ; ฟิลด์ additive default 0
+  ไม่มี mock) + ปุ่ม **เสร็จสิ้น (Done)** กลับสู่หน้ารอรับงาน
+- **ลบ dead code**: `riderJobFlow.js` (FLOW_STEPS/flowStepIndex เดิม) — ย้าย logic ไป `riderStage.js`.
+  `RiderOrderCard.jsx` ไม่ถูกเรียกจาก dashboard แล้ว (คงไฟล์ไว้ ยังเป็นคอมโพเนนต์ที่ reuse ได้)
+- build / lint (ไฟล์ที่แตะ 0 error) / `npm test` (40 เคส) ผ่าน. **ยังไม่ได้ QA เครื่องจริง**
+  (auth/GPS/Firestore/เสียง/กล้อง บล็อกในเครื่องนี้) — ต้องทดสอบ flow ครบทุกขั้นบนอุปกรณ์จริง
+
 ### Added (Rider production UX — incoming-order popup + sound, richer chat, delivery summary)
 - **Full-screen new-order popup + เสียงเรียกวนซ้ำ** (`src/rider/RiderIncomingOrderPopup.jsx` ใหม่):
   งานใหม่ที่เข้าพูล (docChanges `added` จาก snapshot เดิม) เด้งป๊อปอัปเต็มจอ — โชว์ร้าน/ลูกค้า/

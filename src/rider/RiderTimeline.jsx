@@ -1,16 +1,17 @@
 import { Check } from "lucide-react";
-import { FLOW_STEPS, flowStepIndex } from "./riderJobFlow";
+import { RIDER_FLOW_STEPS, riderFlowStepIndex } from "./riderStage";
 
-// Professional status timeline for an accepted job. Reflects the EXISTING order
-// status only (no state changes). Completed steps = green, current = primary + pulse,
-// pending = gray. Robust half-connector layout (each step centred in its own column).
-export const RiderTimeline = ({ status, t }) => {
-  const current = flowStepIndex(status);
-  const last = FLOW_STEPS.length - 1;
+// Professional status timeline for an active job. Reflects the EXISTING status + the
+// additive riderStage only (no state changes) via riderFlowStepIndex — 5 milestones:
+// toStore → atStore → toCustomer → atCustomer → done. Completed steps = green, current =
+// primary + pulse, pending = gray. Robust half-connector layout (each step centred).
+export const RiderTimeline = ({ order, t }) => {
+  const current = riderFlowStepIndex(order);
+  const last = RIDER_FLOW_STEPS.length - 1;
 
   return (
     <div className="flex" role="list" aria-label={t("ro.jobDetails.title")}>
-      {FLOW_STEPS.map((step, i) => {
+      {RIDER_FLOW_STEPS.map((step, i) => {
         const done = i < current;
         const active = i === current;
         return (
