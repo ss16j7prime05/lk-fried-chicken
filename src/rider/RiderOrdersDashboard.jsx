@@ -19,7 +19,8 @@ import {
   READY_QUERY_STATUSES,
   isReadyForDelivery,
 } from "./riderStatus";
-import { byNewest, normalizeStatus, toDate } from "../store/orderStatus";
+import { byNewest, normalizeStatus } from "../store/orderStatus";
+import { summarizeIncome } from "./riderIncome";
 import { useStoreStatus } from "../store/useStoreStatus";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
 import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
@@ -36,8 +37,6 @@ const FALLBACK_STORE_LNG = 100.0529543;
 const orderMs = (ts) => (ts?.toMillis ? ts.toMillis() : ts ? new Date(ts).getTime() : 0);
 
 const money = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
-const isSameDay = (d, ref) =>
-  !!d && d.getDate() === ref.getDate() && d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
 
 // ตัวเลือกจำนวนเงินสดที่ไรเดอร์มี (กรองงานเก็บเงินปลายทางที่เกินวงเงิน) — null = ทั้งหมด
 const CASH_OPTIONS = [500, 1000, Infinity];
@@ -348,15 +347,11 @@ export default function RiderOrdersDashboard() {
   // กรองด้วยวงเงินสดที่ไรเดอร์เลือก (งานเก็บเงินปลายทางที่เกินวงเงินจะไม่ขึ้น)
   const visibleAvailable = availableOrders.filter((o) => passesCash(o, cashFilter));
 
-  // สถิติหัวจอ: รายได้/เหรียญ "วันนี้" คิดจากงานของไรเดอร์ที่ส่งสำเร็จวันนี้ (ข้อมูลจริง) ;
-  // เครดิตอ่านจากโปรไฟล์จริง (default 0 ไม่มี mock). ใช้ mountTime เป็นวันอ้างอิง (คงที่ทั้งเซสชัน)
-  const dayRef = new Date(mountTime);
-  const doneToday = orders.filter(
-    (o) => o.riderId === user?.uid && normalizeStatus(o.status) === DELIVERED_STATUS &&
-      isSameDay(toDate(o.deliveredAt ?? o.completedAt ?? o.createdAt), dayRef)
-  );
-  const todayIncome = doneToday.reduce((s, o) => s + Number(o.deliveryFee || 0) + Number(o.riderBonus || 0), 0);
-  const todayCoins = doneToday.reduce((s, o) => s + Number(o.riderCoins || 0), 0);
+  // สถิติหัวจอ: รายได้/เหรียญ "วันนี้" มาจาก SSOT เดียวกับหน้ารายได้ทั้งหมด (summarizeIncome)
+  // -> ตัวเลขตรงกันทุกหน้าเป๊ะ ; เครดิตอ่านจากโปรไฟล์จริง (default 0 ไม่มี mock)
+  const income = summarizeIncome(orders, new Date(mountTime));
+  const todayIncome = income.today.net;
+  const todayCoins = income.today.coins;
   const credit = Number(profile?.riderCredit ?? profile?.credit ?? 0);
 
   // ป๊อปอัปงานใหม่: แสดงงานแรกในคิวที่ยัง "ว่างจริง" (ถ้าไรเดอร์คนอื่นรับไปก่อน หรือหมดสถานะพร้อมส่ง

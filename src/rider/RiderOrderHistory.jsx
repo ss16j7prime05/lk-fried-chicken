@@ -5,6 +5,7 @@ import { usePreferences } from "../context/PreferencesContext";
 import { PROMPTPAY_ACCOUNT_NAME } from "../config";
 import { useRiderOrders } from "./useRiderOrders";
 import { formatDate } from "./riderFormat";
+import { orderNet, fmtTHB0 } from "./riderIncome";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -45,12 +46,12 @@ const PAYMENT_PILL = {
 };
 
 const itemCount = (order) => (order.items || []).reduce((s, i) => s + (i.qty || 1), 0);
-const orderIncome = (order) => Number(order.deliveryFee || 0);
+const orderIncome = orderNet; // SSOT: fee + bonus − tax − adjustment (matches every income page)
 const orderDistanceKm = (order) => {
   const km = order.distanceKm ?? order.distance ?? order.deliveryDistance;
   return typeof km === "number" && Number.isFinite(km) ? km : null;
 };
-const fmtMoney = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
+const fmtMoney = fmtTHB0;
 
 // One history row. Hierarchy per spec: income is the hero, status second, restaurant
 // third, then customer / distance / payment / date — all aligned to a single grid.
