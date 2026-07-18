@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+### Changed (Rider Profile — production module)
+- **รูปโปรไฟล์**: เลือกรูป → **crop เป็นสี่เหลี่ยมจัตุรัส** (canvas, `services/cropImage.js` ใหม่,
+  fallback ใช้ไฟล์เดิมถ้า decode ไม่ได้เช่น HEIC) → **preview ก่อนบันทึก** (อัปโหลดจริงตอนกด Save
+  พร้อม % progress) → อัปโหลด Cloudinary → เก็บ `photoURL`. เปลี่ยน/ลบรูปได้, avatar วงกลม, ค้างหลังรีเฟรช
+- **ฟิลด์ตามสเปก**: ชื่อจริง/นามสกุล (แยกจาก `name` เดิม — ยังเขียน `name` = first+last เพื่อความเข้ากันได้),
+  เบอร์, **อีเมล (อ่านอย่างเดียว)**, ประเภทรถ, ทะเบียนรถ (→`licensePlate`), ธนาคาร, ชื่อบัญชี (→`accountName`),
+  เลขบัญชี (→`accountNumber`), เลขบัตร ปชช., ที่อยู่ ; **รหัสไรเดอร์อ่านอย่างเดียว**
+- **Validation**: บังคับ ชื่อ/นามสกุล/เบอร์, ตรวจเบอร์, เลขบัตร 13 หลัก, เลขบัญชี 10–15 หลัก, error ใต้ช่อง
+  (แสดงเมื่อ touched), **ปิดปุ่ม Save จนกว่าจะ valid + มีการแก้จริง**
+- **Firestore**: โหลดของเดิม, **บันทึกเฉพาะฟิลด์ที่เปลี่ยน** (merge), ไม่แตะ email/riderCode/uid/status/role
+- **UX**: Edit/Save/Cancel, เตือนแก้ค้าง (beforeunload + dialog), success/error toast, **skeleton loading**,
+  responsive + safe-area. label ผูกกับ input (htmlFor) + aria-invalid (แก้ a11y จาก QA)
+
 ### Added (Rider Profile Management — full editable profile)
 - **รูปโปรไฟล์**: อัปโหลด/เปลี่ยน/ลบ ผ่าน Cloudinary (SSOT รูปของโปรเจกต์ — Firebase Storage ไม่ได้
   provision ใช้แล้ว 404 ตาม cloudinary.js), บันทึก `photoURL` ลง users/{uid} ทันที (มี progress %),
