@@ -5,6 +5,21 @@
 
 ## [Unreleased]
 
+### Added (Rider Profile Management — full editable profile)
+- **รูปโปรไฟล์**: อัปโหลด/เปลี่ยน/ลบ ผ่าน Cloudinary (SSOT รูปของโปรเจกต์ — Firebase Storage ไม่ได้
+  provision ใช้แล้ว 404 ตาม cloudinary.js), บันทึก `photoURL` ลง users/{uid} ทันที (มี progress %),
+  แสดง loading ระหว่างอัปโหลด, ค้างหลังรีเฟรช (อ่านจาก Firestore)
+- **แก้ไขข้อมูลได้ครบ** (บันทึกลง users/{uid}, additive, ไม่แตะ status/role/riderStatus):
+  - ส่วนตัว: ชื่อ-นามสกุล/ชื่อเล่น/เบอร์/อีเมล/วันเกิด/เพศ/ที่อยู่/เลขบัตร ปชช./ผู้ติดต่อฉุกเฉิน+เบอร์
+  - ยานพาหนะ: ประเภท/ยี่ห้อ/รุ่น/สี/ทะเบียน/จังหวัด
+  - ธนาคาร: ธนาคาร/ชื่อบัญชี/เลขบัญชี/พร้อมเพย์
+  - ไรเดอร์: ชื่อที่แสดง/รหัสไรเดอร์/เกี่ยวกับฉัน
+- **Validation**: เบอร์/อีเมล/ช่องบังคับ (ชื่อ+เบอร์) + เลขบัตร 13 หลัก — โชว์ error ใต้ช่อง + toast
+- **UX**: ปุ่ม Edit/Save/Cancel, เตือนเมื่อมีการแก้ที่ยังไม่บันทึก (beforeunload + dialog ยืนยันตอน
+  Cancel), loading state, success/error toast, responsive มือถือ/แท็บเล็ต/เดสก์ท็อป
+- อ่านข้อมูลจาก Firestore อย่างเดียว ไม่มี mock ; business logic เดิมไม่แตะ. firestore.rules เดิม
+  รองรับอยู่แล้ว (rider แก้ users/{uid} ตัวเองได้ตราบใดที่ไม่เปลี่ยน status)
+
 ### Fixed (Rider Job Map — no longer renders under the bottom nav)
 - Regression จากรอบ avatar-clearance: main มี top padding แบบ asymmetric ทำให้ trick `-m-4`
   ของหน้าแผนที่ไม่แมตช์ padding เดิม แผนที่จึงล้นไปใต้แถบเมนูล่าง. แก้โดย:
