@@ -53,13 +53,16 @@ const passesCash = (order, cashLimit) => {
 };
 
 // ยิง browser notification เมื่อมีงานใหม่ (เฉพาะเมื่อได้รับอนุญาตแล้ว) — ไม่ขอสิทธิ์เอง
-// (ให้ไปกดอนุญาตในหน้า Device Check). ปลอดภัยถ้า Notification API ไม่มี
+// (ให้ไปกดอนุญาตในหน้า Device Check). ปลอดภัยถ้า Notification API ไม่มี.
+// คืนค่า Notification object (หรือ null) ให้ผู้เรียกเก็บไว้ปิดทีหลัง — งานที่ตั้ง requireInteraction
+// จะค้างบนหน้าจอจนกว่าจะปิดเอง ถ้าไม่เก็บไว้จะปิด "งานที่ถูกคนอื่นรับไปแล้ว" ไม่ได้
 const sendJobNotification = (order, title, body) => {
   try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return null;
     const n = new Notification(title, { body, tag: `lk-rider-job-${order.id}`, requireInteraction: true });
     n.onclick = () => window.focus();
-  } catch { /* ignore */ }
+    return n;
+  } catch { return null; }
 };
 
 // เหตุผลที่รับ/ปฏิเสธงานไม่สำเร็จ (reason จาก riderAcceptReject) -> คีย์แปลภาษา ro.err.*
@@ -228,6 +231,7 @@ export default function RiderOrdersDashboard() {
   const [mountTime] = useState(() => Date.now()); // เวลาเปิดหน้า — ใช้แยก "งานเพิ่งจบ" ออกจากงานเก่าใน history
   const seenOrderIdsRef = useRef(new Set()); // เคยเห็นแล้ว ไม่ต้องเด้งซ้ำ (เหมือน StoreLayout)
   const notifiedIdsRef = useRef(new Set());  // งานที่ยิง browser notification ไปแล้ว (กันซ้ำ)
+  const jobNotifsRef = useRef(new Map());    // orderId -> Notification ที่เปิดค้างอยู่ (ไว้ปิดตอนงานหลุด/ออกจากหน้า)
   const autoAcceptedRef = useRef(new Set());  // งานที่ auto-accept ไปแล้ว (กันรับซ้ำระหว่างรอ async)
   const availInitRef = useRef(false);        // snapshot แรก = งานเดิม ไม่ต้องเด้ง
   const isOnlineRef = useRef(false);         // สถานะล่าสุดสำหรับใช้ใน callback ของ snapshot
@@ -236,6 +240,8 @@ export default function RiderOrdersDashboard() {
 
   useEffect(() => {
     if (!user?.uid) return;
+    // Map เดียวกันตลอดอายุ component (useRef) — เก็บไว้ในตัวแปรเพื่อใช้ทั้งใน callback และตอน cleanup
+    const jobNotifs = jobNotifsRef.current;
     // แทนการ subscribe ทั้ง collection: ดึงเฉพาะพูลงานว่าง (status พร้อมส่ง) + งานล่าสุดของไรเดอร์คนนี้
     // งานว่าง = bounded โดยธรรมชาติ (มีไม่กี่ใบที่สถานะพร้อมส่ง) ; งานของไรเดอร์ = จำกัด N ใบล่าสุด
     // (orderBy createdAt desc + limit) ผ่าน composite index orders(riderId, createdAt desc)
@@ -273,6 +279,10 @@ export default function RiderOrdersDashboard() {
           const order = { id: change.doc.id, ...change.doc.data() };
           if (change.type === "removed" || order.riderId || !isReadyForDelivery(order.status)) {
             setIncomingIds((prev) => (prev.includes(order.id) ? prev.filter((qid) => qid !== order.id) : prev));
+            // งานหลุดพูล (ถูกคนอื่นรับ/หมดสถานะพร้อมส่ง) -> ปิด browser notification ที่ค้างอยู่
+            // (requireInteraction จะไม่ปิดเอง) ไม่งั้นไรเดอร์กดแจ้งเตือนงานที่รับไปแล้ว
+            const stale = jobNotifs.get(order.id);
+            if (stale) { try { stale.close(); } catch { /* ignore */ } jobNotifs.delete(order.id); }
             return;
           }
           if (change.type !== "added") return;
@@ -283,7 +293,8 @@ export default function RiderOrdersDashboard() {
           // New Job Notification เปิด -> ยิง browser notification (ครั้งเดียวต่อออเดอร์). ปิด = ไม่ยิง
           if (settingsRef.current.notifyNewJob && !notifiedIdsRef.current.has(order.id)) {
             notifiedIdsRef.current.add(order.id);
-            sendJobNotification(order, t("ro.notif.newJobTitle"), t("ro.notif.newJobBody", { name: order.customerName || "-" }));
+            const n = sendJobNotification(order, t("ro.notif.newJobTitle"), t("ro.notif.newJobBody", { name: order.customerName || "-" }));
+            if (n) jobNotifs.set(order.id, n);
           }
         });
       },
@@ -332,6 +343,9 @@ export default function RiderOrdersDashboard() {
       unsubAvailable();
       if (unsubMine) unsubMine();
       unsubStore();
+      // ปิด browser notification ของงานใหม่ที่ยังค้างอยู่ทั้งหมด ไม่ให้ค้างหลังออกจากหน้าแดชบอร์ด
+      jobNotifs.forEach((n) => { try { n.close(); } catch { /* ignore */ } });
+      jobNotifs.clear();
     };
     // t ใช้แค่ทำข้อความ notification — ไม่ผูกเป็น dep เพื่อไม่ให้ re-subscribe listener ทุกครั้งที่สลับภาษา
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -386,7 +400,12 @@ export default function RiderOrdersDashboard() {
   const incomingOrder =
     isOnline && firstIncomingId ? availableOrders.find((o) => o.id === firstIncomingId) : null;
 
-  const dismissIncoming = (id) => setIncomingIds((prev) => prev.filter((qid) => qid !== id));
+  const dismissIncoming = (id) => {
+    // ปิด browser notification ของงานนี้ทันทีเมื่อรับ/ปฏิเสธ/หมดเวลา (ไม่ต้องรอ docChange จาก server)
+    const n = jobNotifsRef.current.get(id);
+    if (n) { try { n.close(); } catch { /* ignore */ } jobNotifsRef.current.delete(id); }
+    setIncomingIds((prev) => prev.filter((qid) => qid !== id));
+  };
 
   // ── งานเดียวต่อครั้ง (single active order) ──────────────────────────────────
   // งานที่ "กำลังทำ" = ออเดอร์ของเราที่ยัง picked_up/delivering (ใหม่สุดก่อน — ปกติมีใบเดียว)
