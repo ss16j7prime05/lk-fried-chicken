@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
+import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from "firebase/firestore";
 import { AlertCircle, Banknote, Bike, CheckCircle2, Coins, MapPin, Navigation, Package, Power, Store, WifiOff } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
@@ -32,6 +32,11 @@ import { logError } from "../errorCenter";
 // ค่าเริ่มต้น ใช้เมื่อยังไม่มี lat/lng ใน Firestore stores/{STORE_ID}
 const FALLBACK_STORE_LAT = 13.8294079;
 const FALLBACK_STORE_LNG = 100.0529543;
+
+// เพดานงานของไรเดอร์ที่ subscribe แบบ realtime บนแดชบอร์ด: หน้านี้ใช้แค่ "งานที่กำลังทำ"
+// (picked_up/delivering — ใบเดียว) + รายได้/เหรียญ "วันนี้" ซึ่งล้วนเป็นออเดอร์ล่าสุดทั้งสิ้น
+// จึงดึงเฉพาะ N ใบล่าสุด (orderBy createdAt desc) แทนการ subscribe ประวัติทั้งชีวิตแบบไม่จำกัด
+const MY_JOBS_LIMIT = 100;
 
 // Firestore Timestamp | ISO | ms -> ms (0 ถ้าไม่มี)
 const orderMs = (ts) => (ts?.toMillis ? ts.toMillis() : ts ? new Date(ts).getTime() : 0);
@@ -231,9 +236,16 @@ export default function RiderOrdersDashboard() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    // แทนการ subscribe ทั้ง collection: ดึงเฉพาะพูลงานว่าง (status พร้อมส่ง) + งานของไรเดอร์คนนี้
+    // แทนการ subscribe ทั้ง collection: ดึงเฉพาะพูลงานว่าง (status พร้อมส่ง) + งานล่าสุดของไรเดอร์คนนี้
+    // งานว่าง = bounded โดยธรรมชาติ (มีไม่กี่ใบที่สถานะพร้อมส่ง) ; งานของไรเดอร์ = จำกัด N ใบล่าสุด
+    // (orderBy createdAt desc + limit) ผ่าน composite index orders(riderId, createdAt desc)
     const availableQ = query(collection(db, "orders"), where("status", "in", READY_QUERY_STATUSES));
-    const mineQ = query(collection(db, "orders"), where("riderId", "==", user.uid));
+    const mineQ = query(
+      collection(db, "orders"),
+      where("riderId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+      limit(MY_JOBS_LIMIT)
+    );
     const markFeed = (key, msg) =>
       setFeedErrors((prev) => (prev[key] === msg ? prev : { ...prev, [key]: msg }));
     // ถ้า feed พัง (สิทธิ์/เน็ต) ต้องเลิกหมุนแล้วบอกเหตุผล ไม่ใช่ค้างที่ Loading ตลอดกาล
@@ -277,17 +289,30 @@ export default function RiderOrdersDashboard() {
       },
       (err) => onFeedError(err, "available")
     );
-    const unsubMine = onSnapshot(
-      mineQ,
-      (snapshot) => {
-        // อ่านด้วย serverTimestamps:"estimate" เพื่อให้ deliveredAt (serverTimestamp) มีค่าประมาณ
-        // ทันทีตอนกดส่งสำเร็จ (ไม่เป็น null ระหว่างรอ server) — ไม่งั้นหน้าสรุปจะกระพริบหลุดไปหน้ารอรับงาน
-        setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })));
-        markFeed("mine", "");
-        setLoading(false);
-      },
-      (err) => onFeedError(err, "mine")
-    );
+    // งานของไรเดอร์: onSnapshot บน mineQ (bounded). ถ้า composite index ยังไม่ deploy จะ error
+    // failed-precondition -> fallback ไป query แบบไม่ orderBy/limit เพื่อให้แดชบอร์ดหลักไม่พัง
+    // (ค่าที่แสดงยังถูก เพราะคำนวณจากออเดอร์ที่ได้มา — แค่ใช้แบนด์วิดท์มากกว่าจนกว่า index จะพร้อม)
+    const mineFallbackQ = query(collection(db, "orders"), where("riderId", "==", user.uid));
+    let unsubMine = null;
+    const onMineNext = (snapshot) => {
+      // อ่านด้วย serverTimestamps:"estimate" เพื่อให้ deliveredAt (serverTimestamp) มีค่าประมาณ
+      // ทันทีตอนกดส่งสำเร็จ (ไม่เป็น null ระหว่างรอ server) — ไม่งั้นหน้าสรุปจะกระพริบหลุดไปหน้ารอรับงาน
+      setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })));
+      markFeed("mine", "");
+      setLoading(false);
+    };
+    const subscribeMine = (q, isFallback) => {
+      unsubMine = onSnapshot(q, onMineNext, (err) => {
+        if (!isFallback && err?.code === "failed-precondition") {
+          logError(err, "RiderOrdersDashboard.mine.index-fallback");
+          if (unsubMine) unsubMine();
+          subscribeMine(mineFallbackQ, true);
+          return;
+        }
+        onFeedError(err, "mine");
+      });
+    };
+    subscribeMine(mineQ, false);
     const unsubStore = onSnapshot(
       doc(db, "stores", STORE_ID),
       (snap) => {
@@ -305,7 +330,7 @@ export default function RiderOrdersDashboard() {
     );
     return () => {
       unsubAvailable();
-      unsubMine();
+      if (unsubMine) unsubMine();
       unsubStore();
     };
     // t ใช้แค่ทำข้อความ notification — ไม่ผูกเป็น dep เพื่อไม่ให้ re-subscribe listener ทุกครั้งที่สลับภาษา

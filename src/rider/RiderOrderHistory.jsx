@@ -3,7 +3,7 @@ import { Store, User, Package, Calendar, Navigation, CreditCard, WifiOff } from 
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
 import { PROMPTPAY_ACCOUNT_NAME } from "../config";
-import { useRiderOrders } from "./useRiderOrders";
+import { useRiderOrderHistory, HISTORY_PAGE_SIZE } from "./useRiderOrderHistory";
 import { formatDate } from "./riderFormat";
 import { orderNet, fmtTHB0 } from "./riderIncome";
 import { byNewest, normalizeStatus } from "../store/orderStatus";
@@ -11,8 +11,6 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { RiderCardGridSkeleton } from "../components/ui/Skeleton";
-
-const PAGE_SIZE = 20;
 
 // Single-store app — the "restaurant" on every delivery is the store itself.
 const STORE_NAME = PROMPTPAY_ACCOUNT_NAME;
@@ -125,13 +123,15 @@ const HistoryCard = ({ order, t }) => {
 };
 
 // ประวัติงานส่งของไรเดอร์: ทุกออเดอร์ที่ riderId == uid เรียงใหม่->เก่า พร้อมฟิลเตอร์สถานะ
+// อ่านแบบแบ่งหน้า (server pagination) — โหลดทีละหน้า ไม่ดึงทั้ง collection (useRiderOrderHistory)
 export default function RiderOrderHistory() {
   const { user } = useAuth();
   const { t } = usePreferences();
-  const { orders, loading, error } = useRiderOrders(user?.uid);
+  const { orders, loading, loadingMore, error, hasMore, loadMore } = useRiderOrderHistory(user?.uid);
   const [filter, setFilter] = useState("all");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
+  // Orders arrive newest-first from the query; re-sort defensively so the display order is
+  // stable even across appended pages. Counts/filters run over the pages loaded so far.
   const sorted = useMemo(() => [...orders].sort(byNewest()), [orders]);
 
   const countFor = (key) =>
@@ -142,13 +142,7 @@ export default function RiderOrderHistory() {
   const filtered =
     filter === "all" ? sorted : sorted.filter((o) => normalizeStatus(o.status) === filter);
 
-  const visible = filtered.slice(0, visibleCount);
-  const hasMore = filtered.length > visibleCount;
-
-  const selectFilter = (key) => {
-    setFilter(key);
-    setVisibleCount(PAGE_SIZE);
-  };
+  const selectFilter = (key) => setFilter(key);
 
   return (
     <div className="space-y-6">
@@ -184,26 +178,32 @@ export default function RiderOrderHistory() {
 
       {loading ? (
         <RiderCardGridSkeleton />
-      ) : error ? null : filtered.length === 0 ? (
-        <EmptyState
-          icon="🛵"
-          title={t("ro.history.emptyTitle")}
-          description={filter === "all" ? t("ro.history.emptyDesc") : t("ro.history.emptyDescFiltered")}
-        />
-      ) : (
+      ) : error ? null : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visible.map((order) => (
-              <HistoryCard key={order.id} order={order} t={t} />
-            ))}
-          </div>
+          {/* Counts + filters run over the pages loaded so far; "Load More" stays available
+              whenever the server has another page, so a filter with no match yet can still
+              pull older pages instead of dead-ending on the empty state. */}
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon="🛵"
+              title={t("ro.history.emptyTitle")}
+              description={filter === "all" ? t("ro.history.emptyDesc") : t("ro.history.emptyDescFiltered")}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((order) => (
+                <HistoryCard key={order.id} order={order} t={t} />
+              ))}
+            </div>
+          )}
           {hasMore && (
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+              loading={loadingMore}
+              onClick={loadMore}
             >
-              {t("ro.showMore", { count: filtered.length - visibleCount })}
+              {t("ro.showMore", { count: HISTORY_PAGE_SIZE })}
             </Button>
           )}
         </>
