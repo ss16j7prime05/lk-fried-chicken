@@ -6,6 +6,7 @@ import './index.css'
 
 import { AuthProvider } from './AuthContext.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import { CartProvider } from './context/CartContext.jsx'
 import { PreferencesProvider } from './context/PreferencesContext.jsx'
 
@@ -71,6 +72,7 @@ const PageLoading = () => (
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
+    <ErrorBoundary>
     <BrowserRouter>
       <AuthProvider>
         <PreferencesProvider>
@@ -167,5 +169,6 @@ createRoot(document.getElementById('root')).render(
         </PreferencesProvider>
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 )
