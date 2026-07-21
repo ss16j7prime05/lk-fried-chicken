@@ -2,65 +2,91 @@ import { useEffect, useRef, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import {
   User, Camera, Trash2, Pencil, Check, X, Loader2, LogOut,
-  IdCard, Bike, Landmark, CheckCircle2, AlertCircle,
+  IdCard, Bike, Landmark, Lock, CheckCircle2, AlertCircle,
 } from "lucide-react";
 import { db, auth } from "./firebase";
 import { useAuth } from "./AuthContext.jsx";
 import { usePreferences } from "./context/PreferencesContext";
 import { uploadImage } from "./services/cloudinary";
+import { cropToSquare } from "./services/cropImage";
 import { logError } from "./errorCenter";
 import { Card } from "./components/ui/Card";
 import { Button } from "./components/ui/Button";
-import { Loading } from "./components/ui/Loading";
+import { Skeleton } from "./components/ui/Skeleton";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog";
 
-// Every editable text field lives on users/{uid}. Photo (photoURL) is handled separately
-// because it saves instantly on upload/remove. `name` = full name (used across the app),
-// `riderName` = display name — both kept for backward compatibility.
+// Editable fields (form) and how each maps onto the users/{uid} document. `name` is kept in
+// sync from first+last for backward compatibility (dashboard / My Account / hub read it).
+// email, riderCode and uid are NEVER written from here.
 const FIELDS = [
-  "name", "nickname", "phone", "email", "dob", "gender", "address", "nationalId",
-  "emergencyContact", "emergencyPhone",
-  "vehicleType", "vehicleBrand", "vehicleModel", "vehicleColor", "licensePlate", "province",
-  "bankName", "accountName", "accountNumber", "promptPayNumber",
-  "riderName", "riderCode", "bio",
+  "firstName", "lastName", "phone", "vehicleType", "vehiclePlate",
+  "bankName", "bankAccountName", "bankAccountNumber", "nationalId", "address",
 ];
+const TO_DOC = {
+  firstName: "firstName", lastName: "lastName", phone: "phone", vehicleType: "vehicleType",
+  vehiclePlate: "licensePlate", bankName: "bankName", bankAccountName: "accountName",
+  bankAccountNumber: "accountNumber", nationalId: "nationalId", address: "address",
+};
 const EMPTY = Object.fromEntries(FIELDS.map((k) => [k, ""]));
-const pick = (d) => Object.fromEntries(FIELDS.map((k) => [k, d?.[k] ?? ""]));
 
-const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
-const isPhone = (s) => { const d = onlyDigits(s); return d.length >= 9 && d.length <= 10; };
+// Split a legacy full `name` into first/last only when explicit fields are absent.
+const fromDoc = (d = {}) => ({
+  firstName: d.firstName ?? (d.name ? String(d.name).trim().split(/\s+/)[0] : "") ?? "",
+  lastName: d.lastName ?? (d.name ? String(d.name).trim().split(/\s+/).slice(1).join(" ") : "") ?? "",
+  phone: d.phone ?? "",
+  vehicleType: d.vehicleType ?? "",
+  vehiclePlate: d.licensePlate ?? "",
+  bankName: d.bankName ?? "",
+  bankAccountName: d.accountName ?? "",
+  bankAccountNumber: d.accountNumber ?? "",
+  nationalId: d.nationalId ?? "",
+  address: d.address ?? "",
+});
 
-// Required = name + phone ; formats validated when the optional field is filled in.
+const digits = (s) => String(s || "").replace(/\D/g, "");
+const isPhone = (s) => { const d = digits(s); return d.length >= 9 && d.length <= 10; };
+
+// Required = first, last, phone ; formats validated when the optional field is filled in.
 function validate(form, t) {
   const e = {};
-  if (!form.name.trim()) e.name = t("ro.pf.err.required");
+  if (!form.firstName.trim()) e.firstName = t("ro.pf.err.required");
+  if (!form.lastName.trim()) e.lastName = t("ro.pf.err.required");
   if (!form.phone.trim()) e.phone = t("ro.pf.err.required");
   else if (!isPhone(form.phone)) e.phone = t("ro.pf.err.phone");
-  if (form.email.trim() && !emailRe.test(form.email.trim())) e.email = t("ro.pf.err.email");
-  if (form.emergencyPhone.trim() && !isPhone(form.emergencyPhone)) e.emergencyPhone = t("ro.pf.err.phone");
-  if (form.nationalId.trim() && onlyDigits(form.nationalId).length !== 13) e.nationalId = t("ro.pf.err.nationalId");
+  if (form.nationalId.trim() && digits(form.nationalId).length !== 13) e.nationalId = t("ro.pf.err.nationalId");
+  if (form.bankAccountNumber.trim()) {
+    const d = digits(form.bankAccountNumber).length;
+    if (d < 10 || d > 15) e.bankAccountNumber = t("ro.pf.err.bankAccount");
+  }
   return e;
 }
 
-// A single field: input/select/textarea while editing, read-only row otherwise.
-const Field = ({ label, value, onChange, editing, error, type = "text", as = "input", options, ...rest }) => {
-  const base = `w-full rounded-2xl border bg-gray-50 px-4 py-3 font-medium outline-none transition focus:ring-2 focus:ring-primary/20 ${error ? "border-secondary focus:border-secondary" : "border-gray-200 focus:border-primary"}`;
+const inputCls = (error) =>
+  `w-full rounded-2xl border bg-gray-50 px-4 py-3 font-medium outline-none transition focus:ring-2 focus:ring-primary/20 ${
+    error ? "border-secondary focus:border-secondary" : "border-gray-200 focus:border-primary"
+  }`;
+
+// One field: input/select/textarea while editing, read-only row otherwise. `readOnly`
+// forces the read row even in edit mode (email / riderCode).
+const Field = ({ id, label, value, onChange, onBlur, editing, error, type = "text", as = "input", options, readOnly, lock, ...rest }) => {
+  const showInput = editing && !readOnly;
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{label}</label>
-      {editing ? (
+      <label htmlFor={id} className="flex items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider">
+        {lock && <Lock size={11} className="text-gray-400" />} {label}
+      </label>
+      {showInput ? (
         as === "textarea" ? (
-          <textarea value={value} onChange={(ev) => onChange(ev.target.value)} rows={3} className={base} {...rest} />
+          <textarea id={id} value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} rows={3} className={inputCls(error)} aria-invalid={Boolean(error)} {...rest} />
         ) : as === "select" ? (
-          <select value={value} onChange={(ev) => onChange(ev.target.value)} className={base}>
+          <select id={id} value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} className={inputCls(error)} aria-invalid={Boolean(error)}>
             {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         ) : (
-          <input type={type} value={value} onChange={(ev) => onChange(ev.target.value)} className={base} {...rest} />
+          <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} className={inputCls(error)} aria-invalid={Boolean(error)} {...rest} />
         )
       ) : (
-        <p className="px-1 py-2 font-bold text-gray-900 break-words min-h-[1.5rem]">
+        <p className={`px-1 py-2 font-bold break-words min-h-[1.5rem] ${readOnly ? "text-gray-400" : "text-gray-900"}`}>
           {(as === "select" && options ? options.find((o) => o.value === value)?.label : value) || "-"}
         </p>
       )}
@@ -76,6 +102,18 @@ const Section = ({ icon: Icon, title, children }) => (
   </Card>
 );
 
+const ProfileSkeleton = () => (
+  <div className="max-w-3xl mx-auto space-y-6">
+    <div className="flex items-center justify-between"><Skeleton className="h-8 w-40" /><Skeleton className="h-10 w-24" /></div>
+    <Card className="p-6 flex flex-col items-center gap-3"><Skeleton className="w-28 h-28 rounded-full" /><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-24" /></Card>
+    {[0, 1, 2].map((i) => (
+      <Card key={i} className="p-6"><Skeleton className="h-5 w-40 mb-4" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{[0, 1, 2, 3].map((j) => <Skeleton key={j} className="h-12 w-full" />)}</div>
+      </Card>
+    ))}
+  </div>
+);
+
 export default function RiderProfile() {
   const { profile, logout } = useAuth();
   const { t } = usePreferences();
@@ -83,30 +121,41 @@ export default function RiderProfile() {
 
   const [form, setForm] = useState(EMPTY);
   const [original, setOriginal] = useState(EMPTY);
-  const [photo, setPhoto] = useState("");
+  const [readonlyInfo, setReadonlyInfo] = useState({ email: "", riderCode: "" });
+  const [savedPhoto, setSavedPhoto] = useState("");
+  const [staged, setStaged] = useState(null); // { file, preview } — new cropped photo awaiting Save
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(() => Boolean(uid));
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadPct, setUploadPct] = useState(0);
-  const [errors, setErrors] = useState({});
-  const [toast, setToast] = useState(null); // { ok:boolean, msg:string }
+  const [uploadPct, setUploadPct] = useState(null); // null = not uploading
+  const [preparing, setPreparing] = useState(false); // cropping
+  const [toast, setToast] = useState(null); // { ok, msg }
   const [discardOpen, setDiscardOpen] = useState(false);
   const editingRef = useRef(false);
   const fileRef = useRef(null);
+  const stagedRef = useRef(null);
 
   useEffect(() => { editingRef.current = editing; }, [editing]);
+  useEffect(() => { stagedRef.current = staged; }, [staged]);
+  // Revoke the last preview object-URL on unmount (avoid a leak).
+  useEffect(() => () => { if (stagedRef.current?.preview) URL.revokeObjectURL(stagedRef.current.preview); }, []);
 
-  // Real-time load from Firestore (the ONLY source). Don't clobber in-progress edits: text
-  // fields refresh only when not editing; the photo always syncs (it saves instantly).
+  // Real-time load from Firestore (the only source). Don't clobber in-progress edits.
   useEffect(() => {
     if (!uid) return undefined;
     const unsub = onSnapshot(
       doc(db, "users", uid),
       (snap) => {
         const d = snap.exists() ? snap.data() : {};
-        setPhoto(d.photoURL || d.avatarUrl || d.profilePhoto || "");
-        if (!editingRef.current) { setForm(pick(d)); setOriginal(pick(d)); }
+        setReadonlyInfo({ email: d.email || "", riderCode: d.riderCode || uid.slice(0, 8).toUpperCase() });
+        if (!editingRef.current) {
+          const next = fromDoc(d);
+          setForm(next);
+          setOriginal(next);
+          setSavedPhoto(d.photoURL || d.avatarUrl || d.profilePhoto || "");
+        }
         setLoading(false);
       },
       (err) => { logError(err, "RiderProfile.load"); setLoading(false); }
@@ -121,9 +170,13 @@ export default function RiderProfile() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const dirty = editing && JSON.stringify(form) !== JSON.stringify(original);
+  const errors = validate(form, t);
+  const isValid = Object.keys(errors).length === 0;
+  const fieldsDirty = JSON.stringify(form) !== JSON.stringify(original);
+  const photoDirty = Boolean(staged) || photoRemoved;
+  const dirty = editing && (fieldsDirty || photoDirty);
 
-  // Warn on refresh/close with unsaved edits (in-app nav uses the Cancel confirm dialog).
+  // Warn on refresh/close with unsaved edits.
   useEffect(() => {
     if (!dirty) return undefined;
     const h = (e) => { e.preventDefault(); e.returnValue = ""; };
@@ -131,88 +184,93 @@ export default function RiderProfile() {
     return () => window.removeEventListener("beforeunload", h);
   }, [dirty]);
 
-  const setField = (k, v) => {
-    setForm((prev) => ({ ...prev, [k]: v }));
-    setErrors((prev) => (prev[k] ? { ...prev, [k]: undefined } : prev));
-  };
+  const setField = (k, v) => { setForm((p) => ({ ...p, [k]: v })); setTouched((p) => (p[k] ? p : { ...p, [k]: true })); };
+  const blur = (k) => () => setTouched((p) => (p[k] ? p : { ...p, [k]: true }));
+  const err = (k) => (touched[k] ? errors[k] : undefined);
 
-  const startEdit = () => { setErrors({}); setEditing(true); };
-  const exitEdit = () => { setForm(original); setErrors({}); setEditing(false); };
+  const clearStaged = () => {
+    if (staged?.preview) URL.revokeObjectURL(staged.preview);
+    setStaged(null);
+  };
+  const startEdit = () => { setTouched({}); setEditing(true); };
+  const exitEdit = () => { setForm(original); setTouched({}); clearStaged(); setPhotoRemoved(false); setEditing(false); };
   const cancelEdit = () => { if (dirty) setDiscardOpen(true); else exitEdit(); };
 
-  const save = async () => {
-    const e = validate(form, t);
-    setErrors(e);
-    if (Object.keys(e).length > 0) { setToast({ ok: false, msg: t("ro.pf.err.fixErrors") }); return; }
-    if (!uid) return;
-    setSaving(true);
-    try {
-      const patch = Object.fromEntries(FIELDS.map((k) => [k, form[k]]));
-      await updateDoc(doc(db, "users", uid), patch); // never touches status/role/riderStatus
-      setOriginal(form);
-      setEditing(false);
-      setToast({ ok: true, msg: t("ro.pf.saved") });
-    } catch (err) {
-      logError(err, "RiderProfile.save");
-      setToast({ ok: false, msg: t("ro.pf.saveErr") });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const onPhotoFile = async (ev) => {
+  // Pick a photo → crop to square → stage a preview (uploaded only on Save).
+  const onPickPhoto = async (ev) => {
     const file = ev.target.files?.[0];
-    ev.target.value = ""; // allow re-picking the same file
-    if (!file || !uid) return;
+    ev.target.value = "";
+    if (!file) return;
     if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name)) {
       setToast({ ok: false, msg: t("ro.pf.photoErr") }); return;
     }
-    setUploading(true);
-    setUploadPct(0);
+    setPreparing(true);
     try {
-      const url = await uploadImage(file, { folder: "rider-avatars", onProgress: setUploadPct });
-      await updateDoc(doc(db, "users", uid), { photoURL: url });
-      setPhoto(url);
-      setToast({ ok: true, msg: t("ro.pf.photoSaved") });
-    } catch (err) {
-      logError(err, "RiderProfile.photo");
+      let next;
+      try { next = await cropToSquare(file); }
+      catch { next = { file, preview: URL.createObjectURL(file) }; } // HEIC/decoding fallback: upload original
+      clearStaged();
+      setPhotoRemoved(false);
+      setStaged(next);
+    } catch (e) {
+      logError(e, "RiderProfile.crop");
       setToast({ ok: false, msg: t("ro.pf.photoErr") });
     } finally {
-      setUploading(false);
+      setPreparing(false);
+    }
+  };
+  const stageRemove = () => { clearStaged(); setPhotoRemoved(true); };
+
+  const save = async () => {
+    setTouched(Object.fromEntries(FIELDS.map((k) => [k, true])));
+    if (!isValid) { setToast({ ok: false, msg: t("ro.pf.err.fixErrors") }); return; }
+    if (!uid || !dirty) return;
+    setSaving(true);
+    try {
+      const patch = {};
+      // only changed fields
+      for (const k of FIELDS) if (form[k] !== original[k]) patch[TO_DOC[k]] = form[k];
+      if (form.firstName !== original.firstName || form.lastName !== original.lastName) {
+        patch.name = `${form.firstName} ${form.lastName}`.trim();
+      }
+      // photo: upload the staged crop (with progress) or clear it
+      if (staged) {
+        setUploadPct(0);
+        patch.photoURL = await uploadImage(staged.file, { folder: "rider-avatars", onProgress: setUploadPct });
+      } else if (photoRemoved) {
+        patch.photoURL = "";
+      }
+      if (Object.keys(patch).length > 0) {
+        await updateDoc(doc(db, "users", uid), patch); // merge; never touches email/riderCode/uid/status
+      }
+      if (staged) setSavedPhoto(patch.photoURL);
+      else if (photoRemoved) setSavedPhoto("");
+      setOriginal(form);
+      clearStaged();
+      setPhotoRemoved(false);
+      setEditing(false);
+      setToast({ ok: true, msg: t("ro.pf.saved") });
+    } catch (e) {
+      logError(e, "RiderProfile.save");
+      setToast({ ok: false, msg: t("ro.pf.saveErr") });
+    } finally {
+      setSaving(false);
+      setUploadPct(null);
     }
   };
 
-  const removePhoto = async () => {
-    if (!uid || uploading) return;
-    setUploading(true);
-    try {
-      await updateDoc(doc(db, "users", uid), { photoURL: "" });
-      setPhoto("");
-      setToast({ ok: true, msg: t("ro.pf.photoRemoved") });
-    } catch (err) {
-      logError(err, "RiderProfile.photoRemove");
-      setToast({ ok: false, msg: t("ro.pf.photoErr") });
-    } finally {
-      setUploading(false);
-    }
-  };
+  if (loading) return <ProfileSkeleton />;
 
-  if (loading) return <Loading text={t("ro.loading.settings")} />;
-
-  const displayName = form.name || profile?.name || profile?.riderName || "-";
-  const genderOptions = [
-    { value: "", label: "-" },
-    { value: "male", label: t("ro.pf.gender.male") },
-    { value: "female", label: t("ro.pf.gender.female") },
-    { value: "other", label: t("ro.pf.gender.other") },
-  ];
+  const displayName = `${form.firstName} ${form.lastName}`.trim() || profile?.name || "-";
+  const avatarUrl = staged?.preview || (photoRemoved ? "" : savedPhoto);
+  const busy = saving || uploadPct !== null;
   const vehicleOptions = [
     { value: "", label: "-" },
     { value: "motorcycle", label: t("ro.vehicle.motorcycle") },
     { value: "car", label: t("ro.vehicle.car") },
     { value: "bicycle", label: t("ro.vehicle.bicycle") },
   ];
-  const f = (k) => ({ value: form[k], onChange: (v) => setField(k, v), editing, error: errors[k] });
+  const f = (k) => ({ id: k, value: form[k], onChange: (v) => setField(k, v), onBlur: blur(k), editing, error: err(k) });
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-4">
@@ -221,10 +279,10 @@ export default function RiderProfile() {
         <h1 className="text-2xl font-black text-gray-900">{t("ro.pf.title")}</h1>
         {editing ? (
           <div className="flex gap-2">
-            <Button variant="outline" className="!px-4" onClick={cancelEdit} disabled={saving}>
+            <Button variant="outline" className="!px-4" onClick={cancelEdit} disabled={busy}>
               <X size={16} /> {t("ro.pf.cancel")}
             </Button>
-            <Button className="!px-4" onClick={save} loading={saving}>
+            <Button className="!px-4" onClick={save} loading={busy} disabled={busy || !dirty || !isValid}>
               <Check size={16} /> {t("ro.pf.save")}
             </Button>
           </div>
@@ -238,78 +296,67 @@ export default function RiderProfile() {
       {/* photo */}
       <Card className="p-6 flex flex-col items-center text-center">
         <div className="relative">
-          {photo ? (
-            <img src={photo} alt="" className="w-28 h-28 rounded-full object-cover ring-4 ring-primary-light" />
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={t("ro.pf.title")} className="w-28 h-28 rounded-full object-cover ring-4 ring-primary-light" />
           ) : (
             <div className="w-28 h-28 rounded-full bg-primary-light text-primary flex items-center justify-center text-4xl font-black">
-              {displayName.charAt(0).toUpperCase()}
+              {(displayName.charAt(0) || "R").toUpperCase()}
             </div>
           )}
-          {uploading && (
+          {(preparing || uploadPct !== null) && (
             <div className="absolute inset-0 rounded-full bg-black/50 flex flex-col items-center justify-center text-white">
               <Loader2 size={26} className="animate-spin" />
-              <span className="text-xs font-black mt-1">{uploadPct}%</span>
+              {uploadPct !== null && <span className="text-xs font-black mt-1">{uploadPct}%</span>}
             </div>
           )}
         </div>
         <p className="text-lg font-black text-gray-900 mt-3">{displayName}</p>
-        <p className="text-xs font-bold text-gray-400">{form.riderCode || uid?.slice(0, 8).toUpperCase()}</p>
+        <p className="text-xs font-bold text-gray-400">{readonlyInfo.riderCode}</p>
 
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPhotoFile} />
-        <div className="flex flex-wrap justify-center gap-2 mt-4">
-          <Button variant="outline" className="!px-4 !py-2 text-sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-            <Camera size={15} /> {photo ? t("ro.pf.replace") : t("ro.pf.upload")}
-          </Button>
-          {photo && (
-            <Button variant="outline" className="!px-4 !py-2 text-sm text-secondary border-secondary/30 hover:border-secondary" onClick={removePhoto} disabled={uploading}>
-              <Trash2 size={15} /> {t("ro.pf.remove")}
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
+        {editing && (
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            <Button variant="outline" className="!px-4 !py-2 text-sm" onClick={() => fileRef.current?.click()} disabled={busy || preparing}>
+              <Camera size={15} /> {avatarUrl ? t("ro.pf.replace") : t("ro.pf.upload")}
             </Button>
-          )}
-        </div>
+            {avatarUrl && (
+              <Button variant="outline" className="!px-4 !py-2 text-sm text-secondary border-secondary/30 hover:border-secondary" onClick={stageRemove} disabled={busy || preparing}>
+                <Trash2 size={15} /> {t("ro.pf.remove")}
+              </Button>
+            )}
+          </div>
+        )}
+        {editing && staged && <p className="text-[11px] font-bold text-primary mt-2">{t("ro.pf.previewHint")}</p>}
       </Card>
 
       {/* personal */}
       <Section icon={User} title={t("ro.pf.section.personal")}>
-        <Field label={t("ro.pf.fullName")} {...f("name")} />
-        <Field label={t("ro.pf.nickname")} {...f("nickname")} />
+        <Field label={t("ro.pf.firstName")} {...f("firstName")} />
+        <Field label={t("ro.pf.lastName")} {...f("lastName")} />
         <Field label={t("ro.pf.phone")} type="tel" inputMode="tel" {...f("phone")} />
-        <Field label={t("ro.pf.email")} type="email" inputMode="email" {...f("email")} />
-        <Field label={t("ro.pf.dob")} type="date" {...f("dob")} />
-        <Field label={t("ro.pf.gender")} as="select" options={genderOptions} {...f("gender")} />
-        <Field label={t("ro.pf.nationalId")} inputMode="numeric" {...f("nationalId")} />
+        <Field id="email" label={t("ro.pf.email")} value={readonlyInfo.email} editing={editing} readOnly lock />
+        <Field label={t("ro.pf.nationalId")} inputMode="numeric" maxLength={13} {...f("nationalId")} />
         <Field label={t("ro.pf.address")} as="textarea" {...f("address")} />
-        <Field label={t("ro.pf.emergencyContact")} {...f("emergencyContact")} />
-        <Field label={t("ro.pf.emergencyPhone")} type="tel" inputMode="tel" {...f("emergencyPhone")} />
       </Section>
 
       {/* vehicle */}
       <Section icon={Bike} title={t("ro.pf.section.vehicle")}>
         <Field label={t("ro.pf.vehicleType")} as="select" options={vehicleOptions} {...f("vehicleType")} />
-        <Field label={t("ro.pf.vehicleBrand")} {...f("vehicleBrand")} />
-        <Field label={t("ro.pf.vehicleModel")} {...f("vehicleModel")} />
-        <Field label={t("ro.pf.vehicleColor")} {...f("vehicleColor")} />
-        <Field label={t("ro.pf.licensePlate")} {...f("licensePlate")} />
-        <Field label={t("ro.pf.province")} {...f("province")} />
+        <Field label={t("ro.pf.licensePlate")} {...f("vehiclePlate")} />
       </Section>
 
       {/* banking */}
       <Section icon={Landmark} title={t("ro.pf.section.banking")}>
         <Field label={t("ro.pf.bankName")} {...f("bankName")} />
-        <Field label={t("ro.pf.accountName")} {...f("accountName")} />
-        <Field label={t("ro.pf.accountNumber")} inputMode="numeric" {...f("accountNumber")} />
-        <Field label={t("ro.pf.promptPay")} inputMode="tel" {...f("promptPayNumber")} />
+        <Field label={t("ro.pf.accountName")} {...f("bankAccountName")} />
+        <Field label={t("ro.pf.accountNumber")} inputMode="numeric" {...f("bankAccountNumber")} />
       </Section>
 
-      {/* rider info */}
+      {/* rider (read-only identity) */}
       <Section icon={IdCard} title={t("ro.pf.section.rider")}>
-        <Field label={t("ro.pf.riderName")} {...f("riderName")} />
-        <Field label={t("ro.pf.riderCode")} {...f("riderCode")} />
-        <div className="sm:col-span-2">
-          <Field label={t("ro.pf.bio")} as="textarea" {...f("bio")} />
-        </div>
+        <Field id="riderCode" label={t("ro.pf.riderCode")} value={readonlyInfo.riderCode} editing={editing} readOnly lock />
       </Section>
 
-      {/* logout (kept — mobile bottom nav has none) */}
       <Button variant="outline" className="w-full text-secondary border-secondary/30 hover:border-secondary" onClick={logout}>
         <LogOut size={18} /> {t("ro.logout")}
       </Button>

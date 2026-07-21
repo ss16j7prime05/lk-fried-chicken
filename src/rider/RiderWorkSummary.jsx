@@ -6,14 +6,13 @@ import { db } from "../firebase";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
 import { useRiderOrders } from "./useRiderOrders";
-import {
-  completedWithDate, performanceRates, bucketFor, periodStart, orderIncome, orderDistanceKm,
-} from "./riderMetrics";
+import { performanceRates } from "./riderMetrics";
+import { summarizeIncome, fmtTHB0 } from "./riderIncome";
 import { logError } from "../errorCenter";
 import { Card } from "../components/ui/Card";
 import { StatCard } from "./riderUi";
 
-const money = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
+const money = fmtTHB0;
 const pct = (n) => `${Number(n || 0).toFixed(1)}%`;
 const km = (n) => `${Number(n || 0).toFixed(1)} km`;
 
@@ -48,13 +47,13 @@ export default function RiderWorkSummary() {
   }, [user?.uid]);
 
   const rates = performanceRates(orders);
-  const completed = completedWithDate(orders);
-  const now = new Date(mountTime);
-  const todayIncome = bucketFor(completed, periodStart(now, "day"), "day").income;
-  const weekIncome = bucketFor(completed, periodStart(now, "week"), "week").income;
-  const monthIncome = bucketFor(completed, periodStart(now, "month"), "month").income;
-  const lifetimeIncome = completed.reduce((s, o) => s + orderIncome(o), 0);
-  const lifetimeDistance = completed.reduce((s, o) => s + orderDistanceKm(o), 0);
+  // Income figures come from the SSOT (summarizeIncome) so they match every other page exactly.
+  const inc = summarizeIncome(orders, new Date(mountTime));
+  const todayIncome = inc.today.net;
+  const weekIncome = inc.week.net;
+  const monthIncome = inc.month.net;
+  const lifetimeIncome = inc.lifetime.net;
+  const lifetimeDistance = inc.lifetime.distanceKm;
   const rating = reviews.length > 0 ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length).toFixed(2) : "—";
 
   return (

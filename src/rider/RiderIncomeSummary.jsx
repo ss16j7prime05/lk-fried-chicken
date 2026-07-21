@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
-import { useRiderOrders } from "./useRiderOrders";
-import { completedWithDate, bucketFor, addPeriods, recentPeriods } from "./riderMetrics";
+import { useRiderIncome } from "./useRiderIncome";
+import { completedWithDate, bucketFor, addPeriods, recentPeriods, fmtTHB } from "./riderIncome";
 import { Card } from "../components/ui/Card";
 import { Loading } from "../components/ui/Loading";
 
-const money = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = fmtTHB;
 const GRANS = ["day", "week", "month"];
 const CHIP_COUNT = 5;
 
@@ -19,7 +19,7 @@ export default function RiderIncomeSummary() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t, language } = usePreferences();
-  const { orders, loading } = useRiderOrders(user?.uid);
+  const { orders, loading } = useRiderIncome(user?.uid);
   const [mountTime] = useState(() => Date.now());
   const [gran, setGran] = useState("day");
   const [offset, setOffset] = useState(0); // 0 = current period, 1 = previous, ...
@@ -43,7 +43,7 @@ export default function RiderIncomeSummary() {
   const selectedStart = periods[periods.length - 1 - offset];
   const bucket = bucketFor(completed, selectedStart, gran);
   const prev = bucketFor(completed, addPeriods(selectedStart, gran, -1), gran);
-  const diff = bucket.income - prev.income;
+  const diff = bucket.net - prev.net;
 
   const switchGran = (g) => { setGran(g); setOffset(0); };
 
@@ -101,7 +101,7 @@ export default function RiderIncomeSummary() {
       {/* selected period total */}
       <Card className="p-6 text-center">
         <p className="text-sm font-bold text-gray-500">{totalLabel}</p>
-        <p className="text-4xl font-black text-primary mt-1">{money(bucket.income)}</p>
+        <p className="text-4xl font-black text-primary mt-1">{money(bucket.net)}</p>
         <div className="flex items-center justify-center gap-2 mt-2">
           <span className={`inline-flex items-center gap-1 text-xs font-black px-2 py-0.5 rounded-full ${diffTone}`}>
             <DiffIcon size={12} /> {money(Math.abs(diff))}

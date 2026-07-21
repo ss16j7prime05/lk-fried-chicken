@@ -9,8 +9,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
-import { useRiderOrders } from "./useRiderOrders";
-import { byNewest, normalizeStatus, toDate } from "../store/orderStatus";
+import { useRiderIncome } from "./useRiderIncome";
+import { byNewest, normalizeStatus } from "../store/orderStatus";
+import { summarizeIncome, completedWithDate, orderNet, orderDistanceKm, fmtTHB0 } from "./riderIncome";
 import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -19,38 +20,9 @@ import { SectionTitle, StatCard } from "./riderUi";
 
 const RECENT_LIMIT = 10;
 
-/* ── date helpers ── */
-const isSameDay = (d, ref) =>
-  d &&
-  d.getDate() === ref.getDate() &&
-  d.getMonth() === ref.getMonth() &&
-  d.getFullYear() === ref.getFullYear();
-// สัปดาห์เริ่มวันอาทิตย์ (ตาม Store Dashboard)
-const isThisWeek = (d, ref) => {
-  if (!d) return false;
-  const start = new Date(ref);
-  start.setDate(ref.getDate() - ref.getDay());
-  start.setHours(0, 0, 0, 0);
-  return d >= start;
-};
-const isThisMonth = (d, ref) =>
-  d && d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
-
 const formatDate = (d) => (d ? d.toLocaleString("th-TH") : "-");
-
-/* ── earnings derivation ──
-   ไม่มีฟิลด์ earnings ใน Firestore: รายได้ไรเดอร์ต่อออเดอร์ = ค่าส่ง (deliveryFee)
-   ของออเดอร์ที่ส่งสำเร็จ ระยะทางใช้ฟิลด์ระยะจัดส่งที่ Checkout บันทึกไว้อยู่แล้ว */
-const orderEarnings = (o) => Number(o.deliveryFee || 0);
-const orderDistanceKm = (o) => {
-  const km = o.distanceKm ?? o.distance ?? o.deliveryDistance;
-  return typeof km === "number" && Number.isFinite(km) ? km : 0;
-};
-
-const fmtMoney = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
+const fmtMoney = fmtTHB0;
 const fmtKm = (n) => `${Number(n || 0).toFixed(1)} km`;
-
-const sumBy = (list, fn) => list.reduce((s, o) => s + fn(o), 0);
 const avgPer = (total, count) => (count > 0 ? total / count : 0);
 
 const RecentDeliveryCard = ({ order, t }) => {
@@ -66,7 +38,7 @@ const RecentDeliveryCard = ({ order, t }) => {
           <p className="text-xs font-medium text-gray-400 mt-0.5">{formatDate(order.when)}</p>
         </div>
         <div className="text-right shrink-0">
-          <p className="font-black text-primary">{fmtMoney(orderEarnings(order))}</p>
+          <p className="font-black text-primary">{fmtMoney(orderNet(order))}</p>
           <p className="text-xs font-medium text-gray-400 mt-0.5">{fmtKm(orderDistanceKm(order))}</p>
           <div className="mt-1.5">
             <Badge color="green">{t(`ro.status.${status}`)}</Badge>
@@ -81,34 +53,16 @@ const RecentDeliveryCard = ({ order, t }) => {
 export default function RiderEarnings() {
   const { user } = useAuth();
   const { t } = usePreferences();
-  const { orders, loading } = useRiderOrders(user?.uid);
+  const { orders, loading } = useRiderIncome(user?.uid);
 
+  // Every figure comes from the SSOT (summarizeIncome / orderNet) so Finance matches Home,
+  // Income Summary and Work Summary exactly. Net = fee + bonus − tax − adjustment.
   const { today, week, month, lifetime, recent } = useMemo(() => {
-    const now = new Date();
-    // นับรายได้ตามเวลาที่ส่งสำเร็จ (deliveredAt) fallback เป็น createdAt สำหรับออเดอร์เก่า
-    const completed = orders
-      .filter((o) => normalizeStatus(o.status) === "completed")
-      .map((o) => ({ ...o, when: toDate(o.deliveredAt ?? o.createdAt) }));
-
-    const bucket = (list) => ({
-      orders: list.length,
-      earnings: sumBy(list, orderEarnings),
-      distanceKm: sumBy(list, orderDistanceKm),
-    });
-
-    const todayList = completed.filter((o) => isSameDay(o.when, now));
-    const weekList = completed.filter((o) => isThisWeek(o.when, now));
-    const monthList = completed.filter((o) => isThisMonth(o.when, now));
-
-    return {
-      today: bucket(todayList),
-      week: bucket(weekList),
-      month: bucket(monthList),
-      lifetime: bucket(completed),
-      recent: [...completed]
-        .sort(byNewest((o) => o.when))
-        .slice(0, RECENT_LIMIT),
-    };
+    const inc = summarizeIncome(orders, new Date());
+    const recentList = completedWithDate(orders)
+      .sort(byNewest((o) => o.when))
+      .slice(0, RECENT_LIMIT);
+    return { today: inc.today, week: inc.week, month: inc.month, lifetime: inc.lifetime, recent: recentList };
   }, [orders]);
 
   if (loading) {
@@ -149,13 +103,13 @@ export default function RiderEarnings() {
                   <td className="p-4 font-bold text-gray-900 whitespace-nowrap">{p.label}</td>
                   <td className="p-4 text-right font-medium text-gray-700">{p.data.orders}</td>
                   <td className="p-4 text-right font-medium text-gray-700 whitespace-nowrap">
-                    {fmtMoney(p.data.earnings)}
+                    {fmtMoney(p.data.net)}
                   </td>
                   <td className="p-4 text-right font-medium text-gray-700 whitespace-nowrap">
                     {fmtKm(p.data.distanceKm)}
                   </td>
                   <td className="p-4 text-right font-black text-primary whitespace-nowrap">
-                    {fmtMoney(avgPer(p.data.earnings, p.data.orders))}
+                    {fmtMoney(avgPer(p.data.net, p.data.orders))}
                   </td>
                 </tr>
               ))}
@@ -169,7 +123,7 @@ export default function RiderEarnings() {
         <SectionTitle>{t("ro.today")}</SectionTitle>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard icon={Bike} label={t("ro.completedOrders")} value={today.orders} />
-          <StatCard icon={Wallet} label={t("ro.earningsCol")} value={fmtMoney(today.earnings)} />
+          <StatCard icon={Wallet} label={t("ro.earningsCol")} value={fmtMoney(today.net)} />
           <StatCard icon={Route} label={t("ro.distance")} value={fmtKm(today.distanceKm)} />
         </div>
       </div>
@@ -179,7 +133,7 @@ export default function RiderEarnings() {
         <SectionTitle>{t("ro.thisWeek")}</SectionTitle>
         <div className="grid grid-cols-2 gap-4">
           <StatCard icon={CalendarDays} label={t("ro.orders")} value={week.orders} />
-          <StatCard icon={Wallet} label={t("ro.earningsCol")} value={fmtMoney(week.earnings)} />
+          <StatCard icon={Wallet} label={t("ro.earningsCol")} value={fmtMoney(week.net)} />
         </div>
       </div>
 
@@ -188,7 +142,7 @@ export default function RiderEarnings() {
         <SectionTitle>{t("ro.thisMonth")}</SectionTitle>
         <div className="grid grid-cols-2 gap-4">
           <StatCard icon={CalendarRange} label={t("ro.orders")} value={month.orders} />
-          <StatCard icon={Wallet} label={t("ro.earningsCol")} value={fmtMoney(month.earnings)} />
+          <StatCard icon={Wallet} label={t("ro.earningsCol")} value={fmtMoney(month.net)} />
         </div>
       </div>
 
@@ -197,7 +151,7 @@ export default function RiderEarnings() {
         <SectionTitle>{t("ro.lifetime")}</SectionTitle>
         <div className="grid grid-cols-2 gap-4">
           <StatCard icon={TrendingUp} label={t("ro.totalOrders")} value={lifetime.orders} />
-          <StatCard icon={Wallet} label={t("ro.totalEarnings")} value={fmtMoney(lifetime.earnings)} />
+          <StatCard icon={Wallet} label={t("ro.totalEarnings")} value={fmtMoney(lifetime.net)} />
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
+import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from "firebase/firestore";
 import { AlertCircle, Banknote, Bike, CheckCircle2, Coins, MapPin, Navigation, Package, Power, Store, WifiOff } from "lucide-react";
 import { db } from "../firebase";
 import { STORE_ID } from "../config";
@@ -19,7 +19,8 @@ import {
   READY_QUERY_STATUSES,
   isReadyForDelivery,
 } from "./riderStatus";
-import { byNewest, normalizeStatus, toDate } from "../store/orderStatus";
+import { byNewest, normalizeStatus } from "../store/orderStatus";
+import { summarizeIncome } from "./riderIncome";
 import { useStoreStatus } from "../store/useStoreStatus";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
 import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
@@ -32,12 +33,15 @@ import { logError } from "../errorCenter";
 const FALLBACK_STORE_LAT = 13.8294079;
 const FALLBACK_STORE_LNG = 100.0529543;
 
+// เพดานงานของไรเดอร์ที่ subscribe แบบ realtime บนแดชบอร์ด: หน้านี้ใช้แค่ "งานที่กำลังทำ"
+// (picked_up/delivering — ใบเดียว) + รายได้/เหรียญ "วันนี้" ซึ่งล้วนเป็นออเดอร์ล่าสุดทั้งสิ้น
+// จึงดึงเฉพาะ N ใบล่าสุด (orderBy createdAt desc) แทนการ subscribe ประวัติทั้งชีวิตแบบไม่จำกัด
+const MY_JOBS_LIMIT = 100;
+
 // Firestore Timestamp | ISO | ms -> ms (0 ถ้าไม่มี)
 const orderMs = (ts) => (ts?.toMillis ? ts.toMillis() : ts ? new Date(ts).getTime() : 0);
 
 const money = (n) => `฿${Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })}`;
-const isSameDay = (d, ref) =>
-  !!d && d.getDate() === ref.getDate() && d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
 
 // ตัวเลือกจำนวนเงินสดที่ไรเดอร์มี (กรองงานเก็บเงินปลายทางที่เกินวงเงิน) — null = ทั้งหมด
 const CASH_OPTIONS = [500, 1000, Infinity];
@@ -49,13 +53,16 @@ const passesCash = (order, cashLimit) => {
 };
 
 // ยิง browser notification เมื่อมีงานใหม่ (เฉพาะเมื่อได้รับอนุญาตแล้ว) — ไม่ขอสิทธิ์เอง
-// (ให้ไปกดอนุญาตในหน้า Device Check). ปลอดภัยถ้า Notification API ไม่มี
+// (ให้ไปกดอนุญาตในหน้า Device Check). ปลอดภัยถ้า Notification API ไม่มี.
+// คืนค่า Notification object (หรือ null) ให้ผู้เรียกเก็บไว้ปิดทีหลัง — งานที่ตั้ง requireInteraction
+// จะค้างบนหน้าจอจนกว่าจะปิดเอง ถ้าไม่เก็บไว้จะปิด "งานที่ถูกคนอื่นรับไปแล้ว" ไม่ได้
 const sendJobNotification = (order, title, body) => {
   try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return null;
     const n = new Notification(title, { body, tag: `lk-rider-job-${order.id}`, requireInteraction: true });
     n.onclick = () => window.focus();
-  } catch { /* ignore */ }
+    return n;
+  } catch { return null; }
 };
 
 // เหตุผลที่รับ/ปฏิเสธงานไม่สำเร็จ (reason จาก riderAcceptReject) -> คีย์แปลภาษา ro.err.*
@@ -224,6 +231,7 @@ export default function RiderOrdersDashboard() {
   const [mountTime] = useState(() => Date.now()); // เวลาเปิดหน้า — ใช้แยก "งานเพิ่งจบ" ออกจากงานเก่าใน history
   const seenOrderIdsRef = useRef(new Set()); // เคยเห็นแล้ว ไม่ต้องเด้งซ้ำ (เหมือน StoreLayout)
   const notifiedIdsRef = useRef(new Set());  // งานที่ยิง browser notification ไปแล้ว (กันซ้ำ)
+  const jobNotifsRef = useRef(new Map());    // orderId -> Notification ที่เปิดค้างอยู่ (ไว้ปิดตอนงานหลุด/ออกจากหน้า)
   const autoAcceptedRef = useRef(new Set());  // งานที่ auto-accept ไปแล้ว (กันรับซ้ำระหว่างรอ async)
   const availInitRef = useRef(false);        // snapshot แรก = งานเดิม ไม่ต้องเด้ง
   const isOnlineRef = useRef(false);         // สถานะล่าสุดสำหรับใช้ใน callback ของ snapshot
@@ -232,9 +240,18 @@ export default function RiderOrdersDashboard() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    // แทนการ subscribe ทั้ง collection: ดึงเฉพาะพูลงานว่าง (status พร้อมส่ง) + งานของไรเดอร์คนนี้
+    // Map เดียวกันตลอดอายุ component (useRef) — เก็บไว้ในตัวแปรเพื่อใช้ทั้งใน callback และตอน cleanup
+    const jobNotifs = jobNotifsRef.current;
+    // แทนการ subscribe ทั้ง collection: ดึงเฉพาะพูลงานว่าง (status พร้อมส่ง) + งานล่าสุดของไรเดอร์คนนี้
+    // งานว่าง = bounded โดยธรรมชาติ (มีไม่กี่ใบที่สถานะพร้อมส่ง) ; งานของไรเดอร์ = จำกัด N ใบล่าสุด
+    // (orderBy createdAt desc + limit) ผ่าน composite index orders(riderId, createdAt desc)
     const availableQ = query(collection(db, "orders"), where("status", "in", READY_QUERY_STATUSES));
-    const mineQ = query(collection(db, "orders"), where("riderId", "==", user.uid));
+    const mineQ = query(
+      collection(db, "orders"),
+      where("riderId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+      limit(MY_JOBS_LIMIT)
+    );
     const markFeed = (key, msg) =>
       setFeedErrors((prev) => (prev[key] === msg ? prev : { ...prev, [key]: msg }));
     // ถ้า feed พัง (สิทธิ์/เน็ต) ต้องเลิกหมุนแล้วบอกเหตุผล ไม่ใช่ค้างที่ Loading ตลอดกาล
@@ -262,6 +279,10 @@ export default function RiderOrdersDashboard() {
           const order = { id: change.doc.id, ...change.doc.data() };
           if (change.type === "removed" || order.riderId || !isReadyForDelivery(order.status)) {
             setIncomingIds((prev) => (prev.includes(order.id) ? prev.filter((qid) => qid !== order.id) : prev));
+            // งานหลุดพูล (ถูกคนอื่นรับ/หมดสถานะพร้อมส่ง) -> ปิด browser notification ที่ค้างอยู่
+            // (requireInteraction จะไม่ปิดเอง) ไม่งั้นไรเดอร์กดแจ้งเตือนงานที่รับไปแล้ว
+            const stale = jobNotifs.get(order.id);
+            if (stale) { try { stale.close(); } catch { /* ignore */ } jobNotifs.delete(order.id); }
             return;
           }
           if (change.type !== "added") return;
@@ -272,23 +293,37 @@ export default function RiderOrdersDashboard() {
           // New Job Notification เปิด -> ยิง browser notification (ครั้งเดียวต่อออเดอร์). ปิด = ไม่ยิง
           if (settingsRef.current.notifyNewJob && !notifiedIdsRef.current.has(order.id)) {
             notifiedIdsRef.current.add(order.id);
-            sendJobNotification(order, t("ro.notif.newJobTitle"), t("ro.notif.newJobBody", { name: order.customerName || "-" }));
+            const n = sendJobNotification(order, t("ro.notif.newJobTitle"), t("ro.notif.newJobBody", { name: order.customerName || "-" }));
+            if (n) jobNotifs.set(order.id, n);
           }
         });
       },
       (err) => onFeedError(err, "available")
     );
-    const unsubMine = onSnapshot(
-      mineQ,
-      (snapshot) => {
-        // อ่านด้วย serverTimestamps:"estimate" เพื่อให้ deliveredAt (serverTimestamp) มีค่าประมาณ
-        // ทันทีตอนกดส่งสำเร็จ (ไม่เป็น null ระหว่างรอ server) — ไม่งั้นหน้าสรุปจะกระพริบหลุดไปหน้ารอรับงาน
-        setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })));
-        markFeed("mine", "");
-        setLoading(false);
-      },
-      (err) => onFeedError(err, "mine")
-    );
+    // งานของไรเดอร์: onSnapshot บน mineQ (bounded). ถ้า composite index ยังไม่ deploy จะ error
+    // failed-precondition -> fallback ไป query แบบไม่ orderBy/limit เพื่อให้แดชบอร์ดหลักไม่พัง
+    // (ค่าที่แสดงยังถูก เพราะคำนวณจากออเดอร์ที่ได้มา — แค่ใช้แบนด์วิดท์มากกว่าจนกว่า index จะพร้อม)
+    const mineFallbackQ = query(collection(db, "orders"), where("riderId", "==", user.uid));
+    let unsubMine = null;
+    const onMineNext = (snapshot) => {
+      // อ่านด้วย serverTimestamps:"estimate" เพื่อให้ deliveredAt (serverTimestamp) มีค่าประมาณ
+      // ทันทีตอนกดส่งสำเร็จ (ไม่เป็น null ระหว่างรอ server) — ไม่งั้นหน้าสรุปจะกระพริบหลุดไปหน้ารอรับงาน
+      setMyJobs(snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })));
+      markFeed("mine", "");
+      setLoading(false);
+    };
+    const subscribeMine = (q, isFallback) => {
+      unsubMine = onSnapshot(q, onMineNext, (err) => {
+        if (!isFallback && err?.code === "failed-precondition") {
+          logError(err, "RiderOrdersDashboard.mine.index-fallback");
+          if (unsubMine) unsubMine();
+          subscribeMine(mineFallbackQ, true);
+          return;
+        }
+        onFeedError(err, "mine");
+      });
+    };
+    subscribeMine(mineQ, false);
     const unsubStore = onSnapshot(
       doc(db, "stores", STORE_ID),
       (snap) => {
@@ -306,8 +341,11 @@ export default function RiderOrdersDashboard() {
     );
     return () => {
       unsubAvailable();
-      unsubMine();
+      if (unsubMine) unsubMine();
       unsubStore();
+      // ปิด browser notification ของงานใหม่ที่ยังค้างอยู่ทั้งหมด ไม่ให้ค้างหลังออกจากหน้าแดชบอร์ด
+      jobNotifs.forEach((n) => { try { n.close(); } catch { /* ignore */ } });
+      jobNotifs.clear();
     };
     // t ใช้แค่ทำข้อความ notification — ไม่ผูกเป็น dep เพื่อไม่ให้ re-subscribe listener ทุกครั้งที่สลับภาษา
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -348,15 +386,11 @@ export default function RiderOrdersDashboard() {
   // กรองด้วยวงเงินสดที่ไรเดอร์เลือก (งานเก็บเงินปลายทางที่เกินวงเงินจะไม่ขึ้น)
   const visibleAvailable = availableOrders.filter((o) => passesCash(o, cashFilter));
 
-  // สถิติหัวจอ: รายได้/เหรียญ "วันนี้" คิดจากงานของไรเดอร์ที่ส่งสำเร็จวันนี้ (ข้อมูลจริง) ;
-  // เครดิตอ่านจากโปรไฟล์จริง (default 0 ไม่มี mock). ใช้ mountTime เป็นวันอ้างอิง (คงที่ทั้งเซสชัน)
-  const dayRef = new Date(mountTime);
-  const doneToday = orders.filter(
-    (o) => o.riderId === user?.uid && normalizeStatus(o.status) === DELIVERED_STATUS &&
-      isSameDay(toDate(o.deliveredAt ?? o.completedAt ?? o.createdAt), dayRef)
-  );
-  const todayIncome = doneToday.reduce((s, o) => s + Number(o.deliveryFee || 0) + Number(o.riderBonus || 0), 0);
-  const todayCoins = doneToday.reduce((s, o) => s + Number(o.riderCoins || 0), 0);
+  // สถิติหัวจอ: รายได้/เหรียญ "วันนี้" มาจาก SSOT เดียวกับหน้ารายได้ทั้งหมด (summarizeIncome)
+  // -> ตัวเลขตรงกันทุกหน้าเป๊ะ ; เครดิตอ่านจากโปรไฟล์จริง (default 0 ไม่มี mock)
+  const income = summarizeIncome(orders, new Date(mountTime));
+  const todayIncome = income.today.net;
+  const todayCoins = income.today.coins;
   const credit = Number(profile?.riderCredit ?? profile?.credit ?? 0);
 
   // ป๊อปอัปงานใหม่: แสดงงานแรกในคิวที่ยัง "ว่างจริง" (ถ้าไรเดอร์คนอื่นรับไปก่อน หรือหมดสถานะพร้อมส่ง
@@ -366,7 +400,12 @@ export default function RiderOrdersDashboard() {
   const incomingOrder =
     isOnline && firstIncomingId ? availableOrders.find((o) => o.id === firstIncomingId) : null;
 
-  const dismissIncoming = (id) => setIncomingIds((prev) => prev.filter((qid) => qid !== id));
+  const dismissIncoming = (id) => {
+    // ปิด browser notification ของงานนี้ทันทีเมื่อรับ/ปฏิเสธ/หมดเวลา (ไม่ต้องรอ docChange จาก server)
+    const n = jobNotifsRef.current.get(id);
+    if (n) { try { n.close(); } catch { /* ignore */ } jobNotifsRef.current.delete(id); }
+    setIncomingIds((prev) => prev.filter((qid) => qid !== id));
+  };
 
   // ── งานเดียวต่อครั้ง (single active order) ──────────────────────────────────
   // งานที่ "กำลังทำ" = ออเดอร์ของเราที่ยัง picked_up/delivering (ใหม่สุดก่อน — ปกติมีใบเดียว)

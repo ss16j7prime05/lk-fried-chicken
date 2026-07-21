@@ -1,176 +1,187 @@
 rules_version = '2';
 
+// ============================================================================
+// LK Fried Chicken — Firestore Security Rules (production)
+//
+// Collections in this app: users (+users/addresses), orders, chats, chatMeta,
+// stores, menus, options, reviews, blockedCustomers, counters, notifications.
+//
+// NOTE — the Admin UI shows "payments", "riders", "settings", "reports" tabs,
+// but those are NOT Firestore collections: riders are users with role=="rider",
+// payment lives on order.payment, store settings live on the stores doc, and
+// reports are derived from orders. There is therefore no top-level rule for them;
+// the deny-all catch-all at the bottom blocks any such path.
+//
+// Trust model: role/status/approval live on users/{uid} and are set at
+// registration (create) or by an admin; end users can never elevate themselves.
+// ============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------- helpers ----------
-    function isSignedIn() {
-      return request.auth != null;
-    }
+    // ---------- helpers (identity / role / approval) ----------
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
-    function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function role()    { return isSignedIn() ? userDoc().role : ""; }
+    function myPhone() { return isSignedIn() ? userDoc().phone : ""; }
 
-    function role() {
-      return isSignedIn() ? userDoc().role : "";
-    }
+    // ไม่มีฟิลด์ status = บัญชีเก่าก่อนมีระบบอนุมัติ ถือว่าอนุมัติแล้ว (ไม่ล็อกผู้ใช้เดิม)
+    function myStatus()          { return isSignedIn() ? userDoc().status : null; }
+    function isApprovedOrLegacy(){ return myStatus() == null || myStatus() == "approved" || myStatus() == "active"; }
 
-    function myPhone() {
-      return isSignedIn() ? userDoc().phone : "";
-    }
+    function isAdmin() { return role() == "admin"; }
+    function isApprovedStore() { return role() == "store" && isApprovedOrLegacy(); }
 
-    // ไม่มีฟิลด์ status เลย = บัญชีเก่าก่อนมีระบบอนุมัติ ถือว่าอนุมัติแล้ว (ไม่ล็อกผู้ใช้เดิม)
-    function myStatus() {
-      return isSignedIn() ? userDoc().status : null;
+    // The one order-party predicate, shared by /chats and /chatMeta (was duplicated).
+    // Only the two parties of THIS order (its customer + assigned rider) — plus store/admin
+    // for support — may touch its conversation / meta.
+    function orderParty(o) {
+      return isAdmin() ||
+             isApprovedStore() ||
+             (role() == "customer" && o.phone == myPhone()) ||
+             (role() == "rider" && isApprovedOrLegacy() && o.riderId == request.auth.uid);
     }
-    function isApprovedOrLegacy() {
-      return myStatus() == null || myStatus() == "approved" || myStatus() == "active";
-    }
+    function orderById(id) { return get(/databases/$(database)/documents/orders/$(id)).data; }
 
-    // ---------- users ----------
-    // ผู้ใช้แก้ไขเอกสารของตัวเองได้ (ยกเว้นฟิลด์ status) / admin อ่าน-แก้ไขได้ทั้งหมด (รวมการอนุมัติ/ปฏิเสธ)
+    // ---------- users (also the "riders" store: role=="rider") ----------
+    // read: only the owner or an admin.
+    // create: signup only — may self-assign status "active" (customer) or "pending"
+    //   (store/rider); can never self-create as "approved".
+    // update: the owner may edit their production profile fields, but NOT these backend-only
+    //   / identity fields — this blocks privilege escalation (role→admin), status self-
+    //   approval, email/uid/createdAt tampering, and rider verification/wallet/income/rating/
+    //   riderCode edits. Admin may edit everything (approvals included).
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || role() == "admin");
+      function locksProtectedFields() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(["uid", "role", "status", "email", "createdAt",
+                   "riderCode", "verification", "wallet", "income", "rating"]);
+      }
 
-      // สมัครสมาชิกใหม่: ตั้ง status ได้แค่ "active" (customer) หรือ "pending" (store/rider) เท่านั้น
-      // ห้ามสมัครมาแล้วตั้ง status เป็น "approved" เอง
-      allow create: if isSignedIn() && request.auth.uid == uid &&
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create: if isOwner(uid) &&
         (request.resource.data.status == "active" || request.resource.data.status == "pending");
 
-      // แก้ไขโปรไฟล์ตัวเองได้ตามปกติ แต่ "ห้ามเปลี่ยน status เอง" (ป้องกันร้าน/ไรเดอร์ตั้ง approved เอง)
-      // admin แก้ไขได้ทุกฟิลด์ รวมการอนุมัติ/ปฏิเสธ (เปลี่ยน status)
-      allow update: if role() == "admin" ||
-        (isSignedIn() && request.auth.uid == uid &&
-          request.resource.data.status == resource.data.status);
+      allow update: if isAdmin() || (isOwner(uid) && !locksProtectedFields());
 
-      allow delete: if role() == "admin";
+      allow delete: if isAdmin();
 
-      // ---------- addresses (สมุดที่อยู่จัดส่งของลูกค้า) ----------
-      // เจ้าของอ่าน/เขียน/ลบ ที่อยู่ของตัวเองได้เต็มสิทธิ์ ; admin อ่านได้ (ดูข้อมูลลูกค้า)
+      // ---------- users/{uid}/addresses (customer delivery address book) ----------
+      // Owner has full read/write on their own addresses ; admin may read (customer support).
       match /addresses/{addressId} {
-        allow read: if isSignedIn() && (request.auth.uid == uid || role() == "admin");
-        allow write: if isSignedIn() && request.auth.uid == uid;
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid);
       }
     }
 
-    // ---------- menus / options ----------
-    // หน้าร้านสาธารณะอ่านเมนูได้ / แก้ไขเฉพาะ admin หรือ store
+    // ---------- menus / options (public storefront reads; store/admin writes) ----------
     match /menus/{id} {
       allow read: if true;
-      allow write: if role() == "admin" || (role() == "store" && isApprovedOrLegacy());
+      allow write: if isAdmin() || isApprovedStore();
     }
     match /options/{id} {
       allow read: if true;
-      allow write: if role() == "admin" || (role() == "store" && isApprovedOrLegacy());
+      allow write: if isAdmin() || isApprovedStore();
     }
 
     // ---------- orders ----------
     match /orders/{orderId} {
-      // ลูกค้าสั่งจากหน้าร้านสาธารณะ -> สร้างออเดอร์ได้
-      allow create: if true;
-
-      // สถานะที่ถือว่า "พร้อมส่ง / รอไรเดอร์รับ" (รองรับทั้งระบบเก่า/ใหม่)
-      // หมายเหตุ: "delivering"/"picked_up" ไม่อยู่ในกลุ่มนี้ เพราะหมายถึงงานที่มีไรเดอร์รับแล้ว
-      // (เข้าถึงได้เฉพาะผ่าน riderId == uid เท่านั้น ไม่เปิดให้ไรเดอร์คนอื่นแย่งงาน)
+      // "พร้อมส่ง / รอไรเดอร์รับ" (รองรับทั้งค่าใหม่/เก่า). picked_up/delivering ไม่อยู่ในกลุ่มนี้
+      // (เข้าถึงได้เฉพาะไรเดอร์เจ้าของงาน riderId == uid) เพื่อไม่ให้ไรเดอร์อื่นแย่งงาน
       function isReadyForDelivery() {
         return resource.data.status == "กำลังจัดส่ง" ||
                resource.data.status == "ส่งให้ไรเดอร์" ||
                resource.data.status == "ready_for_delivery";
       }
+      function isTerminal() {
+        return resource.data.status == "completed" || resource.data.status == "cancelled";
+      }
+      function statusUnchanged() { return request.resource.data.status == resource.data.status; }
 
-      // อ่าน (store/rider ต้อง approved แล้วเท่านั้น - ร้าน/ไรเดอร์ที่ pending เข้าไม่ได้)
+      // The only forward transitions a RIDER may drive (mirrors orderStateMachine): claim a
+      // ready order → picked_up → delivering → completed. Anything else (backward jumps,
+      // cancelling, arbitrary status) is rejected here regardless of what the client sends.
+      function validRiderTransition() {
+        return (isReadyForDelivery() && request.resource.data.status == "picked_up") ||
+               (resource.data.status == "picked_up" && request.resource.data.status == "delivering") ||
+               (resource.data.status == "delivering" && request.resource.data.status == "completed");
+      }
+
+      // create: the storefront is public (customers can order WITHOUT an account), so create
+      // is intentionally open — App Check is the right next layer to curb anonymous abuse.
+      allow create: if true;
+
+      // read: admin & approved store see all ; customer sees their own (by phone) ; rider sees
+      // orders they hold, or any ready order (to pick one up).
       allow read: if
-        role() == "admin" ||
-        (role() == "store" && isApprovedOrLegacy()) ||
+        isAdmin() ||
+        isApprovedStore() ||
         (role() == "customer" && resource.data.phone == myPhone()) ||
         (role() == "rider" && isApprovedOrLegacy() &&
           (resource.data.riderId == request.auth.uid || isReadyForDelivery()));
 
-      // ลูกค้าเจ้าของออเดอร์อัปโหลด/ส่งสลิปชำระเงินได้ (PromptPay / โอน) — จำกัดเฉพาะ
-      // ฟิลด์ที่ submitSlip แตะจริง (payment / timeline / audit) เท่านั้น ห้ามแก้ราคา
-      // รายการ เบอร์ ฯลฯ ; บังคับให้ payment.method คงเดิม (กันแก้วิธีชำระ) และ
-      // payment.status ได้แค่ "pending_verification" (ส่งสลิปให้ร้านตรวจ ไม่ใช่ตั้ง
-      // approved เอง). เดิมไม่มี rule นี้เลย -> การเขียน URL สลิปลง Firestore ถูกปฏิเสธ
-      // ทำให้อัปโหลดสลิปไม่สำเร็จและร้านไม่ได้รับสลิป
+      // Customer may only attach a payment slip to THEIR OWN, non-terminal order — limited to
+      // payment/timeline/audit, keeping payment.method and forcing payment.status to
+      // "pending_verification" (they can't self-approve). Cannot touch a completed/cancelled order.
       function isCustomerSlipUpdate() {
         return role() == "customer" &&
           resource.data.phone == myPhone() &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(["payment", "timeline", "audit"]) &&
+          !isTerminal() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["payment", "timeline", "audit"]) &&
           request.resource.data.payment.method == resource.data.payment.method &&
           request.resource.data.payment.status == "pending_verification";
       }
 
-      // แก้ไข / เปลี่ยนสถานะ / ยกเลิก
-      // admin/store(approved) = เต็มสิทธิ์ ; rider(approved) = เฉพาะงานที่รับ (หรือพร้อมส่งเพื่อรับงาน)
-      // customer = เฉพาะการส่งสลิปของออเดอร์ตัวเอง (isCustomerSlipUpdate)
+      // update:
+      //   admin / approved store = full control (the store owns every order in this single-
+      //     store app; state-machine validation is enforced server-side in orderEngine).
+      //   rider (approved) = only orders they hold or a ready one, AND only a valid forward
+      //     transition or a same-status field update (riderStage / arrival timestamps / nearPressed).
+      //   customer = slip submission only (isCustomerSlipUpdate).
       allow update: if
-        role() == "admin" ||
-        (role() == "store" && isApprovedOrLegacy()) ||
+        isAdmin() ||
+        isApprovedStore() ||
         (role() == "rider" && isApprovedOrLegacy() &&
-          (resource.data.riderId == request.auth.uid || isReadyForDelivery())) ||
+          (resource.data.riderId == request.auth.uid || isReadyForDelivery()) &&
+          (statusUnchanged() || validRiderTransition())) ||
         isCustomerSlipUpdate();
 
-      // ลบ = admin หรือ store
-      allow delete: if role() == "admin" || role() == "store";
+      // delete: admin or store only.
+      allow delete: if isAdmin() || role() == "store";
     }
 
-    // ---------- chats (ลูกค้า <-> ไรเดอร์) ----------
-    // เดิม: ใครก็ได้ที่ล็อกอิน (role ไหนก็ได้) อ่านแชท "ทุกออเดอร์" ได้ทั้งหมด และ create ได้
-    // โดยไม่ตรวจว่า sender ตรงกับ role จริงไหม -> ลูกค้าคนหนึ่งอ่านบทสนทนาของลูกค้าคนอื่นได้
-    // และไรเดอร์ปลอมเป็น sender:"customer" ได้ (ดู CLAUDE.md §8)
-    // ตอนนี้ผูกสิทธิ์กับ "ออเดอร์ของข้อความนั้น" โดยใช้เกณฑ์เดียวกับ /orders ด้านบน
+    // ---------- chats (customer <-> rider messages) ----------
+    // Bound to the message's order: only that order's parties (+ store/admin) may read, and a
+    // message may only be created by a real party whose sender matches their true role (no
+    // impersonating the other side). Messages are immutable (no edit/delete).
     match /chats/{chatId} {
-      // อ่านออเดอร์ที่ข้อความอ้างถึง (get() ผลลัพธ์ถูก cache ต่อ request และ query แชท
-      // กรองด้วย orderId ค่าเดียวเสมอ จึงเป็น path เดียวกันทุก doc)
-      function chatOrder(orderId) {
-        return get(/databases/$(database)/documents/orders/$(orderId)).data;
-      }
-      // คู่สนทนาของออเดอร์นี้เท่านั้น (+ ร้าน/แอดมินไว้ดูแลเคสมีปัญหา)
-      function isChatParty(o) {
-        return role() == "admin" ||
-               (role() == "store" && isApprovedOrLegacy()) ||
-               (role() == "customer" && o.phone == myPhone()) ||
-               (role() == "rider" && isApprovedOrLegacy() && o.riderId == request.auth.uid);
-      }
-      allow read: if isSignedIn() && isChatParty(chatOrder(resource.data.orderId));
-
-      // ส่งข้อความได้เฉพาะลูกค้าเจ้าของออเดอร์ กับไรเดอร์ที่ถืองานนั้นอยู่จริง
-      // และ sender ต้องตรงกับ role จริงของผู้ส่ง (กันปลอมเป็นอีกฝั่ง)
+      allow read: if isSignedIn() && orderParty(orderById(resource.data.orderId));
       allow create: if isSignedIn() &&
         (role() == "customer" || role() == "rider") &&
         request.resource.data.sender == role() &&
-        isChatParty(chatOrder(request.resource.data.orderId));
-
+        orderParty(orderById(request.resource.data.orderId));
       allow update, delete: if false;
     }
 
-    // ---------- chatMeta (read positions + typing flags ต่อ 1 ออเดอร์) ----------
-    // เอกสารเดียวต่อออเดอร์ (chatMeta/{orderId}) เก็บ <role>LastRead / <role>Typing / typingAt
-    // — คู่สนทนาของออเดอร์นั้นอ่าน/เขียนได้ (เกณฑ์เดียวกับ /chats). Additive ไม่กระทบ schema เดิม
+    // ---------- chatMeta (read receipts + typing + unread, one doc per order) ----------
+    // chatMeta/{orderId} holds <role>LastRead / <role>Typing / typingAt. Same party gate as
+    // /chats. Powers the typing indicator, read receipts and unread counts in realtime chat.
     match /chatMeta/{orderId} {
-      function metaOrder() {
-        return get(/databases/$(database)/documents/orders/$(orderId)).data;
-      }
-      function isMetaParty(o) {
-        return role() == "admin" ||
-               (role() == "store" && isApprovedOrLegacy()) ||
-               (role() == "customer" && o.phone == myPhone()) ||
-               (role() == "rider" && isApprovedOrLegacy() && o.riderId == request.auth.uid);
-      }
-      allow read, write: if isSignedIn() && isMetaParty(metaOrder());
+      allow read, write: if isSignedIn() && orderParty(orderById(orderId));
     }
 
-    // ---------- stores (เปิด/ปิดร้าน) ----------
-    // ลูกค้าหน้าร้านสาธารณะอ่านสถานะร้านได้ ; แก้ไขเฉพาะ store/admin
+    // ---------- stores (open/close + store settings live here) ----------
+    // Public storefront reads store status ; only store/admin write.
     match /stores/{id} {
       allow read: if true;
-      allow write: if role() == "admin" || (role() == "store" && isApprovedOrLegacy());
+      allow write: if isAdmin() || isApprovedStore();
     }
 
     // ---------- reviews ----------
-    // ลูกค้าเขียนรีวิวได้ ; ทุก role ที่เกี่ยวข้องอ่านได้
+    // Any involved role may read ; customers create ; immutable afterwards.
     match /reviews/{id} {
       allow read: if role() == "admin" || role() == "store" ||
                      role() == "rider" || role() == "customer";
@@ -179,22 +190,23 @@ service cloud.firestore {
     }
 
     // ---------- blockedCustomers ----------
-    // หน้าร้านสาธารณะต้องตรวจสอบได้ว่าเบอร์ถูกบล็อกไหม ; แก้ไขเฉพาะ admin
+    // Public storefront must be able to check if a phone is blocked ; only admin writes.
     match /blockedCustomers/{phone} {
       allow read: if true;
-      allow write: if role() == "admin";
+      allow write: if isAdmin();
     }
 
-    // ---------- counters (เลขออเดอร์รันต่อวัน) ----------
-    // หน้าร้านสาธารณะต้องเพิ่มเลขรันได้ตอนสร้างออเดอร์
+    // ---------- counters (daily running order number) ----------
+    // The public storefront increments this while creating an anonymous order, so it stays
+    // open like order-create. App Check is the recommended layer to limit anonymous abuse.
     match /counters/{id} {
       allow read, write: if true;
     }
 
-    // ---------- notifications (Notification Center — Phase 3.7G) ----------
+    // ---------- notifications (Notification Center) ----------
     // recipient key (userId): customer=phone, rider=uid, store/admin="" (role-broadcast).
-    // อ่าน/แก้/ลบ ได้เฉพาะเจ้าของ (role ตรง + userId ตรง uid/phone หรือ broadcast) ;
-    // สร้างได้ทุกผู้ใช้ที่ล็อกอิน (actor แจ้งเตือนถึง role อื่น — เหมือน orders ที่ create เปิดกว้าง)
+    // Owner (matching role + uid/phone, or a role broadcast) may read/modify/delete ; any
+    // signed-in actor may create (to notify another role, like the open order-create).
     match /notifications/{id} {
       function isMine() {
         return isSignedIn() &&
@@ -208,7 +220,7 @@ service cloud.firestore {
       allow update, delete: if isMine();
     }
 
-    // ---------- deny all others ----------
+    // ---------- deny everything else (incl. any future/unknown collection) ----------
     match /{document=**} {
       allow read, write: if false;
     }
