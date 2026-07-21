@@ -7,7 +7,6 @@ import {
   Info,
   HelpCircle,
 } from "lucide-react";
-import { STORE_PHONE } from "../../config";
 import { getStore } from "./getStore";
 import { useStore } from "../../store/useStore";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -49,7 +48,7 @@ const FaqAccordionItem = ({ question, answer, open, onToggle }) => (
 export const HelpCenter = () => {
   const { t } = usePreferences();
   const store = useStore(); // live stores/{STORE_ID} — single source of truth
-  const storePhone = store?.phone || STORE_PHONE;
+  const storePhone = store?.phone || ""; // เบอร์ร้านจาก Firestore เท่านั้น — ไม่มี placeholder
   const [storeLocation, setStoreLocation] = useState(null);
   const [reportText, setReportText] = useState("");
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
@@ -66,7 +65,8 @@ export const HelpCenter = () => {
   };
 
   const handleCallStore = () => {
-    window.location.href = `tel:${storePhone}`;
+    // โทรเบอร์ร้านจาก Firestore เท่านั้น — ไม่มีเบอร์ = ไม่โทร (ไม่โทร placeholder)
+    if (storePhone) window.location.href = `tel:${storePhone}`;
   };
 
   // No Firestore collection exists to persist a free-text report (and adding one
@@ -74,6 +74,7 @@ export const HelpCenter = () => {
   // real phone number instead — the text is actually transmitted, just not stored
   // in the app.
   const handleSendReport = () => {
+    if (!storePhone) return; // ไม่มีเบอร์ร้าน = ส่ง SMS ไม่ได้ (ไม่ใช้ placeholder)
     const body = encodeURIComponent(reportText.trim() || t("help.reportDefault"));
     window.location.href = `sms:${storePhone}?body=${body}`;
   };
@@ -107,7 +108,7 @@ export const HelpCenter = () => {
           </div>
           <div>
             <p className="font-bold text-gray-900">{store?.storeName || "LK Fried Chicken"}</p>
-            <p className="text-sm text-gray-400 font-medium">{storePhone}</p>
+            <p className="text-sm text-gray-400 font-medium">{storePhone || "-"}</p>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">

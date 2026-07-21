@@ -15,7 +15,6 @@ import {
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
-import { STORE_PHONE } from "../../config";
 import { useStore } from "../../store/useStore";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
@@ -99,7 +98,7 @@ export const Settings = () => {
   const { theme, setTheme, language, setLanguage, t } = usePreferences();
   const store = useStore(); // live stores/{STORE_ID} — single source of truth
   const storeName = store?.storeName || "LK Fried Chicken";
-  const storePhone = store?.phone || STORE_PHONE;
+  const storePhone = store?.phone || ""; // เบอร์ร้านจาก Firestore เท่านั้น — ไม่มี placeholder
 
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -135,7 +134,8 @@ export const Settings = () => {
   };
 
   const handleContactStore = () => {
-    window.location.href = `tel:${storePhone}`;
+    // โทรเบอร์ร้านจาก Firestore เท่านั้น — ไม่มีเบอร์ = ไม่โทร (ไม่โทร placeholder)
+    if (storePhone) window.location.href = `tel:${storePhone}`;
   };
 
   if (loading) {
@@ -242,9 +242,13 @@ export const Settings = () => {
         <p>{t("settings.version")}</p>
         <p>
           {t("settings.aboutContact")}{" "}
-          <a href={`tel:${storePhone}`} className="text-primary font-bold">
-            {storePhone}
-          </a>
+          {storePhone ? (
+            <a href={`tel:${storePhone}`} className="text-primary font-bold">
+              {storePhone}
+            </a>
+          ) : (
+            <span className="text-gray-400 font-bold">-</span>
+          )}
         </p>
       </InfoModal>
 

@@ -222,6 +222,7 @@ export default function RiderOrdersDashboard() {
     lat: FALLBACK_STORE_LAT,
     lng: FALLBACK_STORE_LNG,
     name: "LK Fried Chicken",
+    phone: "", // เบอร์ร้านจริงมาจาก Firestore (stores doc) — ไม่มี placeholder
   });
   // คิวงานใหม่ที่เพิ่งเข้ามา -> ป๊อปอัปเต็มจอ + เสียงเรียก (ไล่ทีละใบตามลำดับที่เข้า)
   const [incomingIds, setIncomingIds] = useState([]);
@@ -333,6 +334,7 @@ export default function RiderOrdersDashboard() {
             lat: data.lat ?? FALLBACK_STORE_LAT,
             lng: data.lng ?? FALLBACK_STORE_LNG,
             name: data.storeName || "LK Fried Chicken",
+            phone: data.phone ?? "", // เบอร์ร้านจริงจาก Firestore — ไม่มี fallback placeholder
           });
         }
       },

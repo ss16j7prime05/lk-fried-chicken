@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import {
-  STORE_ID, STORE_PHONE, PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, EST_PREP_MINUTES,
+  STORE_ID, PROMPTPAY_ID, PROMPTPAY_ACCOUNT_NAME, EST_PREP_MINUTES,
 } from "./config";
 
 // Normalize the raw stores/{STORE_ID} data into config sections. Missing fields fall
@@ -20,7 +20,7 @@ export function normalizeConfig(data) {
     store: {
       id: STORE_ID,
       name: d.storeName || PROMPTPAY_ACCOUNT_NAME,
-      phone: d.phone || STORE_PHONE,
+      phone: d.phone || "", // เบอร์ร้านจาก Firestore เท่านั้น — ไม่มี placeholder
       lat: d.lat ?? null,
       lng: d.lng ?? null,
       isOpen: d.isOpen ?? true,
