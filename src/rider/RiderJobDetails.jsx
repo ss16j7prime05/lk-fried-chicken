@@ -24,7 +24,7 @@ export default function RiderJobDetails() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [storeLocation, setStoreLocation] = useState({ lat: FALLBACK_STORE_LAT, lng: FALLBACK_STORE_LNG, name: "LK Fried Chicken" });
+  const [storeLocation, setStoreLocation] = useState({ lat: FALLBACK_STORE_LAT, lng: FALLBACK_STORE_LNG, name: "LK Fried Chicken", phone: "" });
 
   useEffect(() => {
     if (!id) return undefined;
@@ -44,7 +44,7 @@ export default function RiderJobDetails() {
     const unsub = onSnapshot(doc(db, "stores", STORE_ID), (snap) => {
       if (snap.exists()) {
         const d = snap.data();
-        setStoreLocation({ lat: d.lat ?? FALLBACK_STORE_LAT, lng: d.lng ?? FALLBACK_STORE_LNG, name: d.storeName || "LK Fried Chicken" });
+        setStoreLocation({ lat: d.lat ?? FALLBACK_STORE_LAT, lng: d.lng ?? FALLBACK_STORE_LNG, name: d.storeName || "LK Fried Chicken", phone: d.phone ?? "" });
       }
     }, (err) => logError(err, "RiderJobDetails.store"));
     return () => unsub();

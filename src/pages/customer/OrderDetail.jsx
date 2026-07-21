@@ -3,7 +3,6 @@ import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { Phone, MapPin, Navigation, RotateCcw, Check, Bike, Clock, Upload, X, Loader2, Pencil } from "lucide-react";
 import { db } from "../../firebase";
-import { STORE_PHONE } from "../../config";
 import { getStore } from "./getStore";
 import { useStore } from "../../store/useStore";
 import { PAYMENT_STATUS, countdownFrom, uploadSlip, submitSlip, expire } from "../../payment/paymentService";
@@ -431,7 +430,7 @@ export const OrderDetail = () => {
         <div className="flex items-center justify-between">
           <div>
             <p className="font-bold text-gray-900">{store?.storeName || "LK Fried Chicken"}</p>
-            <p className="text-sm text-gray-400 font-medium">{store?.phone || STORE_PHONE}</p>
+            <p className="text-sm text-gray-400 font-medium">{store?.phone || "-"}</p>
           </div>
         </div>
       </Card>
@@ -649,7 +648,8 @@ export const OrderDetail = () => {
             variant="dark"
             className="flex-1 h-[60px] !flex-col !gap-1 !px-1 !rounded-2xl text-[11px] whitespace-nowrap"
             onClick={() => {
-              window.location.href = `tel:${store?.phone || STORE_PHONE}`;
+              // โทรเบอร์ร้านจาก Firestore เท่านั้น — ไม่มีเบอร์ = ไม่โทร (ไม่โทร placeholder)
+              if (store?.phone) window.location.href = `tel:${store.phone}`;
             }}
           >
             <Phone size={18} />

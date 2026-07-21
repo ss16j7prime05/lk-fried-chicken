@@ -5,7 +5,6 @@ import {
   ChevronDown, ChevronUp, StickyNote, X, ArrowLeft, AlertCircle,
 } from "lucide-react";
 import { db } from "../firebase";
-import { STORE_PHONE } from "../config";
 import { useAuth } from "../AuthContext.jsx";
 import { usePreferences } from "../context/PreferencesContext";
 import { transition } from "../store/orderStateMachine";
@@ -55,7 +54,15 @@ const StopCard = ({ index, kind, title, name, address, lat, lng, storeLocation, 
           {address && <p className="text-sm text-gray-500 font-medium mt-1 line-clamp-2">{address}</p>}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {tel && <RoundAction icon={Phone} label={t("ro.callCustomer")} href={tel} />}
+          {tel ? (
+            <RoundAction icon={Phone} label={kind === "store" ? t("ro.callStore") : t("ro.callCustomer")} href={tel} />
+          ) : (
+            // ไม่มีเบอร์ (โดยเฉพาะเบอร์ร้านที่อ่านจาก Firestore) -> ปิดปุ่มโทรและบอกเหตุผล
+            // ห้ามโทรเบอร์ placeholder เด็ดขาด
+            actionsEnabled && kind === "store" && (
+              <span className="text-[11px] font-bold text-gray-400 whitespace-nowrap">{t("ro.noStorePhone")}</span>
+            )
+          )}
           {onChat && actionsEnabled && <RoundAction icon={MessageCircle} label={t("ro.chat")} onClick={onChat} />}
         </div>
       </div>
@@ -175,7 +182,7 @@ export default function RiderActiveOrder({ order, storeLocation, onDone, onBack 
       <StopCard
         index={1} kind="store" title={t("ro.pickup")} name={storeLocation.name}
         address={order.storeAddress || ""} lat={storeLocation.lat} lng={storeLocation.lng}
-        storeLocation={storeLocation} distanceKm={order.distanceKm ?? order.distance} phone={STORE_PHONE}
+        storeLocation={storeLocation} distanceKm={order.distanceKm ?? order.distance} phone={storeLocation.phone}
         actionsEnabled={!terminal} t={t}
       />
       <StopCard
