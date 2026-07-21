@@ -40,6 +40,11 @@ export async function acceptOrder(order, rider) {
         riderStage: "heading_to_restaurant",
         acceptedAt: serverTimestamp(),
         pickedUpAt: serverTimestamp(),
+        // Claimed -> leave the dispatch queue cleanly (clear any live offer state).
+        offeredTo: "",
+        offerExpiresAt: 0,
+        offerCycleRejects: [],
+        dispatchPausedUntil: 0,
         timeline: arrayUnion(timelineTrigger("picked_up", rider.uid)),
         audit: arrayUnion(auditTrigger("accept", rider.uid)),
       });

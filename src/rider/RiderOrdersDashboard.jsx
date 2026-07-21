@@ -23,6 +23,8 @@ import { byNewest, normalizeStatus } from "../store/orderStatus";
 import { summarizeIncome } from "./riderIncome";
 import { useStoreStatus } from "../store/useStoreStatus";
 import { acceptOrder, rejectOrder, hasRejected } from "./riderAcceptReject";
+import { offerActive, needsOffer } from "./dispatchState";
+import { offerNext, declineOffer } from "./dispatchEngine";
 import { useDeliveryBroadcast, getDestination } from "./riderLocationService";
 import { haversineKm } from "../location/locationUtils";
 import { GEO_STATE, useGeolocationStatus } from "../location/mapsService";
@@ -37,6 +39,10 @@ const FALLBACK_STORE_LNG = 100.0529543;
 // (picked_up/delivering — ใบเดียว) + รายได้/เหรียญ "วันนี้" ซึ่งล้วนเป็นออเดอร์ล่าสุดทั้งสิ้น
 // จึงดึงเฉพาะ N ใบล่าสุด (orderBy createdAt desc) แทนการ subscribe ประวัติทั้งชีวิตแบบไม่จำกัด
 const MY_JOBS_LIMIT = 100;
+
+// Auto Accept: how long the incoming popup shows (with sound + vibration) before the order is
+// claimed automatically — long enough for the alarm to sound at least once (req 2).
+const AUTO_ACCEPT_DELAY_MS = 1600;
 
 // Firestore Timestamp | ISO | ms -> ms (0 ถ้าไม่มี)
 const orderMs = (ts) => (ts?.toMillis ? ts.toMillis() : ts ? new Date(ts).getTime() : 0);
@@ -237,6 +243,10 @@ export default function RiderOrdersDashboard() {
   const availInitRef = useRef(false);        // snapshot แรก = งานเดิม ไม่ต้องเด้ง
   const isOnlineRef = useRef(false);         // สถานะล่าสุดสำหรับใช้ใน callback ของ snapshot
   const settingsRef = useRef(settings);      // ค่าล่าสุดสำหรับใช้ใน callback ของ snapshot
+  const availablePoolRef = useRef([]);       // งานว่างล่าสุด — ให้ dispatch tick อ่านโดยไม่ผูก interval กับทุก snapshot
+  const cashFilterRef = useRef(null);        // วงเงินสดล่าสุด — dispatch tick ไม่ยื่นงานที่ไรเดอร์รับไม่ได้
+  const dispatchBusyRef = useRef(false);     // กันยิง offerNext ซ้อนกันระหว่างรอ transaction
+  const autoAcceptTimerRef = useRef(null);   // ตัวจับเวลา auto-accept (โชว์ป๊อปอัป+เสียงก่อนรับเอง)
   const baseTitleRef = useRef(typeof document !== "undefined" ? document.title : ""); // ชื่อแท็บเดิม (ไว้ทำ badge)
 
   useEffect(() => {
@@ -373,6 +383,8 @@ export default function RiderOrdersDashboard() {
   const isOnline = riderStatus === "online";
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { availablePoolRef.current = availablePool; }, [availablePool]);
+  useEffect(() => { cashFilterRef.current = cashFilter; }, [cashFilter]);
   const feedErrorKey = feedErrors.available || feedErrors.mine;
   // networkOnline = มีเน็ตไหม (คนละเรื่องกับ isOnline ที่แปลว่า "ไรเดอร์เปิดรับงาน")
   const networkOnline = useOnlineStatus();
@@ -429,10 +441,17 @@ export default function RiderOrdersDashboard() {
   const showIncoming = !activeOrder;
   const eligibleIncoming =
     showIncoming && incomingOrder && passesCash(incomingOrder, cashFilter) ? incomingOrder : null;
-  // ป๊อปอัปแสดงเมื่อ: เปิด "แจ้งเตือนงานใหม่" + ไม่ได้เปิด auto-accept (auto-accept รับเองไม่ต้องเด้ง)
-  // + ไม่ได้เปิดดูรายละเอียดอยู่. ปิดแจ้งเตือน = ไม่มีป๊อปอัป/ไม่มีเสียง
-  const popupOrder =
-    eligibleIncoming && !detailOrder && settings.notifyNewJob && !settings.autoAccept ? eligibleIncoming : null;
+  // Dispatch: the order currently OFFERED to me (offeredTo == uid, offer not expired) is the
+  // primary trigger — the dispatcher offers one job at a time and the popup counts down from
+  // offerExpiresAt (so it is correct after a refresh). Falls back to the legacy incoming queue.
+  const dispatchedOrder =
+    showIncoming && user?.uid
+      ? availableOrders.find((o) => o.offeredTo === user.uid && offerActive(o) && passesCash(o, cashFilter))
+      : null;
+  const activeOffer = dispatchedOrder || eligibleIncoming;
+  // ป๊อปอัปแสดงเมื่อมีงานถูกยื่นให้ + เปิด "แจ้งเตือนงานใหม่" + ไม่ได้เปิดดูรายละเอียดอยู่.
+  // Auto Accept ก็โชว์ป๊อปอัปสั้น ๆ ด้วย (req 2: ต้องมีเสียง/สั่นก่อนรับเอง) แล้วตัวจับเวลาจะรับให้เอง.
+  const popupOrder = activeOffer && !detailOrder && settings.notifyNewJob ? activeOffer : null;
 
   // งานที่กำลังส่งอยู่จริง = สิ่งที่ต้องกระจายตำแหน่งให้ลูกค้าติดตาม (งานเดียว)
   const deliveries =
@@ -476,30 +495,80 @@ export default function RiderOrdersDashboard() {
     setBusyId("");
   };
 
-  // ปฏิเสธงาน: ซ่อนจากพูลของไรเดอร์คนนี้ (rejectedBy). ออเดอร์ยังว่างสำหรับคนอื่น
+  // ปฏิเสธงาน: ถ้าเป็นงานที่ถูก dispatch มาให้เรา -> declineOffer (คืนสู่ Pending แล้วยื่นให้ไรเดอร์
+  // คนถัดไป / วนกลับมาให้เราหลังหน่วงเวลาเมื่อมีเราคนเดียว — ไม่ทิ้งออเดอร์). ไม่ใช่ dispatch -> ของเดิม
   const rejectDelivery = async (order) => {
     if (!user || busyId) return;
     setBusyId(order.id);
     setActionError("");
-    const { ok, reason } = await rejectOrder(order, riderIdentity());
+    const { ok, reason } =
+      order.offeredTo === user.uid
+        ? await declineOffer(order.id, user.uid, "reject")
+        : await rejectOrder(order, riderIdentity());
     if (!ok) setActionError(t(actionMessageKey(reason)));
     dismissIncoming(order.id);
     setDetailOrder(null);
     setBusyId("");
   };
 
+  // Offer countdown expired: return a dispatched offer to Pending (the coordinator re-offers it —
+  // never lost). Non-dispatch offers just close the popup (order stays in the pool).
+  const handleOfferTimeout = (order) => {
+    if (!order) return;
+    if (order.offeredTo === user?.uid) {
+      declineOffer(order.id, user.uid, "timeout").catch((e) => logError(e, "RiderOrdersDashboard.offerTimeout"));
+    }
+    dismissIncoming(order.id);
+  };
+
   // กด Done บนหน้าสรุป -> เลิกล็อกหน้าจอ กลับสู่โหมดรับงาน
   const markDone = (order) => setDoneIds((prev) => new Set(prev).add(order.id));
 
-  // Auto Accept: เปิดแล้วรับงานที่ "รับได้จริง" อัตโนมัติ (ผ่าน acceptDelivery = ตรวจ validation
-  // เดิมครบทุกอย่าง ไม่ข้ามการกันรับซ้ำ/งานเดียว) โดยไม่ต้องกดยืนยัน. กันรับซ้ำด้วย autoAcceptedRef
+  // Auto Accept (req 2): when a job is offered and Auto Accept is ON, the popup shows briefly so
+  // the alarm sounds + vibrates, then the order is claimed automatically (via acceptDelivery — same
+  // validation, single-active + dup guards). Timer is cleared on cleanup so a job taken away / the
+  // rider going busy cancels the pending auto-accept.
   useEffect(() => {
-    if (!settings.autoAccept || !isOnline || hasActive || busyId || detailOrder) return;
-    if (!eligibleIncoming || autoAcceptedRef.current.has(eligibleIncoming.id)) return;
-    autoAcceptedRef.current.add(eligibleIncoming.id);
-    acceptDelivery(eligibleIncoming);
+    if (!settings.autoAccept || !isOnline || hasActive || busyId || detailOrder) return undefined;
+    if (!activeOffer || autoAcceptedRef.current.has(activeOffer.id)) return undefined;
+    const offer = activeOffer;
+    const timer = setTimeout(() => {
+      autoAcceptedRef.current.add(offer.id);
+      acceptDelivery(offer);
+    }, AUTO_ACCEPT_DELAY_MS);
+    autoAcceptTimerRef.current = timer;
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.autoAccept, isOnline, hasActive, busyId, detailOrder, eligibleIncoming?.id]);
+  }, [settings.autoAccept, isOnline, hasActive, busyId, detailOrder, activeOffer?.id]);
+
+  // ── Dispatch coordinator (client-side, realtime) ───────────────────────────────────────────
+  // While ONLINE, free (no active job) and connected, this rider's client offers pending ready
+  // orders to itself and reclaims expired offers. The roster is self only (Firestore rules scope
+  // rider reads to their own doc); the engine (offerNext/pickNextRider) is already multi-rider-
+  // ready for when a roster is available. offerNext is a transaction -> no duplicate assignment
+  // even if several clients tick at once. One offer at a time (single active order); an interval
+  // catches timeouts/pauses so a job is never lost across refresh / offline→online.
+  useEffect(() => {
+    if (!user?.uid || !isOnline || hasActive || !networkOnline) return undefined;
+    let cancelled = false;
+    const roster = [{ uid: user.uid, location: null }];
+    const tick = async () => {
+      if (cancelled || dispatchBusyRef.current) return;
+      const now = Date.now();
+      const pool = availablePoolRef.current;
+      // already offering one to me -> don't stack offers (handle one job at a time)
+      if (pool.some((o) => o.offeredTo === user.uid && offerActive(o, now))) return;
+      // skip jobs this rider can't take (COD over their cash-on-hand) so we don't loop-offer them
+      const pending = pool.filter((o) => needsOffer(o, now) && passesCash(o, cashFilterRef.current));
+      if (pending.length === 0) return;
+      dispatchBusyRef.current = true;
+      try { await offerNext(pending[0].id, roster); }
+      finally { dispatchBusyRef.current = false; }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [user?.uid, isOnline, hasActive, networkOnline]);
 
   // Badge: จำนวนงานว่างที่รับได้ ขึ้นที่ชื่อแท็บเบราว์เซอร์ เมื่อเปิด "แจ้งเตือนงานใหม่" และยังว่าง
   const badgeCount = settings.notifyNewJob && isOnline && !activeOrder ? visibleAvailable.length : 0;
@@ -549,15 +618,17 @@ export default function RiderOrdersDashboard() {
     <div className="space-y-6">
       {/* งานใหม่เข้า -> ป๊อปอัปเต็มจอ + เสียงเรียกวนซ้ำจนกดรับ/ปฏิเสธ/หมดเวลา (ซ่อนตอนดูรายละเอียด) */}
       <RiderIncomingOrderPopup
-        key={popupOrder?.id || "none"}
+        key={popupOrder ? `${popupOrder.id}:${popupOrder.offerSeq || 0}` : "none"}
         order={popupOrder}
         storeLocation={storeLocation}
         busy={Boolean(busyId)}
         soundOn={settings.soundOn}
+        autoAccept={settings.autoAccept}
+        expiresAt={popupOrder?.offerExpiresAt}
         onAccept={acceptDelivery}
         onReject={rejectDelivery}
         onViewDetails={setDetailOrder}
-        onDismiss={() => popupOrder && dismissIncoming(popupOrder.id)}
+        onTimeout={handleOfferTimeout}
       />
 
       {/* ดูรายละเอียดก่อนรับ (เต็มจอ) — Back กลับไปหน้าป๊อปอัป */}
