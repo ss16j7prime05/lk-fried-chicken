@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { MapPin, Map, Upload, X, Copy, Check, Download } from "lucide-react";
+import {
+  MapPin, Map, Upload, X, Copy, Check, Download, Pencil, Clock, Bike, Store,
+  User, Phone, Coins, ShoppingBag, QrCode, Banknote, Landmark,
+} from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import { STORE_ID, EST_PREP_MINUTES } from "../../config";
@@ -15,8 +18,6 @@ import { calcDeliveryFee, getRoute, haversineKm, reverseGeocode } from "../../lo
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import { Badge } from "../../components/ui/Badge";
-import { Loading } from "../../components/ui/Loading";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { useCart } from "../../context/CartContext";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -50,22 +51,105 @@ const optionLabel = (value) => {
   return typeof value === "object" ? value.name || "" : value;
 };
 
-const SectionTitle = ({ children }) => (
-  <h2 className="text-lg font-black text-gray-900 mb-4">{children}</h2>
+const SectionTitle = ({ icon: Icon, children }) => (
+  <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
+    {Icon && <Icon size={19} className="text-primary shrink-0" />}
+    {children}
+  </h2>
 );
 
-const ToggleOption = ({ label, active, onClick }) => (
+// Delivery/Pickup segmented control — icon + label pill.
+const ModeToggle = ({ label, icon: Icon, active, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`flex-1 py-3 rounded-2xl font-bold text-sm border transition-all ${
+    aria-pressed={active}
+    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-sm border transition-all ${
       active
-        ? "bg-primary text-white border-primary"
+        ? "bg-primary text-white border-primary shadow-soft"
         : "bg-gray-50 text-gray-600 border-gray-100 hover:border-primary"
     }`}
   >
-    {label}
+    {Icon && <Icon size={17} />} {label}
   </button>
+);
+
+// Payment method icons — cash / promptpay / bank transfer only (no wallet/points/card).
+const PAYMENT_ICON = { cash: Banknote, promptpay: QrCode, transfer: Landmark };
+
+// Selectable payment card with a clear active state (radio-style check on the right).
+const PaymentMethodCard = ({ method, active, onClick, t }) => {
+  const Icon = PAYMENT_ICON[method] || Banknote;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex items-center gap-3 w-full p-4 rounded-2xl border-2 text-left transition-all ${
+        active ? "border-primary bg-primary-light" : "border-gray-100 bg-white hover:border-primary/40"
+      }`}
+    >
+      <span className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${active ? "bg-primary text-white" : "bg-gray-50 text-gray-500"}`}>
+        <Icon size={20} />
+      </span>
+      <span className="flex-1 font-black text-gray-900">{t(`payment.${method}`)}</span>
+      <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${active ? "border-primary bg-primary" : "border-gray-300"}`}>
+        {active && <Check size={12} className="text-white" strokeWidth={3} />}
+      </span>
+    </button>
+  );
+};
+
+// Beautiful order-item card: image, name, qty, price, and option/sauce/spice chips + note.
+const FoodItemCard = ({ item }) => {
+  const options = [
+    item.topChicken,
+    item.spicy,
+    optionLabel(item.sauceMain),
+    optionLabel(item.sauceExtra),
+    optionLabel(item.powder),
+    optionLabel(item.tableCheese),
+  ].filter(Boolean);
+  const img = item.menu?.image;
+  return (
+    <div className="flex gap-3 p-3 rounded-2xl border border-gray-100 bg-white">
+      {img ? (
+        <img src={img} alt="" className="w-20 h-20 rounded-xl object-cover shrink-0 bg-gray-50" />
+      ) : (
+        <div className="w-20 h-20 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
+          <ShoppingBag size={22} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-black text-gray-900 leading-tight min-w-0">{item.menu?.name}</p>
+          <span className="text-sm font-black text-gray-900 whitespace-nowrap">฿{item.totalPrice}</span>
+        </div>
+        <span className="inline-block mt-1 text-[11px] font-black text-primary bg-primary-light px-2 py-0.5 rounded-full">× {item.quantity}</span>
+        {options.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {options.map((o, i) => (
+              <span key={i} className="text-[11px] font-bold text-gray-500 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">{o}</span>
+            ))}
+          </div>
+        )}
+        {item.note && (
+          <p className="flex items-start gap-1 text-xs text-gray-400 font-medium mt-1.5">
+            <Pencil size={11} className="mt-0.5 shrink-0" /> <span className="min-w-0">{item.note}</span>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Read-only labelled row for the collapsed delivery summary.
+const SummaryRow = ({ icon: Icon, label, value }) => (
+  <div className="flex items-center gap-3">
+    <Icon size={16} className="text-gray-400 shrink-0" />
+    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider w-20 shrink-0">{label}</span>
+    <span className="text-sm font-bold text-gray-800 truncate">{value || "—"}</span>
+  </div>
 );
 
 // Reused for both PromptPay and Transfer — file input styled to match Button's
@@ -194,6 +278,8 @@ export const Checkout = () => {
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null); // { orderId, orderNo } once submitted
+  // UI-only: collapse the delivery editor into a summary card once details exist (LINE MAN style).
+  const [editingDelivery, setEditingDelivery] = useState(false);
 
   // Real store location, for accurate distance/fee (falls back to the constant
   // above until this resolves).
@@ -341,6 +427,19 @@ export const Checkout = () => {
     !isInsideServiceArea({ lat, lng, distanceKm, store });
 
   const grandTotal = subtotal + (deliveryMethod === "delivery" ? deliveryFee : 0);
+
+  // ── Display-only derivations (no backend/schema/total changes) ──
+  // Customer's existing coin balance, shown for information — NEVER applied as a discount and
+  // never written; grandTotal stays subtotal + deliveryFee exactly as before.
+  const coinBalance = Number(profile?.coins ?? 0);
+  // ETA shown as a small window around the computed estimate (LINE MAN-style "28–40 min").
+  const etaText = etaMinutes != null ? `${etaMinutes}–${etaMinutes + 12} min` : null;
+  // Whether the delivery block has enough to show its summary; else the editor stays open.
+  const deliveryReady =
+    Boolean(displayName.trim()) && Boolean(displayPhone.trim()) &&
+    (deliveryMethod === "pickup" || Boolean(address.trim()));
+  const showDeliveryEditor = editingDelivery || !deliveryReady;
+  const cartEmpty = cartItems.length === 0;
 
   const validate = () => {
     if (storeClosed) return t("store.closedOrder");
@@ -543,141 +642,229 @@ export const Checkout = () => {
     }
   };
 
-  if (submitting) {
-    return <Loading text={t("checkout.placingOrder")} />;
-  }
-
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-8 space-y-6 pb-60 md:pb-44">
+    <div className="max-w-2xl mx-auto p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5 pb-60 md:pb-44">
       <h1 className="text-2xl font-black text-gray-900">{t("checkout.title")}</h1>
 
       <StoreClosedBanner />
 
-      {/* Customer Information */}
-      <Card className="p-6">
-        <SectionTitle>{t("checkout.customerInfo")}</SectionTitle>
-        <div className="space-y-4">
-          <Input
-            label={t("checkout.fullName")}
-            placeholder={t("checkout.fullNamePlaceholder")}
-            value={displayName}
-            onChange={(e) => setFullName(e.target.value)}
-          />
-          <Input
-            label={t("checkout.phoneNumber")}
-            placeholder={t("checkout.phonePlaceholder")}
-            type="tel"
-            value={displayPhone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        </div>
-      </Card>
+      {cartEmpty ? (
+        /* Empty state — nothing to check out yet */
+        <Card className="p-10 text-center">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-primary-light text-primary flex items-center justify-center">
+            <ShoppingBag size={30} />
+          </div>
+          <p className="mt-4 text-lg font-black text-gray-900">{t("checkout.emptyCart")}</p>
+          <div className="mt-5">
+            <Button className="!px-6" onClick={() => navigate("/")}>{t("checkout.continueShopping")}</Button>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {/* ── SECTION 1 · Delivery Information ─────────────────────────────── */}
+          <Card className="p-5 sm:p-6 space-y-4">
+            <SectionTitle icon={Bike}>{t("checkout.deliveryInfo")}</SectionTitle>
 
-      {/* Delivery */}
-      <Card className="p-6">
-        <SectionTitle>{t("checkout.delivery")}</SectionTitle>
-        <div className="flex gap-3 mb-4">
-          <ToggleOption
-            label={t("checkout.delivery")}
-            active={deliveryMethod === "delivery"}
-            onClick={() => setDeliveryMethod("delivery")}
-          />
-          <ToggleOption
-            label={t("checkout.pickup")}
-            active={deliveryMethod === "pickup"}
-            onClick={() => setDeliveryMethod("pickup")}
-          />
-        </div>
+            <div className="flex gap-2">
+              <ModeToggle label={t("checkout.delivery")} icon={Bike} active={deliveryMethod === "delivery"} onClick={() => setDeliveryMethod("delivery")} />
+              <ModeToggle label={t("checkout.pickup")} icon={Store} active={deliveryMethod === "pickup"} onClick={() => setDeliveryMethod("pickup")} />
+            </div>
 
-        {deliveryMethod === "delivery" && (
-          <div className="space-y-4">
-            {/* Saved address book */}
-            {addresses.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    {t("checkout.savedAddresses")}
-                  </label>
+            {showDeliveryEditor ? (
+              /* Editor — receiver, phone, and (for delivery) the address controls */
+              <div className="space-y-4">
+                <Input
+                  label={t("checkout.fullName")}
+                  placeholder={t("checkout.fullNamePlaceholder")}
+                  value={displayName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+                <Input
+                  label={t("checkout.phoneNumber")}
+                  placeholder={t("checkout.phonePlaceholder")}
+                  type="tel"
+                  value={displayPhone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+
+                {deliveryMethod === "delivery" && (
+                  <>
+                    {/* Saved address book */}
+                    {addresses.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                            {t("checkout.savedAddresses")}
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => navigate("/shop/addresses")}
+                            className="text-xs font-bold text-primary hover:underline"
+                          >
+                            {t("checkout.manage")}
+                          </button>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                          {addresses.map((addr) => {
+                            const meta = labelMeta(addr.label);
+                            const active = selectedAddressId === addr.id;
+                            return (
+                              <button
+                                key={addr.id}
+                                type="button"
+                                onClick={() => pickSavedAddress(addr)}
+                                className={`shrink-0 w-[220px] text-left p-3 rounded-2xl border transition-all ${
+                                  active
+                                    ? "bg-primary-light border-primary"
+                                    : "bg-gray-50 border-gray-100 hover:border-primary"
+                                }`}
+                              >
+                                <p className="text-sm font-black text-gray-900 truncate">
+                                  {meta.emoji} {t(`addr.label.${meta.key}`)}
+                                  {addr.isDefault && (
+                                    <span className="ml-1 text-[10px] text-primary font-black">• {t("addr.default")}</span>
+                                  )}
+                                </p>
+                                <p className="text-xs text-gray-500 font-medium truncate">
+                                  {addr.receiverName} · {addr.receiverPhone}
+                                </p>
+                                <p className="text-xs text-gray-400 font-medium truncate">
+                                  {formatFullAddress(addr)}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {savedAddress && (
+                      <button
+                        type="button"
+                        onClick={applySavedAddress}
+                        className="w-full text-left p-3 rounded-2xl bg-primary-light border border-primary/20 text-sm font-medium text-gray-700 hover:brightness-95 transition-all"
+                      >
+                        <span className="font-bold text-primary">{t("checkout.savedAddressPrefix")} </span>
+                        {savedAddress.address}
+                      </button>
+                    )}
+
+                    <Input
+                      label={t("checkout.addressLabel")}
+                      placeholder={t("checkout.addressPlaceholder")}
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                    />
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={useMyLocation}
+                        disabled={gpsLoading}
+                      >
+                        <MapPin size={18} />
+                        {gpsLoading ? t("checkout.locating") : t("checkout.useMyLocation")}
+                      </Button>
+                      <Button variant="outline" className="flex-1" onClick={() => setShowMapModal(true)}>
+                        <Map size={18} />
+                        {t("checkout.chooseMap")}
+                      </Button>
+                    </div>
+
+                    {lat != null && lng != null && (
+                      <div className="rounded-2xl bg-gray-50 p-4 space-y-2">
+                        <div className="flex justify-between text-sm font-medium text-gray-500">
+                          <span>{t("checkout.distance")}</span>
+                          <span>{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-"}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-medium text-gray-500">
+                          <span>{t("checkout.deliveryFee")}</span>
+                          <span>฿{deliveryFee}</span>
+                        </div>
+                        {etaMinutes != null && (
+                          <div className="flex justify-between text-sm font-medium text-gray-500">
+                            <span>{t("checkout.estTime")}</span>
+                            <span>~{etaMinutes} min</span>
+                          </div>
+                        )}
+                        <MapButton
+                          lat={lat}
+                          lng={lng}
+                          address={address}
+                          mode="view"
+                          label={t("checkout.viewGoogleMaps")}
+                          style={{ width: "100%", textAlign: "center", display: "block", marginTop: "4px" }}
+                        />
+                      </div>
+                    )}
+
+                    {outOfArea && (
+                      <p className="text-sm font-bold text-secondary">
+                        {t("checkout.outOfArea", { km: deliveryKm })}
+                      </p>
+                    )}
+                  </>
+                )}
+
+                {deliveryReady && (
+                  <Button variant="outline" className="w-full" onClick={() => setEditingDelivery(false)}>
+                    {t("checkout.done")}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              /* Collapsed summary — address, receiver, phone, ETA + Edit */
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="w-9 h-9 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
+                      {deliveryMethod === "delivery" ? <MapPin size={18} /> : <Store size={18} />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-gray-400 uppercase tracking-wider">
+                        {deliveryMethod === "delivery" ? t("checkout.deliveringTo") : t("checkout.pickup")}
+                      </p>
+                      <p className="text-sm font-bold text-gray-800 mt-0.5 line-clamp-2">
+                        {deliveryMethod === "delivery" ? (address || "—") : storeLocation.name}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => navigate("/shop/addresses")}
-                    className="text-xs font-bold text-primary hover:underline"
+                    onClick={() => setEditingDelivery(true)}
+                    className="flex items-center gap-1 text-sm font-black text-primary hover:underline shrink-0"
                   >
-                    {t("checkout.manage")}
+                    <Pencil size={14} /> {t("checkout.edit")}
                   </button>
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                  {addresses.map((addr) => {
-                    const meta = labelMeta(addr.label);
-                    const active = selectedAddressId === addr.id;
-                    return (
-                      <button
-                        key={addr.id}
-                        type="button"
-                        onClick={() => pickSavedAddress(addr)}
-                        className={`shrink-0 w-[220px] text-left p-3 rounded-2xl border transition-all ${
-                          active
-                            ? "bg-primary-light border-primary"
-                            : "bg-gray-50 border-gray-100 hover:border-primary"
-                        }`}
-                      >
-                        <p className="text-sm font-black text-gray-900 truncate">
-                          {meta.emoji} {t(`addr.label.${meta.key}`)}
-                          {addr.isDefault && (
-                            <span className="ml-1 text-[10px] text-primary font-black">• {t("addr.default")}</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-gray-500 font-medium truncate">
-                          {addr.receiverName} · {addr.receiverPhone}
-                        </p>
-                        <p className="text-xs text-gray-400 font-medium truncate">
-                          {formatFullAddress(addr)}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
-            {/* Selected address summary */}
-            {selectedAddressId && (
-              <div className="rounded-2xl bg-white border border-primary/20 p-4 space-y-2 shadow-soft">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-wider">
-                    {t("checkout.deliveringTo")}
-                  </p>
-                  <span
-                    className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                      lat != null && lng != null
-                        ? "bg-blue-100 text-blue-600"
-                        : "bg-gray-100 text-gray-400"
-                    }`}
-                  >
-                    {lat != null && lng != null ? "GPS ✓" : t("checkout.noGps")}
-                  </span>
+                <div className="space-y-1.5 border-t border-gray-100 pt-3">
+                  <SummaryRow icon={User} label={t("checkout.receiver")} value={displayName} />
+                  <SummaryRow icon={Phone} label={t("checkout.phone")} value={displayPhone} />
                 </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                  <span className="text-gray-400 font-medium">{t("checkout.receiver")}</span>
-                  <span className="text-gray-800 font-bold text-right truncate">{displayName || "—"}</span>
-                  <span className="text-gray-400 font-medium">{t("checkout.phone")}</span>
-                  <span className="text-gray-800 font-bold text-right truncate">{displayPhone || "—"}</span>
-                  <span className="text-gray-400 font-medium">{t("checkout.distance")}</span>
-                  <span className="text-gray-800 font-bold text-right">
-                    {distanceKm != null ? `${distanceKm.toFixed(1)} km` : "—"}
-                  </span>
-                  <span className="text-gray-400 font-medium">{t("checkout.estTime")}</span>
-                  <span className="text-gray-800 font-bold text-right">
-                    {etaMinutes != null ? `~${etaMinutes} min` : "—"}
-                  </span>
-                  <span className="text-gray-400 font-medium">{t("checkout.estFee")}</span>
-                  <span className="text-primary font-black text-right">฿{deliveryFee}</span>
-                </div>
-                {deliveryNote && (
-                  <p className="text-xs text-gray-500 font-medium border-t border-gray-100 pt-2">
-                    Note: {deliveryNote}
-                  </p>
+
+                {deliveryMethod === "delivery" && (
+                  <div className="flex items-center justify-between rounded-2xl bg-primary-light px-4 py-3">
+                    <span className="flex items-center gap-2 text-sm font-black text-primary">
+                      <Clock size={16} /> {t("checkout.eta")}
+                    </span>
+                    <span className="text-right">
+                      <span className="block text-base font-black text-primary leading-tight">{etaText || "—"}</span>
+                      <span className="block text-[10px] font-bold text-primary/70 uppercase tracking-wide">{t("checkout.deliverNow")}</span>
+                    </span>
+                  </div>
                 )}
+
+                {deliveryMethod === "delivery" && lat != null && lng != null && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400 font-medium">{t("checkout.distance")} · {t("checkout.estFee")}</span>
+                    <span className="font-bold text-gray-800">
+                      {distanceKm != null ? `${distanceKm.toFixed(1)} km` : "—"} · ฿{deliveryFee}
+                    </span>
+                  </div>
+                )}
+
                 {outOfArea && (
                   <p className="text-xs font-bold text-secondary border-t border-gray-100 pt-2">
                     ⚠️ {t("checkout.outOfArea", { km: deliveryKm })}
@@ -685,106 +872,41 @@ export const Checkout = () => {
                 )}
               </div>
             )}
+          </Card>
 
-            {savedAddress && (
-              <button
-                type="button"
-                onClick={applySavedAddress}
-                className="w-full text-left p-3 rounded-2xl bg-primary-light border border-primary/20 text-sm font-medium text-gray-700 hover:brightness-95 transition-all"
-              >
-                <span className="font-bold text-primary">{t("checkout.savedAddressPrefix")} </span>
-                {savedAddress.address}
-              </button>
-            )}
+          {/* ── SECTION 2 · Order Items ──────────────────────────────────────── */}
+          <Card className="p-5 sm:p-6 space-y-4">
+            <SectionTitle icon={ShoppingBag}>{t("checkout.orderItems")}</SectionTitle>
+            <div className="space-y-3">
+              {cartItems.map((item) => (
+                <FoodItemCard key={item.id} item={item} />
+              ))}
+            </div>
+          </Card>
 
-            <Input
-              label={t("checkout.addressLabel")}
-              placeholder={t("checkout.addressPlaceholder")}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
+          {/* ── SECTION 3 · Note to Store ────────────────────────────────────── */}
+          <Card className="p-5 sm:p-6 space-y-3">
+            <SectionTitle icon={Pencil}>{t("checkout.noteToStore")}</SectionTitle>
+            <textarea
+              value={deliveryNote}
+              onChange={(e) => setDeliveryNote(e.target.value)}
+              placeholder={t("checkout.storeNotePlaceholder")}
+              rows={4}
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
             />
+          </Card>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={useMyLocation}
-                disabled={gpsLoading}
-              >
-                <MapPin size={18} />
-                {gpsLoading ? t("checkout.locating") : t("checkout.useMyLocation")}
-              </Button>
-              <Button variant="outline" className="flex-1" onClick={() => setShowMapModal(true)}>
-                <Map size={18} />
-                {t("checkout.chooseMap")}
-              </Button>
+          {/* ── SECTION 4 · Payment Method ─────────────────────────────────── */}
+          <Card className="p-5 sm:p-6 space-y-4">
+            <SectionTitle icon={Banknote}>{t("checkout.payment")}</SectionTitle>
+            {/* Only the methods the store has enabled in paymentSettings are shown */}
+            <div className="grid gap-2.5">
+              {methods.map((m) => (
+                <PaymentMethodCard key={m} method={m} active={paymentMethod === m} onClick={() => setPaymentMethod(m)} t={t} />
+              ))}
             </div>
 
-            {lat != null && lng != null && (
-              <div className="rounded-2xl bg-gray-50 p-4 space-y-2">
-                <div className="flex justify-between text-sm font-medium text-gray-500">
-                  <span>{t("checkout.distance")}</span>
-                  <span>{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-"}</span>
-                </div>
-                <div className="flex justify-between text-sm font-medium text-gray-500">
-                  <span>{t("checkout.deliveryFee")}</span>
-                  <span>฿{deliveryFee}</span>
-                </div>
-                {etaMinutes != null && (
-                  <div className="flex justify-between text-sm font-medium text-gray-500">
-                    <span>{t("checkout.estTime")}</span>
-                    <span>~{etaMinutes} min</span>
-                  </div>
-                )}
-                <MapButton
-                  lat={lat}
-                  lng={lng}
-                  address={address}
-                  mode="view"
-                  label={t("checkout.viewGoogleMaps")}
-                  style={{ width: "100%", textAlign: "center", display: "block", marginTop: "4px" }}
-                />
-              </div>
-            )}
-
-            {outOfArea && (
-              <p className="text-sm font-bold text-secondary">
-                {t("checkout.outOfArea", { km: deliveryKm })}
-              </p>
-            )}
-
-            <div>
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                {t("checkout.deliveryNoteLabel")}
-              </label>
-              <textarea
-                value={deliveryNote}
-                onChange={(e) => setDeliveryNote(e.target.value)}
-                placeholder={t("checkout.deliveryNotePlaceholder")}
-                rows={3}
-                className="w-full mt-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
-              />
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Payment */}
-      <Card className="p-6">
-        <SectionTitle>{t("checkout.payment")}</SectionTitle>
-        {/* Only the methods the store has enabled in paymentSettings are shown */}
-        <div className="flex gap-3 mb-4">
-          {methods.map((m) => (
-            <ToggleOption
-              key={m}
-              label={t(`payment.${m}`)}
-              active={paymentMethod === m}
-              onClick={() => setPaymentMethod(m)}
-            />
-          ))}
-        </div>
-
-        {paymentMethod === "cash" && (
+            {paymentMethod === "cash" && (
           <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm font-medium text-gray-600">
             {t("checkout.cashInstr")}
           </div>
@@ -831,92 +953,65 @@ export const Checkout = () => {
             <SlipUploadField file={slipFile} onChange={handleSlipChange} onRemove={() => setSlipFile(null)} t={t} />
           </div>
         )}
-      </Card>
+          </Card>
 
-      {/* Order Summary */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <SectionTitle>{t("checkout.summary")}</SectionTitle>
-          <Badge color={paymentMethod === "cash" ? "green" : paymentMethod === "promptpay" ? "blue" : "orange"}>
-            {t(`payment.${paymentMethod}`)}
-          </Badge>
-        </div>
-        <div className="space-y-3">
-          {cartItems.length === 0 ? (
-            <p className="text-sm text-gray-400 font-medium">{t("checkout.emptyCart")}</p>
-          ) : (
-            cartItems.map((item) => {
-              const options = [
-                item.topChicken,
-                item.spicy,
-                optionLabel(item.sauceMain),
-                optionLabel(item.sauceExtra),
-                optionLabel(item.powder),
-                optionLabel(item.tableCheese),
-              ].filter(Boolean);
-
-              return (
-                <div key={item.id} className="flex justify-between gap-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="text-gray-700 font-medium">
-                      {item.quantity}x {item.menu?.name}
-                    </p>
-                    {options.length > 0 && (
-                      <p className="text-xs text-gray-400 mt-0.5">{options.join(" • ")}</p>
-                    )}
-                    {item.note && (
-                      <p className="text-xs text-gray-400 mt-0.5">{t("addr.noteLabel")}: {item.note}</p>
-                    )}
-                  </div>
-                  <span className="font-bold text-gray-900 whitespace-nowrap">
-                    ฿{item.totalPrice}
-                  </span>
+          {/* ── SECTION 5 · Order Summary ────────────────────────────────────── */}
+          <Card className="p-5 sm:p-6 space-y-3">
+            <SectionTitle icon={Coins}>{t("checkout.summary")}</SectionTitle>
+            <div className="space-y-2.5">
+              <div className="flex justify-between text-sm font-medium text-gray-500">
+                <span>{t("checkout.foodTotal")}</span>
+                <span className="font-bold text-gray-700">฿{subtotal}</span>
+              </div>
+              {deliveryMethod === "delivery" && (
+                <div className="flex justify-between text-sm font-medium text-gray-500">
+                  <span>{t("checkout.deliveryFee")}</span>
+                  <span className="font-bold text-gray-700">฿{deliveryFee}</span>
                 </div>
-              );
-            })
-          )}
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
-          <div className="flex justify-between text-sm font-medium text-gray-500">
-            <span>{t("checkout.subtotal")}</span>
-            <span>฿{subtotal}</span>
-          </div>
-          {deliveryMethod === "delivery" && (
-            <div className="flex justify-between text-sm font-medium text-gray-500">
-              <span>{t("checkout.deliveryFee")}</span>
-              <span>฿{deliveryFee}</span>
+              )}
+              {/* Coin balance — informational only, never applied as a discount (total unchanged) */}
+              <div className="flex justify-between text-sm font-medium text-gray-500">
+                <span className="flex items-center gap-1.5"><Coins size={15} className="text-amber-500" /> {t("checkout.coin")}</span>
+                <span className="font-bold text-gray-700">{coinBalance}</span>
+              </div>
             </div>
-          )}
-          <div className="flex justify-between text-lg font-black text-gray-900 pt-2 border-t border-gray-100">
-            <span>{t("checkout.grandTotal")}</span>
-            <span className="text-primary">฿{grandTotal}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Fixed bottom Place Order bar — sits ABOVE the mobile bottom navigation
-          (nav ≈ 56px + safe-area) so the button is always 100% visible; on md+
-          the nav becomes a sidebar, so the bar drops to the true bottom and
-          shifts right of the 16rem sidebar. */}
-      <div className="fixed left-0 right-0 md:left-64 bottom-[calc(60px+env(safe-area-inset-bottom))] md:bottom-0 bg-white border-t border-gray-100 p-4 sm:p-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))] z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-        <div className="max-w-2xl mx-auto">
-          {validationError && (
-            <p className="text-center text-sm font-bold text-secondary mb-3">
-              {validationError}
-            </p>
-          )}
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase">{t("checkout.total")}</p>
-              <p className="text-xl font-black text-primary">฿{grandTotal}</p>
+            <div className="flex items-end justify-between pt-3 border-t border-gray-100">
+              <span className="text-base font-black text-gray-900">{t("checkout.grandTotal")}</span>
+              <span className="text-2xl font-black text-primary">฿{grandTotal}</span>
             </div>
-            <Button className="flex-1 max-w-xs h-14 text-base disabled:opacity-50" onClick={handlePlaceOrder} disabled={storeClosed}>
-              {storeClosed ? t("store.closedTitle") : t("checkout.placeOrder")}
-            </Button>
+          </Card>
+        </>
+      )}
+
+      {/* ── SECTION 6 · Sticky bottom bar (hidden while the cart is empty) ────
+          Sits ABOVE the mobile bottom nav (≈60px + safe-area) so the button is
+          always visible; on md+ the nav becomes a sidebar, so the bar drops to
+          the true bottom and shifts right of the 16rem sidebar. */}
+      {!cartEmpty && (
+        <div className="fixed left-0 right-0 md:left-64 bottom-[calc(60px+env(safe-area-inset-bottom))] md:bottom-0 bg-white border-t border-gray-100 p-4 sm:p-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))] z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+          <div className="max-w-2xl mx-auto">
+            {validationError && (
+              <p className="text-center text-sm font-bold text-secondary mb-3">
+                {validationError}
+              </p>
+            )}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase">{t("checkout.total")}</p>
+                <p className="text-xl font-black text-primary">฿{grandTotal}</p>
+              </div>
+              <Button
+                className="flex-1 max-w-xs h-14 text-base"
+                onClick={handlePlaceOrder}
+                loading={submitting}
+                disabled={storeClosed || submitting}
+              >
+                {storeClosed ? t("store.closedTitle") : t("checkout.placeOrder")}
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <LocationPicker
         isOpen={showMapModal}

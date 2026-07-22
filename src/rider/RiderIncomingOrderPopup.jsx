@@ -6,9 +6,9 @@ import { getAlarmAudioCtx, playSound, getEffectiveVolume } from "../store/alarmS
 import { getDestination } from "./riderLocationService";
 import { haversineKm } from "../location/locationUtils";
 
-// จังหวะเล่นเสียงซ้ำระหว่างรอไรเดอร์ตัดสินใจ (เท่ากับ StoreLayout alarm loop)
+// จังหวะเล่นเสียง/สั่นซ้ำระหว่างรอไรเดอร์ตัดสินใจ (เท่ากับ StoreLayout alarm loop)
 const ALARM_INTERVAL_MS = 2000;
-// เวลานับถอยหลังก่อนปิด popup อัตโนมัติ (งานยังอยู่ในพูล กดรับจากรายการได้) — กันเสียงดังค้าง
+// เวลานับถอยหลัง fallback เมื่อไม่มี offerExpiresAt (งานแบบเดิม) — dispatch จะส่ง expiresAt มาแทน
 const AUTO_DISMISS_SEC = 30;
 
 // เสียงเรียกงานใหม่วนซ้ำจนกว่าจะกดรับ/ปฏิเสธ/หมดเวลา — ใช้เครื่องเสียงเดียวกับฝั่งร้าน
@@ -30,6 +30,19 @@ function useIncomingAlarm(active) {
   }, [active]);
 }
 
+// สั่นซ้ำระหว่างที่ป๊อปอัปแสดงอยู่ (บนอุปกรณ์ที่รองรับ Vibration API). แยกจากเสียง — สั่นทำงาน
+// แม้ผู้ใช้ปิดเสียงไว้ (req 7/8: ต้องมีทั้งเสียงและการสั่น). หยุดสั่นเมื่อ unmount/รับ/ปฏิเสธ
+function useIncomingVibration(active) {
+  useEffect(() => {
+    if (!active) return undefined;
+    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return undefined;
+    const buzz = () => { try { navigator.vibrate([400, 150, 400]); } catch { /* ignore */ } };
+    buzz();
+    const id = setInterval(buzz, ALARM_INTERVAL_MS);
+    return () => { clearInterval(id); try { navigator.vibrate(0); } catch { /* ignore */ } };
+  }, [active]);
+}
+
 const Stat = ({ icon: Icon, label, value }) => (
   <div className="flex flex-col items-center gap-1 px-1 text-center">
     <Icon size={18} className="text-primary" />
@@ -44,24 +57,32 @@ const Stat = ({ icon: Icon, label, value }) => (
 // order data; no mock values.
 // This component is keyed by order id in the parent, so it remounts per incoming order —
 // the countdown state initialises fresh on mount (no setState-in-effect to reset it).
-export default function RiderIncomingOrderPopup({ order, storeLocation, busy, soundOn = true, onAccept, onReject, onViewDetails, onDismiss }) {
+// Countdown seconds from a deadline (offerExpiresAt) — clamps at 0. Recomputed from the clock
+// each tick so it stays correct after a background tab / refresh instead of drifting.
+const secsUntil = (deadline) => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+
+export default function RiderIncomingOrderPopup({ order, storeLocation, busy, soundOn = true, autoAccept = false, expiresAt, onAccept, onReject, onViewDetails, onTimeout }) {
   const { t } = usePreferences();
-  const [secondsLeft, setSecondsLeft] = useState(AUTO_DISMISS_SEC);
-  const dismissRef = useRef(onDismiss);
-  useEffect(() => { dismissRef.current = onDismiss; }); // keep latest without re-arming the timer
+  // Deadline is the dispatch offer's expiry (survives refresh); falls back to 30s for legacy jobs.
+  // Fixed once per mount (lazy useState init) — the popup is keyed by order id + offerSeq so a
+  // re-offer remounts fresh.
+  const [deadline] = useState(() => expiresAt || Date.now() + AUTO_DISMISS_SEC * 1000);
+  const [secondsLeft, setSecondsLeft] = useState(() => secsUntil(deadline));
+  const timeoutRef = useRef(onTimeout);
+  useEffect(() => { timeoutRef.current = onTimeout; }); // keep latest without re-arming the timer
 
-  // Alarm loops only while the popup is up, not busy, and the Notification Sound setting is
-  // on — flip the setting off and the effect cleanup stops the loop immediately (no refresh).
+  // Alarm loops while the popup is up, not busy, and Notification Sound is on. Vibration loops
+  // independently of the sound setting (so a muted rider still feels the incoming job).
   useIncomingAlarm(Boolean(order) && !busy && soundOn);
+  useIncomingVibration(Boolean(order) && !busy);
 
-  // นับถอยหลัง แล้วปิด popup เมื่อหมดเวลา (งานยังอยู่ในพูล). ตั้ง 1 ครั้งตอน mount (keyed ต่อออเดอร์)
+  // นับถอยหลังจาก deadline. หมดเวลา -> onTimeout (dispatch: คืนงานสู่ Pending แล้วยื่นต่อ; งานเดิม: ปิดป๊อปอัป)
   useEffect(() => {
     if (!order) return undefined;
     const id = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) { clearInterval(id); dismissRef.current?.(); return 0; }
-        return s - 1;
-      });
+      const left = secsUntil(deadline);
+      setSecondsLeft(left);
+      if (left <= 0) { clearInterval(id); timeoutRef.current?.(order); }
     }, 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,6 +112,7 @@ export default function RiderIncomingOrderPopup({ order, storeLocation, busy, so
           </div>
           <p className="text-xs font-bold text-white/80 mt-1">{order.orderNo || order.id?.slice(0, 8)}</p>
           <p className="text-[11px] font-bold text-white/70 mt-2">{t("ro.incoming.countdown", { sec: secondsLeft })}</p>
+          {autoAccept && <p className="text-[10px] font-black text-white/90 mt-1">{t("ro.incoming.autoAccepting")}</p>}
           <div className="mt-1.5 h-1.5 w-full rounded-full bg-white/25 overflow-hidden">
             <div className="h-full bg-white rounded-full transition-all duration-1000 ease-linear" style={{ width: `${pct}%` }} />
           </div>
