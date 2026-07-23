@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { db } from "./firebase";
 import {
   collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp,
@@ -8,13 +9,24 @@ import { uploadImage } from "./services/cloudinary";
 import { usePreferences } from "./context/PreferencesContext";
 import { notifyChatMessage } from "./notifications/notificationUtils";
 import { normalizeStatus } from "./store/orderStatus";
+import { getAlarmAudioCtx, playSound } from "./store/alarmSounds";
 import { telHref } from "./telUtils";
 import { logError } from "./errorCenter";
-import { Camera, MessageCircle, Send, X, Phone, CheckCheck } from "lucide-react";
+import { Camera, Image as ImageIcon, MessageCircle, Send, X, Phone, CheckCheck } from "lucide-react";
 
 const ms = (ts) => ts?.toMillis?.() ?? (ts ? new Date(ts).getTime() : 0);
 const TYPING_IDLE_MS = 3000;   // stop "typing" after this idle
 const TYPING_FRESH_MS = 6000;  // treat the other side's typing flag as stale after this
+
+// Short notification chirp for a NEW incoming chat message. Best-effort: browsers block audio
+// until a user gesture, so this is wrapped — a blocked/unsupported play is silently ignored.
+const playChatSound = () => {
+  try {
+    const ctx = getAlarmAudioCtx();
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    playSound("grab", ctx, 0.5);
+  } catch { /* audio unavailable/blocked — ignore */ }
+};
 
 const MessageBubble = ({ message, mine, senderLabel, onImage }) => (
   <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${mine ? "self-end bg-primary text-white" : "self-start bg-gray-100 text-gray-800"}`}>
@@ -48,18 +60,41 @@ function Chat({ orderId, sender, order }) {
   const bottomRef = useRef(null);
   const typingTimer = useRef(null);
   const typingOn = useRef(false);
+  const seenMsgIdsRef = useRef(null); // ids already seen (null until first snapshot) — no history replay
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const [pickerOpen, setPickerOpen] = useState(false); // camera/gallery bottom sheet
 
   const other = sender === "rider" ? "customer" : "rider";
   const active = !["completed", "cancelled"].includes(normalizeStatus(order?.status));
   const callHref = telHref(sender === "rider" ? order?.phone : order?.riderPhone);
   const metaRef = orderId ? doc(db, "chatMeta", orderId) : null;
 
-  // messages
+  // messages (realtime — unchanged query/listener). Also chime on a NEW incoming message.
   useEffect(() => {
     if (!orderId) return;
+    seenMsgIdsRef.current = null; // reset per order (reopening a chat must not replay history)
     const q = query(collection(db, "chats"), where("orderId", "==", orderId), orderBy("createdAt", "asc"));
     return onSnapshot(q,
-      (snap) => { setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); setLoadError(null); },
+      (snap) => {
+        const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setMessages(docs);
+        setLoadError(null);
+        // First snapshot = existing history -> record ids, no sound. Afterwards, play a chime for
+        // any NEW message from the OTHER party (never for my own, never replaying old history).
+        if (seenMsgIdsRef.current === null) {
+          seenMsgIdsRef.current = new Set(docs.map((d) => d.id));
+        } else {
+          let incoming = false;
+          for (const d of docs) {
+            if (!seenMsgIdsRef.current.has(d.id)) {
+              seenMsgIdsRef.current.add(d.id);
+              if (d.sender !== sender) incoming = true;
+            }
+          }
+          if (incoming) playChatSound();
+        }
+      },
       (err) => { logError(err, "Chat.subscribe"); setLoadError(t("ro.chat.loadErr")); }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,6 +138,7 @@ function Chat({ orderId, sender, order }) {
 
   const handleFile = (e) => {
     const f = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same photo (shared by camera + gallery inputs)
     if (!f) return;
     setFile(f);
     setPreview(URL.createObjectURL(f));
@@ -191,10 +227,17 @@ function Chat({ orderId, sender, order }) {
         <p className="text-xs font-medium text-gray-400 text-center py-2">{t("ro.chat.ended")}</p>
       ) : (
         <div className="flex items-center gap-2">
-          <label className="shrink-0 w-11 h-11 flex items-center justify-center rounded-full bg-white border border-gray-100 text-gray-500 hover:text-primary hover:border-primary cursor-pointer transition-colors" aria-label={t("ro.chat.attach")}>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            aria-label={t("ro.chat.attach")}
+            className="shrink-0 w-11 h-11 flex items-center justify-center rounded-full bg-white border border-gray-100 text-gray-500 hover:text-primary hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
             <Camera size={18} />
-            <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
-          </label>
+          </button>
+          {/* hidden inputs: camera (capture) opens the device camera; gallery opens the picker */}
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" />
+          <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
           <input
             type="text"
             value={text}
@@ -219,6 +262,52 @@ function Chat({ orderId, sender, order }) {
             <X size={22} />
           </button>
         </div>
+      )}
+
+      {/* camera / gallery bottom sheet (Android/iOS style) */}
+      {pickerOpen && createPortal(
+        <div className="fixed inset-0 z-[90] flex items-end justify-center">
+          <button
+            type="button"
+            aria-label={t("common.cancel")}
+            onClick={() => setPickerOpen(false)}
+            className="absolute inset-0 bg-black/50 animate-[chatFade_.2s_ease-out] cursor-default"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-3xl sm:mb-4 shadow-2xl p-3 space-y-1 pb-[max(0.75rem,env(safe-area-inset-bottom))] animate-[chatSheetUp_.25s_cubic-bezier(.22,1,.36,1)]"
+          >
+            <div className="pt-1 pb-2 flex justify-center">
+              <span className="w-10 h-1.5 rounded-full bg-gray-200" aria-hidden="true" />
+            </div>
+            <button
+              type="button"
+              onClick={() => { setPickerOpen(false); cameraInputRef.current?.click(); }}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-colors hover:bg-gray-50 active:scale-[.99]"
+            >
+              <span className="w-11 h-11 rounded-full bg-primary-light text-primary flex items-center justify-center shrink-0"><Camera size={20} /></span>
+              <span className="font-bold text-gray-800">{t("ro.chat.takePhoto")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPickerOpen(false); galleryInputRef.current?.click(); }}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-colors hover:bg-gray-50 active:scale-[.99]"
+            >
+              <span className="w-11 h-11 rounded-full bg-primary-light text-primary flex items-center justify-center shrink-0"><ImageIcon size={20} /></span>
+              <span className="font-bold text-gray-800">{t("ro.chat.chooseImage")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(false)}
+              className="w-full mt-1 py-3 rounded-2xl border border-gray-200 font-bold text-gray-500 transition-colors hover:bg-gray-50"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+          <style>{`@keyframes chatFade{from{opacity:0}to{opacity:1}}@keyframes chatSheetUp{from{transform:translateY(20px);opacity:.6}to{transform:translateY(0);opacity:1}}`}</style>
+        </div>,
+        document.body
       )}
     </div>
   );
