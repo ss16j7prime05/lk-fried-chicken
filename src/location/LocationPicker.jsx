@@ -8,6 +8,7 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { MapPin, Search, Navigation, Check, AlertCircle, Loader2 } from "lucide-react";
 import { reverseGeocode, searchAddress } from "./locationUtils";
 
 const storeDivIcon = L.divIcon({
@@ -23,7 +24,7 @@ const customerDivIcon = L.divIcon({
   iconAnchor: [11, 11],
 });
 
-// หมุดลูกค้าที่ลากได้ + แตะบนแผนที่เพื่อย้าย
+// หมุดลูกค้าที่ลากได้ + แตะบนแผนที่เพื่อย้าย — map events (click/dragend) เดิมทุกประการ ห้ามแก้
 function DraggableMarker({ position, onChange }) {
   useMapEvents({
     click(e) {
@@ -45,17 +46,16 @@ function DraggableMarker({ position, onChange }) {
   );
 }
 
-const input = {
-  width: "100%",
-  padding: "10px",
-  marginBottom: "8px",
-  borderRadius: "10px",
-  border: "1px solid #ccc",
-  boxSizing: "border-box",
+// GPS error code -> ข้อความที่สื่อความหมาย (สิทธิ์/GPS ปิด/หมดเวลา) — แสดงในการ์ด error
+const gpsErrorMessage = (err) => {
+  if (err?.code === 1) return "ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง กรุณาเปิดสิทธิ์ตำแหน่งในเบราว์เซอร์";
+  if (err?.code === 2) return "ไม่สามารถระบุตำแหน่งได้ (GPS ปิดอยู่หรือสัญญาณอ่อน)";
+  if (err?.code === 3) return "หมดเวลาในการค้นหาตำแหน่ง กรุณาลองใหม่";
+  return "ไม่สามารถดึงตำแหน่งได้ กรุณาลองใหม่";
 };
 
-// Modal เลือกตำแหน่งจัดส่ง: แผนที่ลากหมุด + ตำแหน่งปัจจุบัน + ค้นหาที่อยู่ + แสดงที่อยู่เต็ม + ยืนยัน
-// onConfirm({ lat, lng, address }) เรียกเมื่อกดยืนยัน
+// Bottom-sheet เลือกตำแหน่งจัดส่ง: แผนที่ลากหมุด + ตำแหน่งปัจจุบัน + ค้นหาที่อยู่ + แสดงที่อยู่เต็ม + ยืนยัน
+// onConfirm({ lat, lng, address }) เรียกเมื่อกดยืนยัน — สัญญากับ parent เดิมทุกประการ
 export default function LocationPicker({ isOpen, storeLocation, initialPosition, onConfirm, onClose }) {
   const [position, setPosition] = useState(
     initialPosition || { lat: storeLocation.lat, lng: storeLocation.lng }
@@ -65,12 +65,19 @@ export default function LocationPicker({ isOpen, storeLocation, initialPosition,
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  // UI-only state (no backend/logic change): GPS loading, inline error card, confirm animation.
+  const [locating, setLocating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [confirmPhase, setConfirmPhase] = useState("idle"); // idle | saving | done
+  const busy = confirmPhase !== "idle";
 
   if (!isOpen) return null;
 
+  // ── core logic (unchanged) ──────────────────────────────────────────────
   const movePosition = async (lat, lng, knownAddress) => {
     setPosition({ lat, lng });
     setSearchResults([]);
+    setErrorMsg(null);
     if (knownAddress) {
       setAddress(knownAddress);
       return;
@@ -85,23 +92,28 @@ export default function LocationPicker({ isOpen, storeLocation, initialPosition,
   };
 
   const useCurrentLocation = () => {
+    setErrorMsg(null);
     if (!navigator.geolocation) {
-      alert("อุปกรณ์ไม่รองรับ GPS");
+      setErrorMsg("อุปกรณ์นี้ไม่รองรับ GPS");
       return;
     }
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => movePosition(pos.coords.latitude, pos.coords.longitude),
-      () => alert("ไม่สามารถดึงตำแหน่งได้")
+      (pos) => { movePosition(pos.coords.latitude, pos.coords.longitude); setLocating(false); },
+      (err) => { setErrorMsg(gpsErrorMessage(err)); setLocating(false); }
     );
   };
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
+    setErrorMsg(null);
     setSearching(true);
     try {
       const results = await searchAddress(searchQuery);
       setSearchResults(results);
-      if (results.length === 0) alert("ไม่พบที่อยู่ที่ค้นหา");
+      if (results.length === 0) setErrorMsg("ไม่พบที่อยู่ที่ค้นหา ลองใช้คำค้นอื่น");
+    } catch {
+      setErrorMsg("ค้นหาที่อยู่ไม่สำเร็จ กรุณาลองใหม่");
     } finally {
       setSearching(false);
     }
@@ -113,172 +125,183 @@ export default function LocationPicker({ isOpen, storeLocation, initialPosition,
 
   const handleConfirm = () => {
     if (position.lat == null || position.lng == null) {
-      alert("กรุณาลากหมุดก่อน");
+      setErrorMsg("กรุณาลากหมุดเลือกตำแหน่งก่อน");
       return;
     }
-    onConfirm({ lat: position.lat, lng: position.lng, address });
+    setErrorMsg(null);
+    // Success feedback (saving -> done), then hand the confirmed point to the parent, which
+    // closes the sheet. Both buttons are disabled throughout so nothing races the sequence.
+    setConfirmPhase("saving");
+    window.setTimeout(() => {
+      setConfirmPhase("done");
+      window.setTimeout(() => onConfirm({ lat: position.lat, lng: position.lng, address }), 480);
+    }, 380);
   };
 
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        background: "rgba(0,0,0,0.7)",
-        zIndex: 3000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "16px",
-      }}
-    >
-      <div
-        style={{
-          background: "#fff",
-          color: "#222",
-          borderRadius: "20px",
-          padding: "16px",
-          width: "100%",
-          maxWidth: "480px",
-          maxHeight: "92vh",
-          overflowY: "auto",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>🗺️ ลากหมุดเพื่อเลือกตำแหน่ง</h3>
+  const closeIfIdle = () => { if (!busy) onClose(); };
 
-        {/* ค้นหาที่อยู่ */}
-        <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-          <input
-            type="text"
-            placeholder="ค้นหาที่อยู่..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            style={{ ...input, marginBottom: 0, flex: 1 }}
-          />
+  return (
+    <div className="fixed inset-0 z-[3000] flex items-end sm:items-center justify-center">
+      {/* backdrop */}
+      <button
+        type="button"
+        aria-label="ปิด"
+        onClick={closeIfIdle}
+        className="absolute inset-0 bg-black/60 animate-[lpFade_.2s_ease-out] cursor-default"
+      />
+
+      {/* sheet */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="เลือกตำแหน่งจัดส่ง"
+        className="relative w-full sm:max-w-lg bg-white rounded-t-[24px] sm:rounded-[24px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-[lpSheetUp_.3s_cubic-bezier(.22,1,.36,1)] pb-[env(safe-area-inset-bottom)]"
+      >
+        {/* drag handle */}
+        <div className="pt-3 pb-1 flex justify-center shrink-0">
+          <span className="w-10 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
+        </div>
+
+        {/* header (compact) */}
+        <div className="px-5 pb-3 shrink-0">
+          <h3 className="flex items-center gap-2 text-lg font-black text-gray-900">
+            <MapPin size={20} className="text-primary shrink-0" /> เลือกตำแหน่งจัดส่ง
+          </h3>
+          <p className="text-xs font-medium text-gray-400 mt-0.5">ลากหมุดหรือค้นหาที่อยู่</p>
+        </div>
+
+        {/* scrollable body */}
+        <div className="px-5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-3 pb-2">
+          {/* search row */}
+          <div className="flex gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0 h-12 px-3.5 rounded-2xl border border-gray-200 bg-gray-50 transition-colors focus-within:border-primary focus-within:bg-white">
+              <Search size={18} className="text-gray-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="ค้นหาที่อยู่"
+                aria-label="ค้นหาที่อยู่"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="flex-1 min-w-0 bg-transparent outline-none text-sm font-medium text-gray-800 placeholder:text-gray-400"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={searching}
+              className="h-12 px-4 rounded-2xl bg-secondary text-white font-bold text-sm flex items-center gap-1.5 shrink-0 transition-transform active:scale-95 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/40"
+            >
+              {searching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+              ค้นหา
+            </button>
+          </div>
+
+          {/* search results */}
+          {searchResults.length > 0 && (
+            <ul className="rounded-2xl border border-gray-100 overflow-hidden max-h-40 overflow-y-auto divide-y divide-gray-50 animate-[lpFade_.2s_ease-out]">
+              {searchResults.map((r, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => pickSearchResult(r)}
+                    className="w-full flex items-start gap-2 text-left px-3.5 py-2.5 text-[13px] font-medium text-gray-700 hover:bg-primary-light transition-colors"
+                  >
+                    <MapPin size={15} className="text-primary shrink-0 mt-0.5" />
+                    <span className="min-w-0">{r.displayName}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* error card */}
+          {errorMsg && (
+            <div role="alert" className="flex items-start gap-2.5 rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-red-600 animate-[lpFade_.2s_ease-out]">
+              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <p className="text-sm font-bold min-w-0">{errorMsg}</p>
+            </div>
+          )}
+
+          {/* map — large, rounded, soft shadow. Leaflet logic + events unchanged. */}
+          <div className="rounded-[20px] overflow-hidden shadow-soft border border-gray-100 animate-[lpFade_.4s_ease-out]">
+            <MapContainer
+              center={[position.lat, position.lng]}
+              zoom={14}
+              style={{ width: "100%", height: "300px" }}
+            >
+              <TileLayer
+                attribution="© OpenStreetMap"
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <Marker position={[storeLocation.lat, storeLocation.lng]} icon={storeDivIcon}>
+                <Popup>{storeLocation.name || "ร้าน"}</Popup>
+              </Marker>
+              <DraggableMarker position={position} onChange={movePosition} />
+            </MapContainer>
+          </div>
+
+          {/* live address card */}
+          <div className="rounded-2xl border border-gray-100 bg-white p-4">
+            <p className="flex items-center gap-1.5 text-[11px] font-black text-gray-400 uppercase tracking-wider mb-2">
+              <MapPin size={13} className="text-primary" /> ที่อยู่ที่เลือก
+            </p>
+            {resolving ? (
+              <div className="space-y-2 animate-pulse" aria-hidden="true">
+                <div className="h-3.5 w-11/12 rounded-full bg-gray-100" />
+                <div className="h-3.5 w-3/4 rounded-full bg-gray-100" />
+              </div>
+            ) : address ? (
+              <p className="text-sm font-bold text-gray-800 leading-relaxed">{address}</p>
+            ) : (
+              <p className="text-sm font-medium text-gray-400">ยังไม่พบที่อยู่</p>
+            )}
+          </div>
+
+          {/* current location button — white, gray border, green accent */}
           <button
-            onClick={handleSearch}
-            disabled={searching}
-            style={{
-              padding: "10px 16px",
-              borderRadius: "10px",
-              border: "none",
-              background: "#ff9800",
-              color: "#fff",
-              fontWeight: "bold",
-              cursor: "pointer",
-            }}
+            type="button"
+            onClick={useCurrentLocation}
+            disabled={locating}
+            className="w-full h-12 rounded-2xl border border-gray-200 bg-white text-gray-700 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[.98] hover:border-primary disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            {searching ? "..." : "ค้นหา"}
+            {locating ? (
+              <><Loader2 size={18} className="animate-spin text-primary" /> กำลังค้นหาตำแหน่ง…</>
+            ) : (
+              <><Navigation size={18} className="text-primary" /> ใช้ตำแหน่งปัจจุบัน</>
+            )}
           </button>
         </div>
-        {searchResults.length > 0 && (
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              marginBottom: "10px",
-              maxHeight: "140px",
-              overflowY: "auto",
-            }}
+
+        {/* sticky footer actions */}
+        <div className="shrink-0 border-t border-gray-100 bg-white p-4 pt-3 space-y-2.5">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={busy}
+            className="w-full h-14 rounded-2xl bg-secondary text-white font-black text-base flex items-center justify-center gap-2 transition-transform active:scale-[.98] disabled:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/40"
           >
-            {searchResults.map((r, i) => (
-              <div
-                key={i}
-                onClick={() => pickSearchResult(r)}
-                style={{
-                  padding: "8px 10px",
-                  fontSize: "13px",
-                  cursor: "pointer",
-                  borderTop: i === 0 ? "none" : "1px solid #eee",
-                }}
-              >
-                📍 {r.displayName}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <MapContainer
-          center={[position.lat, position.lng]}
-          zoom={14}
-          style={{ width: "100%", height: "320px", borderRadius: "12px", marginBottom: "12px" }}
-        >
-          <TileLayer
-            attribution="© OpenStreetMap"
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <Marker position={[storeLocation.lat, storeLocation.lng]} icon={storeDivIcon}>
-            <Popup>{storeLocation.name || "ร้าน"}</Popup>
-          </Marker>
-          <DraggableMarker position={position} onChange={movePosition} />
-        </MapContainer>
-
-        {/* แสดงที่อยู่เต็ม */}
-        <div
-          style={{
-            background: "#f5f5f5",
-            borderRadius: "10px",
-            padding: "10px",
-            marginBottom: "10px",
-            fontSize: "13px",
-            color: "#444",
-            minHeight: "20px",
-          }}
-        >
-          {resolving ? "กำลังค้นหาที่อยู่..." : address || "แตะ/ลากหมุดเพื่อดูที่อยู่"}
+            {confirmPhase === "saving" && <Loader2 size={20} className="animate-spin" />}
+            {confirmPhase === "done" && <Check size={20} className="animate-[lpPop_.3s_ease-out]" strokeWidth={3} />}
+            {confirmPhase === "done" ? "บันทึกแล้ว" : "ยืนยันตำแหน่ง"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="w-full h-12 rounded-2xl border border-gray-200 bg-white text-gray-600 font-bold text-sm transition-all active:scale-[.98] hover:border-gray-300 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-200"
+          >
+            ยกเลิก
+          </button>
         </div>
-
-        <button
-          onClick={useCurrentLocation}
-          style={{
-            width: "100%",
-            padding: "10px",
-            marginBottom: "8px",
-            borderRadius: "10px",
-            border: "none",
-            background: "#444",
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          📍 ใช้ตำแหน่งปัจจุบัน
-        </button>
-        <button
-          onClick={handleConfirm}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "12px",
-            background: "#ff9800",
-            color: "#fff",
-            border: "none",
-            fontSize: "16px",
-            fontWeight: "bold",
-            cursor: "pointer",
-            marginBottom: "8px",
-          }}
-        >
-          ยืนยันหมุด
-        </button>
-        <button
-          onClick={onClose}
-          style={{
-            width: "100%",
-            padding: "10px",
-            borderRadius: "12px",
-            background: "#fff",
-            color: "#666",
-            border: "1px solid #ccc",
-            cursor: "pointer",
-          }}
-        >
-          ยกเลิก
-        </button>
       </div>
+
+      {/* micro-animations (scoped keyframes) */}
+      <style>{`
+        @keyframes lpFade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes lpSheetUp { from { transform: translateY(24px); opacity: .6 } to { transform: translateY(0); opacity: 1 } }
+        @keyframes lpPop { 0% { transform: scale(.4); opacity: 0 } 60% { transform: scale(1.15) } 100% { transform: scale(1); opacity: 1 } }
+      `}</style>
     </div>
   );
 }
