@@ -1,4 +1,5 @@
-import { exportToExcel, formatDateTime } from "./adminUtils";
+import { exportToExcel, formatDateTime, adminNormalizeStatus } from "./adminUtils";
+import { orderStatusLabel, refundStatusLabel } from "./statusLabels";
 
 const btn = {
   padding: "12px 18px",
@@ -18,9 +19,9 @@ export default function ReportsPanel({ orders, customers, riders }) {
         orderNo: o.orderNo || o.id,
         customerName: o.customerName || "",
         phone: o.phone || "",
-        status: o.status || "",
+        status: orderStatusLabel(adminNormalizeStatus(o.status)),
         paymentMethod: o.paymentMethod || "",
-        refundStatus: o.refundStatus || "none",
+        refundStatus: refundStatusLabel(o.refundStatus),
         grandTotal: o.grandTotal || 0,
         riderName: o.riderName || "",
         createdAt: formatDateTime(o.createdAt),

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import { formatDateTime } from "./adminUtils";
+import { formatDateTime, adminNormalizeStatus } from "./adminUtils";
 import { input, thB as th, tdB as td } from "./adminStyles";
+import { orderStatusLabel } from "./statusLabels";
 
 // รายชื่อลูกค้า + ค้นหา + บล็อก/ปลดบล็อก + ดูประวัติคำสั่งซื้อ
 export default function CustomersPanel({ customers, blocked, orders }) {
@@ -112,7 +113,7 @@ export default function CustomersPanel({ customers, blocked, orders }) {
             {historyOrders.length === 0 && <div style={{ color: "#777" }}>ไม่มีประวัติคำสั่งซื้อ</div>}
             {historyOrders.map((o) => (
               <div key={o.id} style={{ borderTop: "1px dashed #444", paddingTop: "8px", marginTop: "8px", fontSize: "13px" }}>
-                <div>{o.orderNo || o.id} — {o.status}</div>
+                <div>{o.orderNo || o.id} — {orderStatusLabel(adminNormalizeStatus(o.status))}</div>
                 <div style={{ color: "#999" }}>{formatDateTime(o.createdAt)}</div>
                 <div style={{ color: "#ff9800" }}>{o.grandTotal ?? 0} บาท</div>
               </div>

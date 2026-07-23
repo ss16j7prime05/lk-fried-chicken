@@ -4,6 +4,7 @@ import { db } from "../firebase";
 import { STORE_ID } from "../config";
 import { useAuth } from "../AuthContext.jsx";
 import { adminNormalizeStatus, isSameDay, isSameMonth, toDate } from "./adminUtils";
+import { ORDER_STATUS_LABELS } from "./statusLabels";
 import { NotificationBell } from "../components/notifications/NotificationBell";
 import SummaryCards from "./SummaryCards.jsx";
 import SalesChart from "./SalesChart.jsx";
@@ -92,10 +93,10 @@ export default function AdminControlCenter() {
     { label: "ลูกค้าทั้งหมด", value: customers.length },
     { label: "ไรเดอร์ทั้งหมด", value: riders.length },
     { label: "ร้านค้าทั้งหมด", value: stores.length },
-    { label: "รอรับออเดอร์", value: countByStatus("pending"), color: "#e53935" },
-    { label: "กำลังปรุง", value: countByStatus("cooking"), color: "#ffb74d" },
-    { label: "กำลังจัดส่ง", value: countByStatus("delivering"), color: "#4fc3f7" },
-    { label: "เสร็จสิ้น", value: countByStatus("completed"), color: "#22c55e" },
+    { label: ORDER_STATUS_LABELS.pending, value: countByStatus("pending"), color: "#e53935" },
+    { label: ORDER_STATUS_LABELS.cooking, value: countByStatus("cooking"), color: "#ffb74d" },
+    { label: ORDER_STATUS_LABELS.delivering, value: countByStatus("delivering"), color: "#4fc3f7" },
+    { label: ORDER_STATUS_LABELS.completed, value: countByStatus("completed"), color: "#22c55e" },
   ];
 
   const sevenDays = [];

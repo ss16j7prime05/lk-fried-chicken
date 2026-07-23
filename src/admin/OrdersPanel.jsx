@@ -8,6 +8,9 @@ import { adminNormalizeStatus, formatDateTime, toDate } from "./adminUtils";
 import { updateOrderStatus, cancelOrder as engineCancelOrder } from "../store/orderEngine";
 import { setRefund } from "../payment/paymentService";
 import { input, thA as th, tdA as td } from "./adminStyles";
+import {
+  orderStatusLabel, refundStatusLabel, ALL_ORDER_STATUS_LABEL, ALL_REFUND_STATUS_LABEL,
+} from "./statusLabels";
 
 const STATUS_OPTIONS = [
   "",
@@ -33,11 +36,13 @@ const optionLabel = (value) => {
 export default function OrdersPanel({ orders }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [refundFilter, setRefundFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [selected, setSelected] = useState(null);
 
   const filtered = orders.filter((o) => {
     if (statusFilter && adminNormalizeStatus(o.status) !== statusFilter) return false;
+    if (refundFilter && (o.refundStatus || "none") !== refundFilter) return false;
     if (dateFilter) {
       const d = toDate(o.createdAt);
       if (!d) return false;
@@ -76,9 +81,15 @@ export default function OrdersPanel({ orders }) {
           style={{ ...input, flex: 1, minWidth: "220px" }}
         />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={input}>
-          <option value="">ทุกสถานะ</option>
+          <option value="">{ALL_ORDER_STATUS_LABEL}</option>
           {STATUS_OPTIONS.filter(Boolean).map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>{orderStatusLabel(s)}</option>
+          ))}
+        </select>
+        <select value={refundFilter} onChange={(e) => setRefundFilter(e.target.value)} style={input}>
+          <option value="">{ALL_REFUND_STATUS_LABEL}</option>
+          {REFUND_OPTIONS.map((r) => (
+            <option key={r} value={r}>{refundStatusLabel(r)}</option>
           ))}
         </select>
         <input
@@ -87,9 +98,9 @@ export default function OrdersPanel({ orders }) {
           onChange={(e) => setDateFilter(e.target.value)}
           style={input}
         />
-        {(search || statusFilter || dateFilter) && (
+        {(search || statusFilter || refundFilter || dateFilter) && (
           <button
-            onClick={() => { setSearch(""); setStatusFilter(""); setDateFilter(""); }}
+            onClick={() => { setSearch(""); setStatusFilter(""); setRefundFilter(""); setDateFilter(""); }}
             style={{ ...input, cursor: "pointer", background: "#444" }}
           >
             ล้างตัวกรอง
@@ -124,7 +135,7 @@ export default function OrdersPanel({ orders }) {
                     style={{ ...input, padding: "4px 6px", fontSize: "12px" }}
                   >
                     {EDITABLE_STATUSES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                      <option key={s} value={s}>{orderStatusLabel(s)}</option>
                     ))}
                   </select>
                 </td>
@@ -137,7 +148,7 @@ export default function OrdersPanel({ orders }) {
                     style={{ ...input, padding: "4px 6px", fontSize: "12px" }}
                   >
                     {REFUND_OPTIONS.map((r) => (
-                      <option key={r} value={r}>{r}</option>
+                      <option key={r} value={r}>{refundStatusLabel(r)}</option>
                     ))}
                   </select>
                 </td>
@@ -190,7 +201,7 @@ export default function OrdersPanel({ orders }) {
             <h3 style={{ marginTop: 0 }}>🧾 {selected.orderNo || selected.id}</h3>
             <p>👤 {selected.customerName} — 📞 {selected.phone}</p>
             <p>🏠 {selected.deliveryAddress || selected.address || "-"}</p>
-            <p>💳 {selected.paymentMethod || "-"} | สถานะ: {adminNormalizeStatus(selected.status)}</p>
+            <p>💳 {selected.paymentMethod || "-"} | สถานะ: {orderStatusLabel(adminNormalizeStatus(selected.status))}</p>
             {selected.payment && (
               <p style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <PaymentStatusBadge status={selected.payment.status} />
